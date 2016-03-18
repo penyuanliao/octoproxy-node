@@ -1,0 +1,154 @@
+FFmpeg Configure
+
+
+// https://sites.google.com/site/linuxencoding/x264-ffmpeg-mapping
+// http://www.tvro.com.tw/main5/maimtxt/H.264%E5%A0%B1%E5%B0%8E%EF%BC%8D%E5%B7%A5%E7%A0%94%E9%99%A2.htm
+// http://gnonstop.linkpc.net/~gordon/?page_id=302
+
+
+// stdin : keyboard input.
+// stdout : desktop output.
+// stderr : desktop error output.
+
+*macroblock* 就是將影像切割成很多塊(block)
+
+// -y 忽略確認
+// -i <fileName> 來源檔案
+// -r 設定fps 29.97(30000/1001)
+// -b:a 2M : audio stream
+// -bt 4M : Allowed variance of average bitrate
+
+// -vcodec libx264 (v:c, codec:v) 
+## 說明 : 指定影像編碼格式,這邊採用x264(libx264)
+
+// -bf 0 : b-frames (x264參數 --bframes)
+## 說明 : b-frames 最大數量
+## 預設 : -bf 16
+
+// -pass 1 : bitrate 1:wirte統計 2:read 3:both (x264參數 --pass)
+## 說明 : 允許stream通過,<ffmpeg也有一個參數是pass但只有1,2好像是選擇通過n 好像是stream幾個通道>
+## 預設 : -pass<1,2,3>
+>> 1 : 統計寫
+>> 2 : 統計讀
+>> 3 : 都統計
+
+// -coder 0 : 前文參考之適應性二元算術編碼(CABAC) H264演算法 (x264參數 --no-cabac)
+# 說明 : CABAC是高壓縮比率的影像, 另一個是CAVLC跟MPEG-2/VLC相同壓縮
+>> 0 : 關閉 
+>> 1 : 開啟
+
+// -flags -loop : 內嵌式去區塊效應過濾器 deblocking filter (disabled) (x264參數 --no-deblock)
+## 說明 : 理解是編解碼過程中進行effect主要處理平滑區域修補另一個則是post filter解碼時候處理
+## 預設 : -flags +loop (Enabled)
+>> -flags -loop : 關閉 
+>> -flags +loop : 開啟
+
+// -wpredp 0 : Weighted prediction for P-frames (x264參數 -weightp)
+## 說明：開啟明確的加權預測以增進P-frame壓縮, 愈高越耗時.
+>> 0 : 關閉
+>> 1 : 靜態補償(永遠為-1)
+>> 2 : 智能統計靜態frames, 特別處理淡入淡出效果的壓縮率設計
+
+// -an : 停止輸出聲音
+// -f H264 : 轉檔格式為H264
+// - : 在stdout輸出stream (等同於pipe:1)
+
+@ other @
+// no-weightb
+## 說明：H.264允許給可參考B幀加上影響預測影像的加權，此選項會關閉此特性。
+## 預設值：無
+
+// -re 按照(frame rate)來源傳輸stream資料
+// -bufsize 0
+// -max_delay 100ms
+
+// --------------------- //
+//        QUALITY        
+// --------------------- //
+// -qp 23(0 - 69) 跟 -crf 23(0 - 51) 都是輸出品質建議使用crf //
+
+// -crf 23 
+## 說明 : 影像壓縮的品質程度(0 ~ 51)越大品質越差
+## 預設 : 23
+>> 18 就會很接近原視訊流品質
+
+// -profile:v baseline
+## 說明 : H.264參數 限制輸出文件的profile
+>> baseline : 低畫質
+>> main : 中畫質
+>> high : 高畫質
+
+// -preset slow
+## 說明 : H.264編碼(encoding)壓縮效率
+## 預設 : medium
+>> ultrafast > superfast > veryfast > faster > fast > medium > slow > veryslow
+
+// -v 999
+## 說明 : 重新連線次數
+
+// -timeout 10
+## 說明 : 重新連線延遲
+
+// 影像正常解碼問題
+// http://stackoverflow.com/questions/18243810/handling-chunked-responses-from-process-stdout-data-event
+
+// 影片卡住問題
+// http://www.lxway.net/896842.html
+// http://www.wowza.cn/ffmpeg
+// 解法好像是 process.stdout, process.stderr
+// 不確定什麼問題
+process.stdout
+
+// uint test 
+// -crf 37 >> 157kbits/s    size=734kB
+// -crf 30 >> 302kbits/s    size=7938kB
+// -crf 27 >> 488.8kbits/s  size=1073kB
+
+#compiler openh264
+# make OS=android NDKROOT=/Users/penyuan/Documents/framework/ndk/android-ndk-r10e TARGET=android-19 
+
+
+
+// 42["pl","[4,[2,{\"type\":\"syncf\",\"remoteId\":2,\"memberIdx\":11,\"args\":[]}]]"]
+
+[
+          "-y", 
+          "-i", 
+
+          this[9],
+          "-threads",
+          "2",
+          "-r",
+          "29.97",
+          "-b:a", 
+          "128k",
+          "-bufsize",
+          "0k",
+          "-vcodec", 
+          "libx264",
+          "-pass", 
+          "1", 
+          "-coder", 
+          "0",
+          "-bf", 
+          "0",
+          "-crf",
+          "20",
+          "-flags", 
+          "-loop",
+          "-g",
+          "1",
+          "-sc_threshold",
+          "0",
+          "-wpredp",
+          "0",
+          "-b_strategy",
+          "0",
+          "-s",
+          "720x480",
+          "-an",
+          "-f",
+          "h264",
+          "-"
+        ];
+        //180X120

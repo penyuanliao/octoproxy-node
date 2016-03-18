@@ -1,0 +1,18 @@
+{
+    "name": "fxNetSocket",
+    "version": "0.0.1",
+    "private": true,
+    "dependencies": {
+},
+    "contributors": [
+        {
+            "name": "Benson liao",
+            "email": "anaylst@gmail.com"
+        }
+    ],
+    "keywords":[],
+    "main": "index.js",
+    "engines": {
+        "node": ">= 0.12.0"
+    }
+}
