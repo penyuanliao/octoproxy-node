@@ -13,28 +13,46 @@ var FxConnection = fxNetSocket.netConnection;
 var parser = fxNetSocket.parser;
 var utilities = fxNetSocket.utilities;
 var libRtmp = require('./fxNodeRtmp').RTMP;
+var connections = []; //記錄連線物件
 
-const FMS_Domain = "10.251.34.14";
-//const FMS_Domain = "192.168.0.154";
-const FMS_Port = 1935;
-// const FMS_Domain = "43.251.76.111";
-// const FMS_Port = 443;
+var config = function () {
 
-var connections = [];
-/****/
+    if (!process.env.NODE_ENV){
+        return {
+            bFMSHost:"10.251.40.14",
+            bFMSPort:1935,
+            bNodePort:80
+        };
+    }else {
+        //開發用
+        return {
+            bFMSHost:"43.251.76.111",
+            bFMSPort:443,
+            bNodePort:8000
+        };
+    }
+}();
 
-function connect(uri,socket) {
+var srv = createNodejsSrv(config.bNodePort);
+
+
+/**
+ * 連線到伺服器
+ * @param uri obj{host,port}
+ * @param socket 連線client socket
+ * @returns {RTMPClient}
+ */
+function connect(uri, socket) {
 
     var rtmp = undefined;
-
+    // #1 建立連線
     rtmp = libRtmp.RTMPClient.connect(uri.host,uri.port, function (){
-        debug("complete connected!");
+        debug("RTMPClient Connected!");
+        //#1-1 送給Client連線成功
         if (socket.isConnect)
             socket.write(JSON.stringify({"NetStatusEvent":"Connected.amfIsReady"}));
 
-
-
-        // send connect event
+        //#2-1 告訴FMS進行connect連線
         rtmp.sendInvoke('connect', 1, {
             app: uri.app,
             flashVer: "MAC 10,0,32,18",
@@ -45,202 +63,187 @@ function connect(uri,socket) {
             videoCodecs: 252.0,
             videoFunction: 1.0
         });
-        // init
-        //rtmp.setWindowACK(2500000);
-        //rtmp.setPeerBandwidth(2500000,2);
-        //rtmp.setChunkSize(4000);
-
+        //完成後就可以自己送出要的事件
     });
 
+    // #2 接收FMS訊息
     rtmp.on('message', function (message) {
+        //檢查FMS訊息Type = 20(0x14 invoke message structure)
         if (message.messageHeader.messageType == 20) {
+            //message 裡有Data結構為{commandName:FMS回傳的名稱(String), transactionId:傳輸編號(int),arguments:FMS回傳的變數(Array)};
             var data = message.data;
             var cmd = data.commandName;
             var tranId = data.transactionId;
             var argument = data.arguments;
-            console.log('INFO :: cmd:%s, argument:%s', cmd, argument);
+            debug('INFO :: cmd:%s, argument:%s', cmd, argument);
+            //這邊暫時忽略_result訊息
             if(cmd != '_result') {
                 if (socket.isConnect)
                     socket.write(JSON.stringify({"NetStatusEvent":"Data","cmd":cmd, args:argument}));
             }
         };
     });
+    // #3 FMS錯誤訊息事件
     rtmp.on("error", function (args) {
         console.log("RTMP ERROR", args);
     });
+    // #4 FMS關閉的事件
     rtmp.on('close', function (args) {
         console.log("RTMP connection closed");
+        if(socket.isConnect)
+            socket.write(JSON.stringify({"NetStatusEvent":"Connected.Close"}));
+            socket.destroy();
     });
 
     return rtmp;
 };
-
-function Call(rtmp, commandName, obj){
-
-    var s1 = new libRtmp.AMF.AMFSerialiser(commandName);
-    var s2 = new libRtmp.AMF.AMFSerialiser(1);
-    var data_buf = libRtmp.amfUtils.amf0Encode([{},obj]);
-    var buf = new Buffer(s1.byteLength + s2.byteLength).fill(0x0);
-    s1.write(buf.slice(0,s1.byteLength));
-    s2.write(buf.slice(s1.byteLength,s1.byteLength + s2.byteLength));
-    buf = Buffer.concat([buf, data_buf]);
-    if (rtmp)
-        rtmp.sendPacket(0x14, libRtmp.RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE, buf);
-    else
-        connections[rtmp.name].write({"NetStatusEvent":"Connect.FMS.Failed"})
-};
-
-//utilities.autoReleaseGC(); //** 手動 10 sec gc
-var server = new FxConnection(80);
-server.on('connection', function (client) {
-    debug('clients:%s - %s',client.name, client.namespace);
-
-    setupFMSClient(client)
-
-});
-
-function setupFMSClient(client){
+/**
+ * 建立fms連線
+ * @param client NetConnection自己封裝的Client
+ */
+function setupFMSClient(client) {
     var _rtmp;
     var uri = {
-        host:FMS_Domain,
-        port:FMS_Port,
-        path:"rtmp://" + FMS_Domain + ":" + FMS_Port + client.namespace,
+        host:config.bFMSHost,
+        port:config.bFMSPort,
+        path:"rtmp://" + config.bFMSHost + ":" + config.bFMSPort + client.namespace,
         app:client.namespace.substr(1,client.namespace.length)
     };
-    //if (typeof json["data"] != 'undefined' || json["data"] != null || json["data"] != "") {
-    //    uri = verificationString(json["data"]);
-    //}else
-    //{
-    //    uri = {
-    //        host:"10.251.40.14",
-    //        port:1935,
-    //        path:"rtmp://10.251.40.14/motest/g1",
-    //        app:"motest/g1"
-    //    };
-    //}
+    //建立FMS連線
     _rtmp = connect(uri, client);
+    //設定一下名稱跟client一樣
     _rtmp.name = client.name;
-    connections[client.name] = {ws:client, amf:_rtmp};
-}
-
-/** socket data event **/
-server.on('message', function (evt) {
-    debug('message :', evt.data);
-    var socket = evt.client;
-
-    var data = evt.data;
-    if (data.charCodeAt(0) == 123) {
-        //object
-        var json = JSON.parse(data);
-        var event = json["event"];
-        if (event == "Connect") {
-            console.log('data', json["data"]);
-
-
-        }else if (event == "Send") {
-            console.log('data', json["data"]);
-
-            Call(connections[socket.name].amf, "setObj", json["data"]);
-        }else if (typeof event != 'undefined' && event != null && event != ""){
-
-            Call(connections[socket.name].amf, event, json["data"]);
-
-        } else {
-            // todo call data
-            console.log('JSON DATA', json);
-            Call(connections[socket.name].amf, "serverHandlerAMF", json);
-        }
-    }else
-    {
-        //string
-    }
-
-});
-
-/** client socket destroy **/
-server.on('disconnect', function (name) {
-    debug('disconnect_fxconnect_client.');
-    //socket.removeListener('connection', callback);
-    var index = connections.indexOf(name);
-    var removeItem;
-    if (index > -1) removeItem = index.splice(index, 1);
-    if (typeof connections[name] != 'undefined' && typeof connections[name].amf != 'undefined' && connections[name].amf) connections[name].amf.socket.destroy();
-    delete connections[name];
-});
-
-
-/** verification **/
-function verificationString(str) {
-    var _path = str.match(/([a-z]+\:\/+)([^\/\s]*)([a-z0-9\-@\^=%&;\/~\+]*)[\?]?([^ \#]*)#?([^ \#]*)/i);
-
-    if (typeof _path === 'undefined') return null;
-
-    if (!_path[2]) return null;
-
-    var url = String(_path[2]).split(":");
-
-    if(!url[1]) url[1] = "443";
-
-
-    var path = {
-        host:url[0],
-        port:url[1],
-        path:_path[0],
-        app:_path[3].substr(1,_path[3].length)
-    };
-    return path;
-}
-
-/**
- * client socket connection is http connect()
- * @param req: request
- * @param client: client socket
- * @param head: req header
- * **/
-server.on('httpUpgrade', function (req, client, head) {
-
-    debug('## HTTP upgrade ##');
-    var _get = head[0].split(" ");
-
-    var socket = client.socket;
-    failureHeader(404, socket, "html");
-    client.close();
-
-});
-/**
- * @param code: response header Status Code
- * @param socket: client socket
- * @param type: content-type
- * */
-function successfulHeader(code, socket, type) {
-
-    var contentType = type === 'js' ? "application/javascript" : "text/html";
-
-    var headers = parser.headers.responseHeader(code, {
-        "Host": server.app.address().address,
-        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Connection": "Keep-Alive",
-        "Keep-Alive": "timeout=3, max=10",
-        "Access-Control-Allow-Origin": "*",
-        "Content-Type": contentType
-    });
-
-    //socket.write("Content-Security-Policy: default-src 'self'; img-src *;object-src 'self' http://127.0.0.1; script-src 'self' http://127.0.0.1;\n");
-    socket.write(headers);
+    //存在array裡面方便讀取
+    connections[client.name] = {ws:client, fms:_rtmp};
 };
 /**
- * @param code: response header Status Code
- * @param socket: client socket
- * */
-function failureHeader(code, socket) {
+ * 建立NodeJS Server
+ * @param port
+ * @returns {port}
+ */
+function createNodejsSrv(port) {
+    var server = new FxConnection(port);
 
-    var headers = parser.headers.responseHeader(code, {
-        "Connection": "close" });
-    socket.write(headers);
+    server.on('connection', function (client) {
 
+        debug('clients name:%s (namespace %s)',client.name, client.namespace);
+
+        setupFMSClient(client);
+
+    });
+
+    server.on('message', function (evt) {
+        debug('message :', evt.data);
+        var socket = evt.client;
+
+        var data = evt.data;
+        if (data.charCodeAt(0) == 123) {
+            //object
+            var json = JSON.parse(data);
+            var event = json["event"];
+            var _fms = connections[socket.name].fms;
+            //檢查fms有沒有被建立成功沒有就回傳失敗
+            if (!_fms) {
+                connections[rtmp.name].write({"NetStatusEvent":"Connect.FMS.Failed"});
+                return;
+            }
+
+            /* ----------------------------------
+             *        這邊是Websocket事件
+             * ---------------------------------- */
+
+            if (event == "Connect") {
+                console.log('data', json["data"]);
+
+            }else if (event == "Send") {
+                //測試用
+                console.log('data', json["data"]);
+
+                _fms.fmsCall("setObj",json["data"]);
+
+            }else if (typeof event != 'undefined' && event != null && event != ""){
+
+                _fms.fmsCall(event,json["data"]);
+
+            } else {
+                // todo call data
+                console.log('[JSON DATA]', json);
+                _fms.fmsCall( "serverHandlerAMF", json);
+            };
+        }else
+        {
+            /* 如果送出來了事件是字串的話會在這裡 */
+        }
+
+    });
+
+    /** server client socket destroy **/
+    server.on('disconnect', function (name) {
+        debug('disconnect_fxconnect_client.');
+        //socket.removeListener('connection', callback);
+        var index = connections.indexOf(name);
+        var removeItem;
+        if (index > -1) removeItem = index.splice(index, 1);
+        if (typeof connections[name] != 'undefined' && typeof connections[name].amf != 'undefined' && connections[name].amf) connections[name].amf.socket.destroy();
+        delete connections[name];
+    });
+
+    /**
+     * client socket connection is http connect()
+     * @param req: request
+     * @param client: client socket
+     * @param head: req header
+     * **/
+    server.on('httpUpgrade', function (req, client, head) {
+
+        debug('## HTTP upgrade ##');
+        var _get = head[0].split(" ");
+
+        var socket = client.socket;
+        failureHeader(404, socket, "html");
+        client.close();
+
+    });
+    /**
+     * @param code: response header Status Code
+     * @param socket: client socket
+     * @param type: content-type
+     * */
+    function successfulHeader(code, socket, type) {
+
+        var contentType = type === 'js' ? "application/javascript" : "text/html";
+
+        var headers = parser.headers.responseHeader(code, {
+            "Host": server.app.address().address,
+            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Connection": "Keep-Alive",
+            "Keep-Alive": "timeout=3, max=10",
+            "Access-Control-Allow-Origin": "*",
+            "Content-Type": contentType
+        });
+
+        //socket.write("Content-Security-Policy: default-src 'self'; img-src *;object-src 'self' http://127.0.0.1; script-src 'self' http://127.0.0.1;\n");
+        socket.write(headers);
+    };
+    /**
+     * @param code: response header Status Code
+     * @param socket: client socket
+     * */
+    function failureHeader(code, socket) {
+
+        var headers = parser.headers.responseHeader(code, {
+            "Connection": "close" });
+        socket.write(headers);
+
+    };
+
+    return server;
 }
-/* ------- ended testing logger ------- */
 
+/* ------- ended testing logger ------- */
+/**
+ * 程序錯誤會出現在這裡
+ */
 process.on('uncaughtException', function (err) {
     console.error(err.stack);
 });

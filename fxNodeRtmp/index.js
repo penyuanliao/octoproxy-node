@@ -3,7 +3,7 @@ exports.RTMPClient = require('./client');
 exports.RTMPPacket = require('./packet');
 exports.RTMPMessage = require('./message');
 exports.AMFLOG = require('./log');
-exports.amfUtils = require('./amfutils.js');
+exports.amfUtils = require('./amfUtils.js');
 
 exports.RTMP = {
     AMF: exports.AMF,

@@ -6,7 +6,7 @@ var net = require('net'),
 var AMF = require('./amf');
 var RTMPHandshake = require('./handshake');
 var RTMPMessage = require('./message');
-
+var amfUtils = require('./amfUtils');
 var log = require('./log');
 
 var level ={'sendRTMPPacket':true};
@@ -49,7 +49,7 @@ RTMPClient.prototype.onData = function(data) {
 	 * #2 0 > 沒有就認定是前個封包
 	 * #3 1 > 這個封包
 	 **/
-	//if (data[0] == 0x02) {this.emit("data", data); return;}
+	if (data[0] == 0x02) {this.emit("data", data); return;}
 	if (data[0] != 0x03) {
 		chunkPacket = Buffer.concat([chunkPacket, data],chunkPacket.length + data.length);
 		data = chunkPacket;
@@ -153,6 +153,19 @@ RTMPClient.prototype.sendInvokeMessage = function(commandName, transactionId, co
 	console.log('LOG::RTMPClient.prototype.sendInvoke');
 
 	this.sendPacket(0x14, RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE, amfData);
+};
+RTMPClient.prototype.fmsCall = function (commandName, args) {
+	//command name名稱
+	var s1 = new AMF.AMFSerialiser(commandName);
+	//streamid 1 - fms通道
+	var s2 = new AMF.AMFSerialiser(1);
+	var body = amfUtils.amf0Encode([{},args]);
+	var buf = new Buffer(s1.byteLength + s2.byteLength).fill(0x0);
+	s1.write(buf.slice(0,s1.byteLength));
+	s2.write(buf.slice(s1.byteLength,s1.byteLength + s2.byteLength));
+	buf = Buffer.concat([buf, body]);
+	if (this)
+		this.sendPacket(0x14, RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE, buf);
 };
 /**
  * 0x05 – Window Acknowledgement Size

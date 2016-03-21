@@ -126,3 +126,27 @@ rtmp.on('error', function(args) {
 rtmp.on('close', function(args) {
     console.log("RTMP connection closed");
 });
+
+
+
+/** 驗證uri字串分解 **/
+function verificationString(str) {
+    var _path = str.match(/([a-z]+\:\/+)([^\/\s]*)([a-z0-9\-@\^=%&;\/~\+]*)[\?]?([^ \#]*)#?([^ \#]*)/i);
+
+    if (typeof _path === 'undefined') return null;
+
+    if (!_path[2]) return null;
+
+    var url = String(_path[2]).split(":");
+
+    if(!url[1]) url[1] = "443";
+
+
+    var path = {
+        host:url[0],
+        port:url[1],
+        path:_path[0],
+        app:_path[3].substr(1,_path[3].length)
+    };
+    return path;
+}
