@@ -549,7 +549,7 @@ function amf0decObject(buf) { // TODO: Implement references!
         if (prop.lost != -1) {
             iBuf = Buffer.concat([new Buffer([prop.lost]), iBuf],iBuf.length+1);
         }
-         console.log('Got field for property', prop);
+         // console.log('Got field for property', prop);
         len += prop.len;
         if (iBuf.slice(prop.len).readUInt8(0) == 0x09) {
             len++;
@@ -558,7 +558,7 @@ function amf0decObject(buf) { // TODO: Implement references!
         } // END Object as value, we shall leave
         else if (iBuf.slice(prop.len).readUInt8(0) == 0x06)
         {
-            console.log(iBuf.slice(prop.len).readUInt8(0));
+            // console.log(iBuf.slice(prop.len).readUInt8(0));
         }
         if (prop.value == '') break;
         var val = amf0DecodeOne(iBuf.slice(prop.len));

@@ -93,13 +93,7 @@ RTMPMessage.prototype.__defineGetter__('data', function() {
 			//	i++;
 			//	//console.log('++++++++++++++++++++++++++++++++++++++++++++++++');
 			//}
-			console.log('------decoder data------ ', obj.commandName,this.rawData.length,this.messageHeader.messageLength);
-			if ( this.rawData.length === 503) {
-				log.logHex(data);
-
-			}
-			console.log(data.length,data.toString('utf8'));
-			console.log('------decoder data------ ');
+			
 			obj.arguments = amfUtils.amf0Decode(data);
 			data = 0;
 		}
@@ -127,37 +121,9 @@ RTMPMessage.prototype.__defineGetter__('rawData', function() {
 	if (this._rawData) return this._rawData;
 	var data = [];
 	for (var i = 0; i < this.chunks.length; i++) {
-		//TODO:檢查0xC3 和結尾有_result變數
-		var idx = -1;
-		if (i == this.chunks.length-1 && (idx = arrayIndexOf(this.chunks[i].chunkData, 0x02)) > 1) {
-			console.log("[LOG]getter rawData",this.chunks[i].chunkData);
-			var find = this.chunks[i].chunkData;
-			var findResult = false;
-			for (var j = idx; j < find.length; j++) {
-				var obj = find[j];
-				if (find[j] === packet_result[j-idx]) {
-					findResult = true;
-				}else
-				{
-					data.push(this.chunks[i].chunkData);
-					findResult = false;
-					break;
-				}
-
-			}
-			if (findResult) {
-				log.logHex(this.chunks[i].chunkData);
-				console.log('////////');
-				console.log('data/');
-			}
-
-
-		}else
-		{
-			data.push(this.chunks[i].chunkData);
-		}
-
+		data.push(this.chunks[i].chunkData);
 	}
+	console.log("[LOG]getter rawData size:", data.length);
 	this._rawData = Buffer.concat(data); //TODO: concat is time & memory consuming, array of buffers or stream I/O would be better
 	return this._rawData; 
 });
@@ -227,6 +193,8 @@ RTMPMessage.prototype.parseData = function(data) {
 		//console.log('length:', a.length, b.length);
 		//console.log('messageType%d,%s:',chunk.messageHeader.messageType, chunk.chunkData.length);
 		//log.logHex(data);
+
+		
 		data = Buffer.concat([data.slice(0, chunk.chunkDataOffset), data.slice(chunk.chunkDataOffset+chunk.chunkLength)]);
 		if (data.length == chunk.chunkDataOffset){
 			data = 0;

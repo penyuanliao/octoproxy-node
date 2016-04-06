@@ -30,6 +30,16 @@ RTMPClient.prototype.onSocketConnect = function() {
 	this.handshake.on('complete', (function() {
 		log('handshake complete');
 		this.socket.on('data', this.onData.bind(this));
+		this.socket.on('end',function () {
+			this.socket.end();
+			this.emit('end');
+		});
+		this.socket.on('error', function (e) {
+			this.emit('socketError',e);
+		});
+		this.socket.on('close', function () {
+			this.emit('socketClose');
+		});
 		this.emit('connect');
 	}).bind(this));
 	this.handshake.sendClientHandshake();
@@ -41,9 +51,6 @@ RTMPClient.prototype.onSocketConnect = function() {
 var chunkPacket = new Buffer(0);
 RTMPClient.prototype.onData = function(data) {
 	//log("LOG::recieved RTMP data...", "(" + data.length + " bytes)");
-	console.log(":::Socket Name:::",this.socket.name);
-
-	log.logHex(data);
 	/**
 	 * #1 這邊主要處理0x03開頭有沒有
 	 * #2 0 > 沒有就認定是前個封包
@@ -76,9 +83,7 @@ RTMPClient.prototype.onData = function(data) {
 	for (var i = 0; i < data.length; i++) {
 		s = s + ","+ data[i];
 	}
-	console.log(s);
-
-
+	console.log("[Debug] chunkPacket size:%d, data size:%d", chunkPacket.length, data.length);
 
 	if (!this.message || this.message.bytesRemaining == 0) {
 		this.message = new RTMPMessage(data);
@@ -154,12 +159,17 @@ RTMPClient.prototype.sendInvokeMessage = function(commandName, transactionId, co
 
 	this.sendPacket(0x14, RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE, amfData);
 };
-RTMPClient.prototype.fmsCall = function (commandName, args) {
+RTMPClient.prototype.fmsCall = function (commandName, arg) {
 	//command name名稱
 	var s1 = new AMF.AMFSerialiser(commandName);
 	//streamid 1 - fms通道
 	var s2 = new AMF.AMFSerialiser(1);
-	var body = amfUtils.amf0Encode([{},args]);
+	var args = [{}];
+	var count = arguments.length;
+	while (count-- > 0) {
+		args.push(arguments[count]);
+	}
+	var body = amfUtils.amf0Encode(args);
 	var buf = new Buffer(s1.byteLength + s2.byteLength).fill(0x0);
 	s1.write(buf.slice(0,s1.byteLength));
 	s2.write(buf.slice(s1.byteLength,s1.byteLength + s2.byteLength));
@@ -167,14 +177,22 @@ RTMPClient.prototype.fmsCall = function (commandName, args) {
 	if (this)
 		this.sendPacket(0x14, RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE, buf);
 };
+RTMPClient.prototype.pingResponse = function (num) {
+	var rtmpBuffer = new Buffer('4200000000000604000700000000', 'hex');
+	rtmpBuffer.writeUInt32BE(num, 10);
+	// //console.log('windowACK: '+rtmpBuffer.hex());
+	log.logHex(rtmpBuffer);
+	this.socket.write(rtmpBuffer);
+};
 /**
  * 0x05 – Window Acknowledgement Size
  * @param size
  */
 RTMPClient.prototype.setWindowACK = function (size) {
-	var rtmpBuffer = new Buffer('02000000000004050000000000000000', 'hex');
+	var rtmpBuffer = new Buffer('023b659c000004050000000000000000', 'hex');
 	rtmpBuffer.writeUInt32BE(size, 12);
 	// //console.log('windowACK: '+rtmpBuffer.hex());
+	log.logHex(rtmpBuffer);
 	this.socket.write(rtmpBuffer);
 };
 /**

@@ -151,6 +151,7 @@ var RTMPHandshake = module.exports = function(client) {
         throw new Error("Invalid arguments, requires RTMPClient or net.Socket");
     }
     this.socket.on('data', this.onResponse.bind(this));
+    this.socket.DataFunc = this.onResponse.bind(this);
     this.state = RTMPHandshake.STATE_UNINITIALIZED;
 };
 util.inherits(RTMPHandshake, events.EventEmitter);
@@ -198,8 +199,16 @@ RTMPHandshake.prototype.sendC2 = function() {
 };
 var i = 0;
 RTMPHandshake.prototype.onResponse = function(chunk) {
+
+    if (this.state == RTMPHandshake.STATE_HANDSHAKE_DONE) {
+        chunk = null;
+        return;
+    }
+
     if (this.remainingChunk && this.remainingChunk.length) {
         chunk = Buffer.concat([this.remainingChunk, chunk], this.remainingChunk.length + chunk.length)
+    }else {
+
     }
 
     if (!this.s0chunk && chunk.length >= S0Chunk.byteLength) {
@@ -221,7 +230,7 @@ RTMPHandshake.prototype.onResponse = function(chunk) {
         }
         this.emit('s1recieved', this.s1chunk);
     }
-    console.log('check s2chunk:%d,%d', chunk.length, S2Chunk.byteLength);
+    console.log('CHECK check s2chunk:%d,%d', chunk.length, S2Chunk.byteLength);
     if (!this.s2chunk && chunk.length >= S2Chunk.byteLength) {
         this.s2chunk = new S2Chunk(chunk);
         chunk = chunk.slice(S2Chunk.byteLength);
@@ -236,10 +245,13 @@ RTMPHandshake.prototype.onResponse = function(chunk) {
 
         /* Emit any left over data */
         this.emit('data', chunk);
-
+        console.log('CHECK socket removeListener');
         /* Clean up */
         this.socket.removeListener('data', this.onResponse.bind(this)); //TODO: test this actually removes the listener (not sure?)
+        this.socket.removeListener('data',this.socket.DataFunc);
+        this.socket.DataFunc = null;
         this.remainingChunk = null;
+
     }
     this.remainingChunk = chunk;
 }

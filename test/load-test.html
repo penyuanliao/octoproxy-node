@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<br lang="en" xmlns="http://www.w3.org/1999/html">
+<head>
+    <meta charset="UTF-8">
+    <title> Live Stream (Cluster)</title>
+    <style>
+        button {
+            width: 100px;
+            display:inline-block;
+            padding-bottom: 10px;
+            padding-top: 10px;
+            margin: 0px 0px 5px 05px;
+            border-radius:4px;
+            border: 1px solid transparent;
+            background-color: #5bc0de;
+            border-color: #46b8da;
+            color: white;
+        }
+        button[disabled] {
+            background-color: #d9534f;
+            border-color: #d43f3a;
+        }
+
+    </style>
+
+</head>
+<br>
+<script type="text/javascript">
+    window.onload = load;
+    function load() {
+
+        var sample = [ {a1: 'this a1 1234567890',
+            a2: [ 1, 2, 3, '1', '1' ],
+            a3: { name: '1' },
+            a4: 123 }];
+
+        var ws; // websocket連線
+
+        function liveStream() {
+
+//            var wsURL = 'ws://' + '43.251.76.26:80/BacPlayerLight/g1';
+//            var wsURL = 'ws://' + '127.0.0.1:8000/BacPlayerLight/g1';
+            var wsURL = 'ws://' + '127.0.0.1:8000/motest/g1';
+            ws = new WebSocket(wsURL);
+            ws.onopen = onOpenHandle;
+            ws.onclose = onCloseHandle;
+            ws.onmessage = onMessageHandle;
+        };
+        function onCloseHandle(evt) {
+            console.log('websocket on disconnect.');
+        };
+        function onOpenHandle(evt){
+            console.log('websocket on connected.');
+        };
+        function onMessageHandle(evt) {
+            var json = JSON.parse(evt.data);
+
+            if (json.NetStatusEvent === "NetConnect.Success") {
+            }else if(json.NetStatusEvent === "Connected.amfIsReady") {
+//                ws.send(JSON.stringify({
+//                    sid:'bd75377db886a5014a65ae17b4b7bbda3b4366a5',
+//                    action:'login'
+//                }));
+//
+//                setInterval(function () {
+//                    ws.send(JSON.stringify({
+//                        event:'bd75377db886a5014a65ae17b4b7bbda3b4366a5',
+//                        data:'login'
+//                    }));
+//                },15001)
+            }else if(json.NetStatusEvent === "Data"){
+                if(json.args[0].action == 'onLogin') {
+                    console.log('onlogin');
+                    setTimeout(function () {
+                        ws.send(JSON.stringify({action:"userInfo"}))
+                    },2000)
+                }
+            }
+            else{
+            }
+            console.log(json.data);
+
+
+        };
+
+        var liveList = ["live1","live2"];
+
+        for (var i = 0; i < liveList.length; i++) {
+            var obj = liveList[i];
+            var button = document.getElementById(obj);
+            if (i === 0) {
+                button.onclick = onClickHandle;
+            }else {
+                button.onclick = onClickHandleStop;
+            }
+        }
+        function onClickHandle(e) {
+            liveStream();
+        }
+        function onClickHandleStop(e) {
+//            ws.send(JSON.stringify({action:"userInfo"}));
+            ws.close();
+        }
+    };
+</script>
+        <button id="live1" class="button" >start</button>
+        <button id="live2" class="button" >stop</button>
+
+    </div>
+</body>
+</html>

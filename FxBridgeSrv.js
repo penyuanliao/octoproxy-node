@@ -19,14 +19,14 @@ var config = function () {
 
     if (!process.env.NODE_ENV){
         return {
-            bFMSHost:"10.251.40.14",
+            bFMSHost:"10.251.34.14",
             bFMSPort:1935,
             bNodePort:80
         };
     }else {
         //開發用
         return {
-            bFMSHost:"43.251.76.111",
+            bFMSHost:"43.251.76.26",
             bFMSPort:443,
             bNodePort:8000
         };
@@ -52,6 +52,10 @@ function connect(uri, socket) {
         if (socket.isConnect)
             socket.write(JSON.stringify({"NetStatusEvent":"Connected.amfIsReady"}));
 
+        //LNX 11,7,700,203
+        //MAC 10,0,32,18
+        //MAC 11,8,800,94
+        //WIN 11,3,372,94
         //#2-1 告訴FMS進行connect連線
         rtmp.sendInvoke('connect', 1, {
             app: uri.app,
@@ -60,9 +64,10 @@ function connect(uri, socket) {
             fpad: false,
             capabilities: 15.0,
             audioCodecs: 0.0,
-            videoCodecs: 252.0,
-            videoFunction: 1.0
+            videoCodecs: 0.0,
+            videoFunction: 0.0
         });
+
         //完成後就可以自己送出要的事件
     });
 
@@ -80,6 +85,9 @@ function connect(uri, socket) {
             if(cmd != '_result') {
                 if (socket.isConnect)
                     socket.write(JSON.stringify({"NetStatusEvent":"Data","cmd":cmd, args:argument}));
+            }else
+            {
+                // rtmp.setWindowACK(2500000);
             }
         };
     });
@@ -90,9 +98,19 @@ function connect(uri, socket) {
     // #4 FMS關閉的事件
     rtmp.on('close', function (args) {
         console.log("RTMP connection closed");
-        if(socket.isConnect)
+        if(socket.isConnect){
             socket.write(JSON.stringify({"NetStatusEvent":"Connected.Close"}));
             socket.destroy();
+        }
+
+    });
+    rtmp.on('data', function (chunk) {
+       if (chunk[0] == 0x02 && chunk.byteLength == 18) {
+           console.log(chunk);
+           var num = chunk.readInt32BE(14);
+           rtmp.pingResponse(num);
+
+       }
     });
 
     return rtmp;
@@ -127,7 +145,11 @@ function createNodejsSrv(port) {
     server.on('connection', function (client) {
 
         debug('clients name:%s (namespace %s)',client.name, client.namespace);
-
+        if(client.namespace.indexOf("policy-file-request") != -1 ) {
+            console.log('is none rtmp...');
+            client.destroy();
+            return;
+        }
         setupFMSClient(client);
 
     });
@@ -180,12 +202,18 @@ function createNodejsSrv(port) {
     /** server client socket destroy **/
     server.on('disconnect', function (name) {
         debug('disconnect_fxconnect_client.');
-        //socket.removeListener('connection', callback);
-        var index = connections.indexOf(name);
-        var removeItem;
-        if (index > -1) removeItem = index.splice(index, 1);
-        if (typeof connections[name] != 'undefined' && typeof connections[name].amf != 'undefined' && connections[name].amf) connections[name].amf.socket.destroy();
-        delete connections[name];
+
+        var removeItem = connections[name];
+
+
+
+        if (typeof removeItem != 'undefined' && typeof removeItem.fms != 'undefined' && removeItem.fms) {
+
+            removeItem.fms.socket.destroy();
+            delete connections[name];
+        };
+        console.log('index', connections,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
+
     });
 
     /**

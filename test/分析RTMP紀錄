@@ -1,0 +1,16 @@
+分析RTMP紀錄
+第一個字節決定消息類型
+## HeaderType(fmt): 決定chunk message header編碼方式和大小,前兩個2bits 決定chunk message header length 
+00 12 bytes 0x000000 
+01 8 bytes 0x
+10 4 bytes
+11 1 bytes
+[1 2 4 8 16 32 64 128]
+
+## ChannelID
+
+#1 RTMPClient.prototype.onData 
+
+
+amf0Encode -> amf0EncodeOne -> amfXEncodeOne
+
