@@ -18,7 +18,7 @@ config.numCPUs = require('os').cpus().length;
 
 
 if (config.env == 'development') {
-    config.bFMSHost = "43.251.76.26";
+    config.bFMSHost = "127.0.0.1";
     config.bFMSPort = 443;
     config.srvOptions = {
         'host': '0.0.0.0',
@@ -38,7 +38,7 @@ if (config.env == 'development') {
     };
 }
 else {
-    config.bFMSHost = "10.251.34.14";
+    config.bFMSHost = "127.0.0.1";
     config.bFMSPort = 1935;
     config.srvOptions = {
         'host': '0.0.0.0',
