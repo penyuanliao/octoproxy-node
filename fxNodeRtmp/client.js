@@ -194,6 +194,7 @@ RTMPClient.prototype.setWindowACK = function (size) {
 	// //console.log('windowACK: '+rtmpBuffer.hex());
 	log.logHex(rtmpBuffer);
 	this.socket.write(rtmpBuffer);
+
 };
 /**
  * 0x06 – Set Peer Bandwidth
