@@ -7,34 +7,19 @@
  * --expose-gc: manual gc().
  */
 
-var debug = require('debug')('Live');
-var fxNetSocket = require('./fxNetSocket');
-var FxConnection = fxNetSocket.netConnection;
-var parser = fxNetSocket.parser;
-var utilities = fxNetSocket.utilities;
-var libRtmp = require('./fxNodeRtmp').RTMP;
+const debug = require('debug')('Live');
+const fxNetSocket = require('fxNetSocket');
+const net = require('net');
+const FxConnection = fxNetSocket.netConnection;
+const parser = fxNetSocket.parser;
+const utilities = fxNetSocket.utilities;
+const libRtmp = require('./fxNodeRtmp').RTMP;
+const config = require('./config.js');
+const isWorker = ('NODE_CDID' in process.env);
+const isMaster = (isWorker === false);
+
 var connections = []; //記錄連線物件
-
-var config = function () {
-
-    if (!process.env.NODE_ENV){
-        return {
-            bFMSHost:"10.251.34.14",
-            bFMSPort:1935,
-            bNodePort:80
-        };
-    }else {
-        //開發用
-        return {
-            bFMSHost:"43.251.76.26",
-            bFMSPort:443,
-            bNodePort:8000
-        };
-    }
-}();
-
-var srv = createNodejsSrv(config.bNodePort);
-
+var srv = createNodejsSrv(config.srvOptions.port);
 
 /**
  * 連線到伺服器
@@ -58,14 +43,14 @@ function connect(uri, socket) {
         //WIN 11,3,372,94
         //#2-1 告訴FMS進行connect連線
         rtmp.sendInvoke('connect', 1, {
-            app: uri.app,
-            flashVer: "MAC 10,0,32,18",
-            tcUrl: uri.path,
-            fpad: false,
-            capabilities: 15.0,
-            audioCodecs: 0.0,
-            videoCodecs: 0.0,
-            videoFunction: 0.0
+            app: uri.app, //app name
+            flashVer: "MAC 10,0,32,18", //flash version
+            tcUrl: uri.path, //rtmp path
+            fpad: false, // unknown
+            capabilities: 9947.75, // unknown
+            audioCodecs: 3191, // audio code
+            videoCodecs: 252, // video code
+            videoFunction: 1
         });
 
         //完成後就可以自己送出要的事件
@@ -104,8 +89,14 @@ function connect(uri, socket) {
         }
 
     });
+    // 沒有解析的資料
     rtmp.on('data', function (chunk) {
-       if (chunk[0] == 0x02 && chunk.byteLength == 18) {
+        // header長度
+        var header_size = chunk.readUInt8(0);
+        
+        // console.log('header_size:%d, number:%d', header_size, chunk.readInt32BE(14));
+
+        if (chunk[0] == 0x02 && chunk.byteLength == 18) {
            console.log(chunk);
            var num = chunk.readInt32BE(14);
            rtmp.pingResponse(num);
@@ -140,7 +131,7 @@ function setupFMSClient(client) {
  * @returns {port}
  */
 function createNodejsSrv(port) {
-    var server = new FxConnection(port);
+    var server = new FxConnection(port,{runListen: isMaster});
 
     server.on('connection', function (client) {
 
@@ -205,14 +196,14 @@ function createNodejsSrv(port) {
 
         var removeItem = connections[name];
 
-
-
         if (typeof removeItem != 'undefined' && typeof removeItem.fms != 'undefined' && removeItem.fms) {
 
             removeItem.fms.socket.destroy();
             delete connections[name];
+
+            console.log('index', connections,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
         };
-        console.log('index', connections,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
+
 
     });
 
@@ -274,4 +265,38 @@ function createNodejsSrv(port) {
  */
 process.on('uncaughtException', function (err) {
     console.error(err.stack);
+});
+process.on('SIGQUIT',function () {
+    Info("IPC channel exit -1");
+    process.exit(-1);
+});
+process.on('disconnect', function () {
+    Info("sends a QUIT signal (SIGQUIT)");
+    process.exit(0);
+});
+process.on('message', function (data, handle) {
+    var json = data;
+    if (typeof json === 'string') {
+
+    }else if(typeof json === 'object'){
+
+        if (data.evt == "c_init") {
+            var socket = new net.Socket({
+                handle:handle,
+                allowHalfOpen:srv.app.allowHalfOpen
+            });
+            socket.readable = socket.writable = true;
+            socket.server = srv.app;
+            srv.app.emit("connection", socket);
+            socket.emit("connect");
+            socket.emit('data',new Buffer(data.data));
+            socket.resume();
+            return;
+        }else if(data.evt == "processInfo") {
+            process.send({"evt":"processInfo", "data" : {"memoryUsage":process.memoryUsage(),"connections": Object.keys(connections)}})
+        }else{
+            debug('out of hand. dismiss message');
+        }
+
+    }
 });
