@@ -191,6 +191,8 @@ function assign(namespace, cb) {
     console.log(path);
     if (path[2]) {
         namespace = path[1];
+    }else{
+        namespace = path[1];
     }
 
     // url_param
