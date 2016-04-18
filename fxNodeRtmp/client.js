@@ -69,7 +69,7 @@ RTMPClient.prototype.onData = function(data) {
 	var passcount = 0;
 	while (len >= 0) {
 		var obj = data[len];
-		if (obj == 0xC3) {
+		if (obj == 0xC3 && data[len-1]) {
 			data = Buffer.concat([data.slice(0,len),data.slice(len+1,data.length)],data.length-1);
 			passcount++;
 		}else
@@ -251,15 +251,20 @@ RTMPClient.prototype.sendRawData = function(packet) {
 RTMPClient.connect = function(host, port, connectListener) {
 	console.log('LOG::RTMPClient.connect');
 	const DEFAULT_PORT = 1935;
+	var client;
 	if (!connectListener && typeof port == "function") {
 		connectListener = port;
 		port = DEFAULT_PORT;
 	}
 	var socket = new net.Socket();
 	socket.connect(port || DEFAULT_PORT, host);
-	var client = new RTMPClient(socket);
+
+	client = new RTMPClient(socket);
+	socket.on('error', function (err) {
+		client.emit('error',err);
+	});
 	if (connectListener && typeof connectListener == "function") 
-		client.on('connect', connectListener)
+		client.on('connect', connectListener);
 	return client;
 };
 RTMPClient.connectComplete = function (host, port, complete) {
