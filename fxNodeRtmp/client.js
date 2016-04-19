@@ -9,7 +9,7 @@ var RTMPMessage = require('./message');
 var amfUtils = require('./amfUtils');
 var log = require('./log');
 
-var level ={'sendRTMPPacket':true};
+var level ={'sendRTMPPacket':false};
 
 var RTMPClient = module.exports = function(socket) {
 	console.log('LOG::NEW RTMPClient');
@@ -22,6 +22,7 @@ util.inherits(RTMPClient, events.EventEmitter);
 RTMPClient.prototype.onSocketConnect = function() {
 	console.log('LOG::RTMPClient.prototype.onSocketConnect');
 	// On connection send handshake
+	var self = this;
 	this.handshake = new RTMPHandshake(this);
 	this.handshake.on('error', function(err) {
 		console.log('ERROR::RTMPClient.prototype.onSocketConnect >> handshake error');
@@ -31,14 +32,14 @@ RTMPClient.prototype.onSocketConnect = function() {
 		log('handshake complete');
 		this.socket.on('data', this.onData.bind(this));
 		this.socket.on('end',function () {
-			this.socket.end();
-			this.emit('end');
+			self.socket.end();
+			self.emit('end');
 		});
 		this.socket.on('error', function (e) {
-			this.emit('socketError',e);
+			self.emit('socketError',e);
 		});
 		this.socket.on('close', function () {
-			this.emit('socketClose');
+			self.emit('socketClose');
 		});
 		this.emit('connect');
 	}).bind(this));
@@ -65,16 +66,21 @@ RTMPClient.prototype.onData = function(data) {
 	}
 
 	//start 過濾C3
-	var len = data.length - 1;
+	var len = 0;
 	var passcount = 0;
-	while (len >= 0) {
+	const chunkType = (data.readUInt8(0))>>6;
+	const headerLength = (chunkType == 0 ? 11 : (chunkType == 1 ? 7 : (chunkType == 2 ? 3 : 0 ) ) );
+	const chunkSize = 128;
+	while (len < data.length) {
 		var obj = data[len];
-		if (obj == 0xC3 && data[len-1]) {
+		var nextAbove = (passcount+1) * chunkSize + headerLength+1;
+		if (obj == 0xC3 && len == nextAbove) {
+			console.log('0xC3 -> from above in :', (passcount+1)*128 + headerLength+1,len);
 			data = Buffer.concat([data.slice(0,len),data.slice(len+1,data.length)],data.length-1);
 			passcount++;
 		}else
 		{
-			len--;
+			len++;
 		}
 	}
 	//end 過濾C3

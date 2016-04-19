@@ -103,7 +103,6 @@ function onread_url_param(nread, buffer) {
     };
     // Error, end of file.
     if (nread === uv.UV_EOF) { debug('error UV_EOF: unexpected end of file.'); return;}
-    console.log(buffer.toString('utf8'));
     var headers = pheaders.onReadTCPParser(buffer);
     var source = headers.source;
     var general = headers.general;
