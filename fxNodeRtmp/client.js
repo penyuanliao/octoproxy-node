@@ -12,7 +12,6 @@ var log = require('./log');
 var level ={'sendRTMPPacket':false};
 
 var RTMPClient = module.exports = function(socket) {
-	console.log('LOG::NEW RTMPClient');
 	this.socket = socket;
 	this.socket.name = new Date().getTime();
 	this.state = 'connecting'; 
@@ -20,7 +19,6 @@ var RTMPClient = module.exports = function(socket) {
 };
 util.inherits(RTMPClient, events.EventEmitter);
 RTMPClient.prototype.onSocketConnect = function() {
-	console.log('LOG::RTMPClient.prototype.onSocketConnect');
 	// On connection send handshake
 	var self = this;
 	this.handshake = new RTMPHandshake(this);
@@ -29,7 +27,6 @@ RTMPClient.prototype.onSocketConnect = function() {
 		log.warn('handshake error:',err);
 	});
 	this.handshake.on('complete', (function() {
-		log('handshake complete');
 		this.socket.on('data', this.onData.bind(this));
 		this.socket.on('end',function () {
 			self.socket.end();
@@ -51,7 +48,7 @@ RTMPClient.prototype.onSocketConnect = function() {
  */
 var chunkPacket = new Buffer(0);
 RTMPClient.prototype.onData = function(data) {
-	//log("LOG::recieved RTMP data...", "(" + data.length + " bytes)");
+	log("LOG::recieved RTMP data...", "(" + data.length + " bytes)");
 	/**
 	 * #1 這邊主要處理0x03開頭有沒有
 	 * #2 0 > 沒有就認定是前個封包
@@ -97,7 +94,7 @@ RTMPClient.prototype.onData = function(data) {
 		this.message.on('complete', this.onMessage.bind(this));
 	}
 	this.message.parseData(data);
-}
+};
 
 
 RTMPClient.prototype.onMessage = function() {
@@ -137,8 +134,8 @@ RTMPClient.prototype.sendInvoke = function(commandName, transactionId, commandOb
     if (invokeArguments !== undefined) {
     	invokeArgumentsSerialiser.write(amfData.slice(amfOffset, amfOffset + invokeArgumentsSerialiser.byteLength));
     }
-	console.log('LOG::RTMPClient.prototype.sendInvoke');
-	this.sendPacket(0x03, RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE, amfData);	
+
+	this.sendPacket(0x03, RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE, amfData);
 };
 RTMPClient.prototype.sendInvokeMessage = function(commandName, transactionId, commandObj, invokeArguments) {
 	// TODO: create RTMPInvoke class to parse and/or handle this (that inherits from a general RTMPPacket class)
@@ -161,7 +158,6 @@ RTMPClient.prototype.sendInvokeMessage = function(commandName, transactionId, co
 	if (invokeArguments !== undefined) {
 		invokeArgumentsSerialiser.write(amfData.slice(amfOffset, amfOffset + invokeArgumentsSerialiser.byteLength));
 	}
-	console.log('LOG::RTMPClient.prototype.sendInvoke');
 
 	this.sendPacket(0x14, RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE, amfData);
 };
@@ -241,8 +237,9 @@ RTMPClient.prototype.sendPacket = function(channel, messageType, data) {
 
 	if (level.sendRTMPPacket) {
 		log("sending RTMP packet...",  "(" + rawData.length + " bytes)");
-		log.logHex(data);
+		log.logHex(rawData);
 	}
+
 	this.socket.write(rawData);
 
 }
@@ -255,7 +252,6 @@ RTMPClient.prototype.sendRawData = function(packet) {
 }
 
 RTMPClient.connect = function(host, port, connectListener) {
-	console.log('LOG::RTMPClient.connect');
 	const DEFAULT_PORT = 1935;
 	var client;
 	if (!connectListener && typeof port == "function") {

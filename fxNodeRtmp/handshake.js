@@ -208,18 +208,14 @@ RTMPHandshake.prototype.onResponse = function(chunk) {
     if (!this.s0chunk && chunk.length >= S0Chunk.byteLength) {
         this.s0chunk = new S0Chunk(chunk);
         chunk = chunk.slice(S0Chunk.byteLength);
-        console.log("S0 Length(1) is =:",this.s0chunk);
         if (!this.s0chunk.isValid())
             this.emit('error', 's0 invalid');
         this.emit('s0recieved', this.s0chunk);
     }
     if (!this.s1chunk && chunk.length >= S1Chunk.byteLength) {
-        console.log("S1 Length(1536) is =:",chunk.length);
         this.s1chunk = new S1Chunk(chunk);
         chunk = chunk.slice(S1Chunk.byteLength);
 
-
-        console.log('info::this.s1chunk.isValid()', this.s1chunk.isValid());
         if (!this.s1chunk.isValid()) {
             this.emit('error', 's1 invalid');
         }
@@ -239,7 +235,6 @@ RTMPHandshake.prototype.onResponse = function(chunk) {
 
         /* Emit any left over data */
         this.emit('data', chunk);
-        console.log('CHECK socket removeListener');
         /* Clean up */
         this.socket.removeListener('data', this.onResponse.bind(this)); //TODO: test this actually removes the listener (not sure?)
         this.socket.removeListener('data',this.socket.DataFunc);

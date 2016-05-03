@@ -7,7 +7,8 @@
  * --expose-gc: manual gc().
  */
 
-const debug = require('debug')('Live');
+const debug = require('debug')('rtmp:BridgeSrv');
+debug.log = console.log.bind(console); //file log 需要下這行
 const fxNetSocket = require('fxNetSocket');
 const net = require('net');
 const FxConnection = fxNetSocket.netConnection;
@@ -54,7 +55,7 @@ function connect(uri, socket) {
         });
 
         //完成後就可以自己送出要的事件
-    });
+    });;
 
     // #2 接收FMS訊息
     rtmp.on('message', function (message) {
@@ -135,9 +136,9 @@ function createNodejsSrv(port) {
 
     server.on('connection', function (client) {
 
-        debug('clients name:%s (namespace %s)',client.name, client.namespace);
+        debug('Connection Clients name:%s (namespace %s)',client.name, client.namespace);
         if(client.namespace.indexOf("policy-file-request") != -1 ) {
-            console.log('is none rtmp...');
+            console.log('Clients is none rtmp... to destroy.');
             client.destroy();
             return;
         }
@@ -148,16 +149,16 @@ function createNodejsSrv(port) {
     server.on('message', function (evt) {
         debug('message :', evt.data);
         var socket = evt.client;
-
+        const sockName = socket.name;
         var data = evt.data;
         if (data.charCodeAt(0) == 123) {
             //object
             var json = JSON.parse(data);
             var event = json["event"];
-            var _fms = connections[socket.name].fms;
+            var _fms = connections[sockName].fms;
             //檢查fms有沒有被建立成功沒有就回傳失敗
             if (!_fms) {
-                connections[rtmp.name].write({"NetStatusEvent":"Connect.FMS.Failed"});
+                socket.write(JSON.stringify({"NetStatusEvent":"Connect.FMS.Failed"}));
                 return;
             }
 
@@ -167,7 +168,7 @@ function createNodejsSrv(port) {
 
             if (event == "Connect") {
                 console.log('data', json["data"]);
-
+                
             }else if (event == "Send") {
                 //測試用
                 console.log('data', json["data"]);
@@ -201,7 +202,7 @@ function createNodejsSrv(port) {
             removeItem.fms.socket.destroy();
             delete connections[name];
 
-            console.log('index', connections,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
+            console.log('disconnect count:', Object.keys(connections).length,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
         };
 
 
@@ -281,6 +282,9 @@ process.on('message', function (data, handle) {
     }else if(typeof json === 'object'){
 
         if (data.evt == "c_init") {
+
+            debug("Conversion Socket.Hanlde from Child Process.");
+
             var socket = new net.Socket({
                 handle:handle,
                 allowHalfOpen:srv.app.allowHalfOpen
@@ -296,7 +300,7 @@ process.on('message', function (data, handle) {
             process.send({"evt":"processInfo", "data" : {"memoryUsage":process.memoryUsage(),"connections": Object.keys(connections)}})
         }else{
             debug('out of hand. dismiss message');
-        }
+        };
 
-    }
+    };
 });

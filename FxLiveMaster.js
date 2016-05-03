@@ -6,7 +6,7 @@
  */
 
 const util = require('util');
-const debug = require('debug')('Live');
+const debug = require('debug')('rtmp:LiveMaster');
 debug.log = console.log.bind(console); //file log 需要下這行
 const fxNetSocket = require('fxNetSocket');
 const parser = fxNetSocket.parser;
@@ -28,7 +28,7 @@ var server;
 var clusters = [];
 var roundrobinNum = [];
 
-debug(" starting FxLiveMaster.js");
+debug("** Initialize FxLiveMaster.js **");
 
 initizatialSrv();
 
@@ -71,7 +71,7 @@ function createServer(opt) {
         tcp_handle.onconnection = function (err ,handle) {
 
             if (err) throw new Error("client not connect.");
-
+            console.log('Handle ;typeof', typeof handle);
             handle.onread = onread_url_param;
             handle.readStart(); //讀header封包
             //onread_roundrobin(handle); //平均分配資源
@@ -85,6 +85,20 @@ function createServer(opt) {
     };
 
 };
+function reboot() {
+    server.close();
+    server.onconnection = null;
+    delete server;
+    server = null;
+
+    createServer(cfg.srvOptions);
+
+};
+function initSocket(sockHandle) {
+    var socket = new net.Socket(sockHandle);
+    
+}
+
 /** _handle Equal Division **/
 function onread_roundrobin(client_handle) {
     var worker = clusters.shift();
@@ -121,8 +135,14 @@ function onread_url_param(nread, buffer) {
         console.log('socket - namespace - ', namespace);
         source = namespace;
     }
+
     if ((buffer.byteLength == 0 || mode == "socket" || !headers) && !headers.swfPolicy) mode = "socket";
     if (headers.unicodeNull != null && headers.swfPolicy && mode != 'ws') mode = "flashsocket";
+
+
+    debug("sec-websocket-protocol:", headers["sec-websocket-protocol"]);
+
+
 
     if ((mode === 'ws' && isBrowser) || mode === 'socket' || mode === "flashsocket") {
 
@@ -132,7 +152,7 @@ function onread_url_param(nread, buffer) {
                 handle.close();
             }else{
                 worker.send({'evt':'c_init',data:source}, handle,[{ track: false, process: false }]);
-                
+                handle.close();
             };
 
         });
@@ -172,7 +192,7 @@ function setupCluster(opt) {
             }
             clusters[cluster.name].push(cluster);
         };
-        console.log("Cluster count:", num);
+        debug("Cluster active number:", num);
     };
 }
 /**
@@ -187,13 +207,12 @@ function assign(namespace, cb) {
     var cluster = undefined;
 
     var path = namespace.split("/");
-    console.log(path);
     if (path[2]) {
         namespace = path[1];
     }else{
         namespace = path[1];
     }
-
+    debug("assign::namespace: ", namespace);
     // url_param
     if (cfg.balance === "url_param") {
 
@@ -203,8 +222,6 @@ function assign(namespace, cb) {
         cluster = clusters[namespace][roundrobinNum[namespace]++];
 
         if (roundrobinNum[namespace] >= clusters[namespace].length) roundrobinNum[namespace] = 0;
-
-        console.log('assign rule [roundrobin].');
 
         if (cb) cb(cluster);
 
@@ -224,9 +241,6 @@ function assign(namespace, cb) {
                 cluster = clusters[namespace][n];
             }
         }
-
-        console.log('assign rule [leastconn]');
-
         if (cb) cb(cluster);
     }else
     {
