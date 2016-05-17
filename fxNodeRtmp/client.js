@@ -14,7 +14,15 @@ var level ={'sendRTMPPacket':false};
 var RTMPClient = module.exports = function(socket) {
 	this.socket = socket;
 	this.socket.name = new Date().getTime();
-	this.state = 'connecting'; 
+	this.state = 'connecting';
+	// video stream //
+	this.isVideoStream = false; // 檢查有沒有送出createStream
+	this.callbackfunc = undefined; // 視訊事件出發回傳
+	this.streamChunkSize = 0; // 伺服器回傳chunkSize大小
+	this.videoname = undefined;
+
+
+
 	socket.on('connect', this.onSocketConnect.bind(this));
 };
 util.inherits(RTMPClient, events.EventEmitter);
@@ -27,6 +35,7 @@ RTMPClient.prototype.onSocketConnect = function() {
 		log.warn('handshake error:',err);
 	});
 	this.handshake.on('complete', (function() {
+		this.socket.chunkPacket = new Buffer(0);
 		this.socket.on('data', this.onData.bind(this));
 		this.socket.on('end',function () {
 			self.socket.end();
@@ -46,9 +55,30 @@ RTMPClient.prototype.onSocketConnect = function() {
  * socket on data 事件
  * @param data
  */
-var chunkPacket = new Buffer(0);
 RTMPClient.prototype.onData = function(data) {
 	log("LOG::recieved RTMP data...", "(" + data.length + " bytes)");
+	var chunkPacket = this.socket.chunkPacket;
+	if (this.isVideoStream) {
+		if ((data[0] == 0x02 || data[0] == 0x03 || data[0] == 0x04) && this.callbackfunc) {
+			if (this.callbackfunc instanceof Function) {
+				this.callbackfunc(data);
+				// this.callbackfunc = undefined;
+				return;
+			};
+		}
+		else
+		{
+			this.emit('videoData',data);
+			// console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
+			// log.logHex(data.slice(0,512));
+			// console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
+
+
+		}
+
+		return;
+	}
+
 	/**
 	 * #1 這邊主要處理0x03開頭有沒有
 	 * #2 0 > 沒有就認定是前個封包
@@ -90,12 +120,10 @@ RTMPClient.prototype.onData = function(data) {
 
 	if (!this.message || this.message.bytesRemaining == 0) {
 		this.message = new RTMPMessage(data);
-		this.message.name = "bytes_"+data.length;
 		this.message.on('complete', this.onMessage.bind(this));
 	}
 	this.message.parseData(data);
 };
-
 
 RTMPClient.prototype.onMessage = function() {
 	this.emit("message", this.message);
@@ -249,7 +277,239 @@ RTMPClient.prototype.sendRawData = function(packet) {
 	log.logHex(packet);
 	console.log('LOG::RTMPClient.prototype.sendRawData (w)');
 	this.socket.write(packet);
-}
+};
+
+RTMPClient.prototype.createStream = function(name) {
+	var self = this;
+	this.isVideoStream = true;
+	this.callbackfunc = function (data) {
+		console.log('callbasekfunc createStream', data);
+		var fmsObj = amfUtils.decodeAmf0Cmd(data.slice(12, data.length));
+		// console.log(amfUtils.decodeAmf0Cmd(fmsObj));
+		if (fmsObj.cmd == "_result" && fmsObj.info == 1) {
+			console.log('createStream successful');
+			self.callbackfunc = undefined;
+			self.emit("createStreamEvent",fmsObj.info);
+		};
+	};
+
+
+
+	this.sendInvoke('createStream',0,{});
+
+};
+
+RTMPClient.prototype.streamPlay = function(name) {
+	console.log('TRACE >> sending play');
+	var self = this;
+
+	var header = new Buffer('080000b800001c110100000000','hex');
+	var cmdName = amfUtils.amf0encString("play");
+	var tranID = amfUtils.amf0encNumber(0); // transactionID = 0
+	var cmdObj = amfUtils.amf0encNull(); // Command Object = NULL
+	var stramName = amfUtils.amf0encString(name);
+	console.log('length:', cmdName.length + tranID.length + cmdObj.length + stramName.length);
+	var body = Buffer.concat([header,cmdName, tranID, cmdObj, stramName], header.length + cmdName.length + tranID.length + cmdObj.length + stramName.length);
+	// log.logHex(body);
+	var chunkCount = 0;
+	self.callbackfunc = function (data) {
+		// self.callbackfunc = null;
+		console.log('chunkCount :', chunkCount);
+		if (chunkCount++ > 0) {
+			// log.logHex(data);
+		}
+		// #1 server SetChunkSize
+		var iPacket = self.filterPacket(data);
+
+		if (iPacket.header.CSID == 2 && iPacket.header.typeID == 0x01) {
+			var chunkSize = iPacket.header.bodyBuf.readUInt32BE(0);
+			console.log('server SetChunkSize(4): ', chunkSize);
+			self.streamChunkSize = chunkSize;
+
+			data = data.slice(iPacket.header.offset, data.length);
+		};
+
+		// #2 User Control Message Stream Begin 1
+
+		iPacket = self.filterPacket(data);
+		if (iPacket.header.CSID == 2 && iPacket.header.typeID == 0x04) {
+			// #2-1 2bytes event type
+			var eventType = iPacket.header.bodyBuf.readUInt16BE(0);
+			var eventData = iPacket.header.bodyBuf.readUInt32BE(2);
+			console.log('server eventType:%d eventData:%d ', eventType, eventData);
+
+			data = data.slice(iPacket.header.offset, data.length);
+
+		};
+
+		// #3 AMF0 Command onStatus('NetStream.Play.Reset') //
+
+		iPacket = self.filterPacket(data);
+
+		if (iPacket.header.CSID == 4 && iPacket.header.typeID == 0x14)
+		{
+			var amfObj = amfUtils.decodeAmf0Cmd(iPacket.header.bodyBuf);
+
+			console.log('amfObj Reset:', amfObj);
+
+			data = data.slice(iPacket.header.offset, data.length);
+		}
+		console.log('iPacket.header.typeID ', iPacket.header.typeID);
+
+		// #4 AMF0 Command onStatus('NetStream.Play.Start') //
+
+		if(data.length > 0) {
+
+			iPacket = self.filterPacket(data);
+			if (iPacket.header.CSID == 4 && iPacket.header.typeID == 0x14) {
+
+				var amfObj = amfUtils.decodeAmf0Cmd(iPacket.header.bodyBuf);
+
+				console.log('amfObj Start:', amfObj);
+
+				data = data.slice(iPacket.header.offset, data.length);
+			}
+		}
+
+		// #4 AMF0 Data |RtmpSampleAccess() //
+
+		if(data.length > 0) {
+
+			iPacket = self.filterPacket(data);
+			if (iPacket.header.CSID == 4 && iPacket.header.typeID == 0x12) {
+
+				var amfObj = amfUtils.amf0Decode(iPacket.header.bodyBuf);
+
+				console.log('amfObj RtmpSampleAccess:', amfObj);
+
+				data = data.slice(iPacket.header.offset, data.length);
+
+			}
+		}
+
+		// #5 AMF0 Data onMetaData() //
+		if (data.length > 0) {
+			iPacket = self.filterPacket(data);
+			if (iPacket.header.CSID == 4 && iPacket.header.typeID == 0x12) {
+
+				var amfObj = amfUtils.amf0Decode(iPacket.header.bodyBuf);
+				console.log('amfObj onMetaData:', amfObj);
+
+				data = data.slice(iPacket.header.offset, data.length);
+			}
+		}
+
+		if(data.length > 0) {
+			console.log('data > 0');
+			iPacket = self.filterPacket(data);
+			if (iPacket.header.CSID == 4 && iPacket.header.typeID == 0x09) {
+				console.log('video Data > 0x09');
+				self.emit('videoData', data);
+				self.callbackfunc = null;
+			}
+			// log.logHex(data);
+		}
+
+		console.log('play successful');
+	};
+	self.socket.write(body);
+
+};
+
+RTMPClient.prototype.filterPacket = function (data) {
+	var chunk1st = data.readUInt8(data);
+	var fmt = chunk1st >> 6;
+	var CSID = chunk1st & (0x3f);
+	var iRTMPPacket = {header:{fmt:fmt, CSID:CSID}};
+	var headerBytesLength = 0;
+	var offset = 1;
+	if (fmt === 0) {
+		headerBytesLength = 12; //header (full header).
+		var header = data.slice(0,headerBytesLength);
+		var timestamp = header.readUInt24BE(offset);
+		offset += 3;
+		var bodySize = header.readUInt24BE(offset);
+		offset += 3;
+		var typeID = header.readUInt8(offset);
+		offset += 1;
+		var streamID = header.readUInt32LE(offset); //Message ID
+		offset += 4;
+
+		var body = data.slice(12, 12 + bodySize);
+		console.log(' fmt:%d \n csid:%d \n timestamp:%s \n bodySize:%d \n typeID(0x14[20]):%d \n streamID:%d \n ' +
+			'offset:%d \n data-len: %d \n',
+			fmt, CSID,timestamp, bodySize,typeID, streamID,
+			offset,data.length
+		);
+		offset += bodySize;
+
+		iRTMPPacket.header = {
+			fmt: fmt,
+			CSID: CSID,
+			timestamp: timestamp,
+			bodySize: bodySize,
+			typeID: typeID,
+			streamID: streamID,
+			bodyBuf: body,
+			offset: offset
+		};
+
+	}else if (fmt === 1) {
+		headerBytesLength = 8 ; //like type b00. not including message ID (4 last bytes).
+		var basicHeader = data.slice(0,headerBytesLength);
+		var timestamp = basicHeader.readUInt24BE(offset);
+		offset += 3;
+		var bodySize = basicHeader.readUInt24BE(offset);
+		offset += 3;
+		var typeID = basicHeader.readUInt8(offset);
+		offset += 1;
+		iRTMPPacket.header = {
+			fmt: fmt,
+			CSID: CSID,
+			timestamp: timestamp,
+			bodySize: bodySize,
+			typeID: typeID,
+			offset: offset
+		};
+
+	}else if (fmt === 2) {
+		headerBytesLength = 4; //Basic Header and timestamp (3 bytes) are included.
+		var basicHeader = data.slice(0,headerBytesLength);
+		var timestamp = basicHeader.readUInt24BE(offset);
+		offset += 3;
+		iRTMPPacket.header = {
+			fmt: fmt,
+			CSID: CSID,
+			timestamp: timestamp,
+			offset: offset
+		};
+
+	}else if (fmt === 3) {
+		headerBytesLength = 1; //only the Basic Header is included.
+
+		iRTMPPacket.header = {
+			fmt: fmt,
+			CSID: CSID,
+			offset: offset
+		}
+
+	}
+
+	return iRTMPPacket;
+};
+
+RTMPClient.prototype.netStreamConnect = function (name) {
+
+	var self = this;
+	
+	this.on('createStreamEvent', function (result) {
+		self.streamPlay(name);
+	});
+
+	this.createStream(name);
+	
+};
+
 
 RTMPClient.connect = function(host, port, connectListener) {
 	const DEFAULT_PORT = 1935;
@@ -269,17 +529,17 @@ RTMPClient.connect = function(host, port, connectListener) {
 		client.on('connect', connectListener);
 	return client;
 };
-RTMPClient.connectComplete = function (host, port, complete) {
-	var rtmp = libRtmp.RTMPClient.connect(host,port, function () {
-		rtmp.sendInvoke('connect', 1, {
-			app: "motest/g1",
-			flashVer: "MAC 10,0,32,18",
-			tcUrl: "rtmp://43.251.76.107:23/motest/g1",
-			fpad: false,
-			capabilities: 15.0,
-			audioCodecs: 0.0,
-			videoCodecs: 252.0,
-			videoFunction: 1.0
-		});
-	});
-};
+// RTMPClient.connectComplete = function (host, port, complete) {
+// 	var rtmp = libRtmp.RTMPClient.connect(host,port, function () {
+// 		rtmp.sendInvoke('connect', 1, {
+// 			app: "motest/g1",
+// 			flashVer: "MAC 10,0,32,18",
+// 			tcUrl: "rtmp://43.251.76.107:23/motest/g1",
+// 			fpad: false,
+// 			capabilities: 15.0,
+// 			audioCodecs: 0.0,
+// 			videoCodecs: 252.0,
+// 			videoFunction: 1.0
+// 		});
+// 	});
+// };
