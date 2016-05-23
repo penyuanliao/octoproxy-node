@@ -13,6 +13,7 @@ const parser = fxNetSocket.parser;
 const pheaders = parser.headers;
 const utilities = fxNetSocket.utilities;
 const daemon = fxNetSocket.daemon;
+const client = fxNetSocket.wsClient;
 /** 建立連線 **/
 const TCP = process.binding("tcp_wrap").TCP;
 const uv = process.binding('uv');
@@ -23,6 +24,8 @@ const cfg = require('./config.js');
 /** 所有視訊stream物件 **/
 var liveStreams = {};
 /** 多執行緒 **/
+
+const closeWaitTime = 5000;
 
 var server;
 var clusters = [];
@@ -35,7 +38,6 @@ initizatialSrv();
 /** cluster ended **/
 function initizatialSrv() {
 
-    //setInterval(observerTotoalUseMem, 60000); // testing code 1.0 min
 
     utilities.autoReleaseGC(); //** 手動 1 sec gc
 
@@ -56,8 +58,7 @@ function createServer(opt) {
     var err, tcp_handle;
     try {
         tcp_handle = new TCP();
-        err = tcp_handle.bind(opt.host, cfg.appConfig.port);
-
+        err = tcp_handle.bind(opt.host, opt.port);
         if (err) {
             throw new Error(err);
         };
@@ -71,10 +72,13 @@ function createServer(opt) {
         tcp_handle.onconnection = function (err ,handle) {
 
             if (err) throw new Error("client not connect.");
-            console.log('Handle ;typeof', typeof handle);
             handle.onread = onread_url_param;
             handle.readStart(); //讀header封包
             //onread_roundrobin(handle); //平均分配資源
+            handle.closeWaiting = setTimeout(function () {
+                console.log('CLOSE_WAIT - Wait 5 sec timeout.');
+                handle.close();
+            },closeWaitTime);
         };
 
         server = tcp_handle;
@@ -84,6 +88,7 @@ function createServer(opt) {
         tcp_handle.close();
     };
 
+    debug('listen:80');
 };
 function reboot() {
     server.close();
@@ -94,9 +99,36 @@ function reboot() {
     createServer(cfg.srvOptions);
 
 };
-function initSocket(sockHandle) {
-    var socket = new net.Socket(sockHandle);
-    
+function initSocket(sockHandle, buffer) {
+    console.log('create socket');
+    var socket = new net.Socket({
+        handle:sockHandle
+    });
+    socket.readable = socket.writable = true;
+    socket.server = this.server;
+
+    var ws = new client(socket,function () {
+        console.log('handshake successful.');
+
+        ws.on('data', function (data) {
+            console.log('Data Event is received ws-packet Stream.');
+        });
+        ws.on('message', function (msg) {
+            console.log('Message is decode ws-packet Stream on:', msg);
+            
+            if (msg == '/reboot'){
+                ws.write('reboot main server.');
+                reboot();
+            }
+            
+            
+        });
+
+    });
+
+    socket.emit("connect");
+    socket.emit('data',buffer);
+    socket.resume();
 }
 
 /** _handle Equal Division **/
@@ -107,6 +139,9 @@ function onread_roundrobin(client_handle) {
 };
 /** reload request header and assign **/
 function onread_url_param(nread, buffer) {
+
+    debug("reload request header and assign");
+
     var handle = this;
     // nread > 0 read success
     if (nread < 0) return;
@@ -117,6 +152,9 @@ function onread_url_param(nread, buffer) {
     };
     // Error, end of file.
     if (nread === uv.UV_EOF) { debug('error UV_EOF: unexpected end of file.'); return;}
+
+    clearTimeout(handle.closeWaiting);
+
     var headers = pheaders.onReadTCPParser(buffer);
     var source = headers.source;
     var general = headers.general;
@@ -139,11 +177,12 @@ function onread_url_param(nread, buffer) {
     if ((buffer.byteLength == 0 || mode == "socket" || !headers) && !headers.swfPolicy) mode = "socket";
     if (headers.unicodeNull != null && headers.swfPolicy && mode != 'ws') mode = "flashsocket";
 
-
-    debug("sec-websocket-protocol:", headers["sec-websocket-protocol"]);
-
-
-
+    // debug("sec-websocket-protocol:", headers["sec-websocket-protocol"]);
+    // if (headers["sec-websocket-protocol"] == 'admini') {
+    //     initSocket(handle, buffer);
+    //     return;
+    // }
+    debug('connection:mode:',mode);
     if ((mode === 'ws' && isBrowser) || mode === 'socket' || mode === "flashsocket") {
 
         assign(namespace, function (worker) {
@@ -152,17 +191,26 @@ function onread_url_param(nread, buffer) {
                 handle.close();
             }else{
                 worker.send({'evt':'c_init',data:source}, handle,[{ track: false, process: false }]);
-                handle.close();
             };
 
         });
 
     }else if(mode === 'http' && isBrowser)
     {
+
+        handle.close();
+        handle.readStop();
+        handle = null;
+        return;// current no http service
         var worker = clusters[0];
 
         if (typeof worker === 'undefined') return;
         worker.send({'evt':'c_init',data:source}, handle,[{ track: false, process: false }]);
+    }else {
+        handle.close();
+        handle.readStop();
+        handle = null;
+        return;// current no http service
     }
 
     handle.readStop();

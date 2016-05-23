@@ -94,11 +94,11 @@ function connect(uri, socket) {
     rtmp.on('data', function (chunk) {
         // header長度
         var header_size = chunk.readUInt8(0);
-        
-        // console.log('header_size:%d, number:%d', header_size, chunk.readInt32BE(14));
 
         if (chunk[0] == 0x02 && chunk.byteLength == 18) {
-           console.log(chunk);
+
+            console.log('basicHeader fmt:%d, number:%d', header_size >> 6, chunk.readInt32BE(14));
+
            var num = chunk.readInt32BE(14);
            rtmp.pingResponse(num);
 
@@ -119,6 +119,7 @@ function setupFMSClient(client) {
         path:"rtmp://" + config.bFMSHost + ":" + config.bFMSPort + client.namespace,
         app:client.namespace.substr(1,client.namespace.length)
     };
+    debug('Bridge of fms:',uri.path);
     //建立FMS連線
     _rtmp = connect(uri, client);
     //設定一下名稱跟client一樣
@@ -139,7 +140,7 @@ function createNodejsSrv(port) {
         debug('Connection Clients name:%s (namespace %s)',client.name, client.namespace);
         if(client.namespace.indexOf("policy-file-request") != -1 ) {
             console.log('Clients is none rtmp... to destroy.');
-            client.destroy();
+            client.close();
             return;
         }
         setupFMSClient(client);
@@ -169,6 +170,9 @@ function createNodejsSrv(port) {
             if (event == "Connect") {
                 console.log('data', json["data"]);
                 
+            }else if (event == "close") {
+                socket.close();
+
             }else if (event == "Send") {
                 //測試用
                 console.log('data', json["data"]);
@@ -199,12 +203,11 @@ function createNodejsSrv(port) {
 
         if (typeof removeItem != 'undefined' && typeof removeItem.fms != 'undefined' && removeItem.fms) {
 
-            removeItem.fms.socket.destroy();
+            removeItem.fms.socket.destroy(); 
             delete connections[name];
 
             console.log('disconnect count:', Object.keys(connections).length,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
         };
-
 
     });
 

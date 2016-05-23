@@ -696,8 +696,13 @@ function amf0encLongString(str) {
  */
 function amf0decArray(buf) {
 //    var count = buf.readUInt32BE(1);
-    var obj = amf0decObject(buf.slice(4));
-    return { len: 5 + obj.len, value: obj.value }
+    var buf2 = buf.slice(4);
+    // 0x08會錯？？
+    buf2[0] = 0x03;
+    buf2[1] = 0x00;
+    var obj = amf0decObject(buf2);
+    // return { len: 5 + obj.len, value: obj.value }
+    return { len: 4 + obj.len, value: obj.value }
 }
 
 /**
@@ -990,7 +995,6 @@ function decodeAMF0Cmd(dbuf) {
     resp.cmd = cmd.value;
     resp.byteLength = cmd.len;
     buffer = buffer.slice(cmd.len);
-
     if (rtmpCmdDecode[cmd.value]) {
         rtmpCmdDecode[cmd.value].forEach(function (n) {
             if (buffer.length > 0) {

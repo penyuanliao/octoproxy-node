@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
-export NODE_ENV=development;
+NOW=$(date +"%Y%m%d");
+
+export NODE_ENV='';
 export DEBUG_FD=3;
 export DEBUG="rtmp:*,daemon,Connect";
 
-exec node FxLiveMaster.js
+node FxLiveMaster.js -p 80 > "/home/Newflash/www/${NOW}_log.log" 2>&1 &
