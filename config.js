@@ -23,8 +23,10 @@ if (config.env == 'development') {
     config.srvOptions = {
         'host': '0.0.0.0',
         'port': config.appConfig.port,
+        'closeWaitTime':5000,
         'backlog': 511
     };
+    //建立第二台一樣服務只需複製一樣設定即可
     config.forkOptions = {
         'webCluster':'',
         'webNum':0,
@@ -33,7 +35,13 @@ if (config.env == 'development') {
             assign:'motest'
         },{
             file:'./FxBridgeSrv.js',
-            assign:'slotFX'
+            assign:'motest'
+        },{
+            file:'./FxBridgeSrv.js',
+            assign:'BacPlayerLight'
+        },{
+            file:'./solve/libvp62Srv.js',
+            assign:'video'
         }]
     };
 }
@@ -43,6 +51,7 @@ else {
     config.srvOptions = {
         'host': '0.0.0.0',
         'port': config.appConfig.port,
+        'closeWaitTime':5000,
         'backlog': 511
     };
     config.forkOptions = {
@@ -62,7 +71,6 @@ config.assignRule = [];
 //if (config.assignRule.length < config.forkOptions.num) throw new Error("assignRule != forkOptions.num");
 
 config.rtmpPort = 1935;
-config.videoDomainName = config.rtmpHostname + ":" + config.rtmpPort;
 //todo define the balance
 config.balance = 'leastconn';//roundrobin
 

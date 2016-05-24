@@ -58,8 +58,6 @@ RTMPClient.prototype.onSocketConnect = function() {
 	}).bind(this));
 	this.handshake.sendClientHandshake();
 };
-var iAcknowledgement = 0;
-var max = 2500000;
 /***
  * socket on data 事件
  * @param data
@@ -94,7 +92,7 @@ RTMPClient.prototype.onData = function(data) {
 		else
 		{
 			var fmt = data.readUInt8(0) >> 6;
-			var csid = data.readUInt8(0) - fmt;
+			var csid = data.readUInt8(0) & (0x3f);
 			// csid = 2 is message type
 			if (csid == 2 && fmt < 4 && data.length == 18) {
 				var typeID = undefined;
@@ -123,30 +121,7 @@ RTMPClient.prototype.onData = function(data) {
 			}else {
 				this.emit('videoData',data);
 			}
-
-
-
-
-			//------------------------------------------
-
-			if (typeID === 9 && csid === 4) {
-				//
-			}else if(typeID === 3 || typeID === 0x1F)  {
-				// console.log('!!!!!!! PingRequest !!!!!!', data.length, typeID);
-
-				// log.logHex(data.slice(0,18));
-				// var num = data.readInt32BE(14); // get timestamp value
-				// this.pingResponse(num);
-			}
-
-
-			// console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
-			// log.logHex(data.slice(0,512));
-			// console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
-
-
 		}
-
 		return;
 	}
 
