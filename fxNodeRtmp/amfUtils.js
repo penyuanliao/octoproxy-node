@@ -696,6 +696,7 @@ function amf0encLongString(str) {
  */
 function amf0decArray(buf) {
 //    var count = buf.readUInt32BE(1);
+    console.log("!!!!");
     var buf2 = buf.slice(4);
     // 0x08會錯？？
     buf2[0] = 0x03;

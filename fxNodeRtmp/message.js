@@ -213,7 +213,7 @@ RTMPMessage.prototype.parseData = function(data) {
 	//TODO: do something with remaining data (there could be some if the data events aren't split on a message boundary)
 	if (data.length) {
 		console.log("unparsed data remaining:", data, "("+data.length+" bytes)");
-		log.logHex(data);
+		// log.logHex(data);
 	}
 
 };

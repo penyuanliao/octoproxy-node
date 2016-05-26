@@ -14,6 +14,7 @@ var level ={'sendRTMPPacket':false};
 // flv header '464c56010d00000009000000001200836600000000000000'
 var RTMPClient = module.exports = function(socket) {
 	this.socket = socket;
+	this.socket.rtmpChunkSize = 128;
 	this.uptime = os.uptime();
 	this.state = 'connecting';
 	// video stream //
@@ -52,7 +53,7 @@ RTMPClient.prototype.onSocketConnect = function() {
 		});
 		this.socket.on('close', function () {
 			self.emit('socketClose');
-			console.log('socket close');
+			console.log('RTMP socket close');
 		});
 		this.emit('connect');
 	}).bind(this));
@@ -62,34 +63,36 @@ RTMPClient.prototype.onSocketConnect = function() {
  * socket on data 事件
  * @param data
  */
+var vd_len = 0;
+var dd;
 RTMPClient.prototype.onData = function(data) {
 	// log("LOG::recieved RTMP data...", "(" + data.length + " bytes)");
 	var sock = this.socket;
-	var chunkPacket = sock.chunkPacket;
+	// var chunkPacket = sock.chunkPacket;
 
+	if ((data[0] == 0x02 || data[0] == 0x03 || data[0] == 0x04) && this.callbackfunc) {
+		if (this.callbackfunc instanceof Function) {
+			this.callbackfunc(data);
+			// this.callbackfunc = undefined;
+			return;
+		};
+	};
+	if (sock.ackMaximum > 0) sock.sequenceNumber += data.length; //record by total chunk size
+	if (sock.sequenceNumber > (sock.ackMaximum * 0.95) && sock.ackMaximum > 0) {
+
+		log('Acknowledgement %s', sock.sequenceNumber);
+		this.setAcknowledgement(sock.sequenceNumber);
+		sock.ackMaximum = sock.ackMaximum + sock.acknowledgementSize;
+
+	}else if(sock.sequenceNumber > 1250000 && !sock.firstSN) {
+		log('Acknowledgement %s', sock.sequenceNumber);
+		this.setAcknowledgement(sock.sequenceNumber);
+		sock.firstSN = true;
+	}
 	if (this.isVideoStream) {
 
-		if (sock.ackMaximum > 0) sock.sequenceNumber += data.length; //record by total chunk size
-		if (sock.sequenceNumber > (sock.ackMaximum * 0.95) && sock.ackMaximum > 0) {
-
-			log('Acknowledgement %s', sock.sequenceNumber);
-			this.setAcknowledgement(sock.sequenceNumber);
-			sock.ackMaximum = sock.ackMaximum + sock.acknowledgementSize;
-
-		}else if(sock.sequenceNumber > 1250000 && !sock.firstSN) {
-			log('Acknowledgement %s', sock.sequenceNumber);
-			this.setAcknowledgement(sock.sequenceNumber);
-			sock.firstSN = true;
-		}
 		// Listener FMS response packet
-		if ((data[0] == 0x02 || data[0] == 0x03 || data[0] == 0x04) && this.callbackfunc) {
-			if (this.callbackfunc instanceof Function) {
-				this.callbackfunc(data);
-				// this.callbackfunc = undefined;
-				return;
-			};
-		}
-		else
+
 		{
 			var fmt = data.readUInt8(0) >> 6;
 			var csid = data.readUInt8(0) & (0x3f);
@@ -119,6 +122,24 @@ RTMPClient.prototype.onData = function(data) {
 				console.log('control message');
 
 			}else {
+
+				// if (data[0] == 68 && data.length > 8 && data[8] == 0x24) {
+				// 	var length = data.readUInt24BE(4);
+				// 	console.log('video Data - ', data[8],data.readUInt8(0) & (0x3f), data.readUInt8(7) );
+				// 	vd_len = length - ( data.length - 9 );
+                //
+                //
+				// }else
+				// {
+				// 	if (data.length == 4) {
+				// 		console.log('4 bytes;');
+				// 	}
+				// 	console.log( data[8],data.readUInt8(0) & (0x3f), data.readUInt8(7));
+				// 	if (vd_len >0){
+				// 		vd_len -= data.length
+				// 	}
+				// }
+
 				this.emit('videoData',data);
 			}
 		}
@@ -130,45 +151,238 @@ RTMPClient.prototype.onData = function(data) {
 	 * #2 0 > 沒有就認定是前個封包
 	 * #3 1 > 這個封包
 	 **/
-	if (data[0] == 0x02) {this.emit("data", data); return;}
-	if (data[0] != 0x03) {
-		chunkPacket = Buffer.concat([chunkPacket, data],chunkPacket.length + data.length);
-		data = chunkPacket;
-	}else{
-		chunkPacket = data;
+	// if (data[0] == 0x02 || (data.length == 18 && data[0] == 0x02)) {
+	// 	console.log('pingResponse1',data.length);
+	// 	var num = data.readInt32BE(14); // get timestamp value
+	// 	this.pingResponse(num);
+	// 	data = data.slice(18, data.length);
+	// 	if (data.length == 0) return;
+	// }
+	sock.chunkPacket = Buffer.concat([sock.chunkPacket, data],sock.chunkPacket.length + data.length);
+	data = sock.chunkPacket;
+	var chunkSize = this.socket.rtmpChunkSize;
+	var filter = this.filterPacket(data,true);
+	var doPing1 = 0;
+
+	if (filter.header.fmt == 0 && filter.header.CSID == 2 && filter.header.typeID == 0x04 && filter.header.offset == 18) {
+		console.log('pingResponse2');
+		var num = filter.header.bodyBuf.readInt32BE(0); // get timestamp value
+		this.pingResponse(num);
+		sock.chunkPacket = sock.chunkPacket.slice(filter.header.offset,sock.chunkPacket.length);
+		doPing1++;
+		return;
 	}
+
+
+	if (filter.header.bodySize > data.length) {
+		var cmd = amfUtils.amf0DecodeOne(filter.header.bodyBuf);
+		// console.log('[OUTPUT]waiting next chunk',cmd);
+		return;
+	}else {
+		var j = 0;
+		while (sock.chunkPacket.length > 0 && filter.header.bodySize <= sock.chunkPacket.length){
+
+			console.log('#%d sock.chunkPacket.length %d filter.header.offset %d',j++, sock.chunkPacket.length,filter.header.offset);
+
+			var bodyFilter = filter.header.bodyBuf;
+
+
+			var g = 0;
+
+			if (filter.header.offset > chunkSize) { // hear size > chunksize to do clean "0xC3"
+				console.log('NEED Find :', parseInt(bodyFilter.length / chunkSize));
+
+				var key = chunkSize;
+				var ended = bodyFilter.length;
+
+				while (key < ended){
+					var val = bodyFilter[key];
+					console.log('search key:%d, val:%d end:%d', key, val,ended);
+
+					if(val == 0xC3){
+						bodyFilter = Buffer.concat([bodyFilter.slice(0,key),bodyFilter.slice(key+1,bodyFilter.length)],bodyFilter.length-1);
+						g++;
+					}else
+					{
+						for (var s = 0; s < bodyFilter.length; s++){
+							if (bodyFilter[s] == 0xC3) console.log('0xC3:%d, doPing1:%d', s, doPing1);
+						}
+					}
+					key += chunkSize;
+
+				}
+				console.log('DO Find :',g);
+			};
+
+
+
+
+
+
+
+			if (filter.header.fmt == 0 && filter.header.CSID == 2 && filter.header.typeID == 0x04 && filter.header.offset == 18){
+				var num = filter.header.bodyBuf.readInt32BE(0); // get timestamp value
+				console.log('pingResponse3 Start：',sock.chunkPacket.length);
+				this.pingResponse(num);
+				sock.chunkPacket = sock.chunkPacket.slice(filter.header.offset,sock.chunkPacket.length);
+				// console.log('pingResponse3 Ended：',sock.chunkPacket.length);
+				if (sock.chunkPacket.length != 0) console.log("pingResponse3 end not 0 - ",sock.chunkPacket, sock.chunkPacket.length);
+				if (sock.chunkPacket.length > 0) {
+					filter = this.filterPacket(sock.chunkPacket,true);
+				}
+				continue;
+			}else{
+
+				var decodeLen = 0;
+				var cmd = amfUtils.amf0DecodeOne(bodyFilter);
+				console.log('analyist ---', cmd);
+				decodeLen += cmd.len;
+				
+				var tranID = undefined;
+				var cmdObj = undefined;
+				var cmdArgs = undefined;
+
+				if (bodyFilter.length - decodeLen > 0){
+					tranID = amfUtils.amf0DecodeOne(bodyFilter.slice(decodeLen, bodyFilter.length));
+					console.log('tranID ---', tranID);
+					decodeLen += tranID.len;
+				}
+				if (bodyFilter.length - decodeLen > 0){
+
+					cmdObj = amfUtils.amf0DecodeOne(bodyFilter.slice(decodeLen, bodyFilter.length));
+					console.log('cmdObj ---',cmdObj);
+					decodeLen += cmdObj.len;
+				}
+				if (bodyFilter.length - decodeLen > 0){
+					console.log('length:%d, decodeLen:%d', bodyFilter.length, decodeLen, bodyFilter.slice(bodyFilter.length-20, bodyFilter.length));
+					// log.logHex(bodyFilter.slice(decodeLen, bodyFilter.length));
+					cmdArgs = amfUtils.amf0DecodeOne(bodyFilter.slice(decodeLen, bodyFilter.length));
+					decodeLen += cmdArgs.len;
+				}
+				/*
+				if (bodyFilter.length - decodeLen > 0){
+					// log.logHex(bodyFilter.slice(decodeLen, bodyFilter.length))
+					cmdArgs[1] = amfUtils.amf0DecodeOne(bodyFilter.slice(decodeLen, bodyFilter.length));
+					decodeLen += cmdArgs[1].len;
+				}*/
+				if (bodyFilter.length != decodeLen) {
+					console.error("Error Parse Data: decode Length (%d) != bodySize Length (%d)", decodeLen, bodyFilter.length );
+				}
+
+				this.emit('message',{
+					messageHeader:{messageType:20},
+					data:{
+						commandName: cmd,
+						transactionId:tranID,
+						commandObject:cmdObj,
+						arguments:cmdArgs
+					}
+				});
+
+				// console.log(cmd,tranID,cmdObj,cmdArgs);
+			}
+			sock.chunkPacket = sock.chunkPacket.slice(filter.header.offset,sock.chunkPacket.length);
+			if (sock.chunkPacket.length > 0){
+				filter = this.filterPacket(sock.chunkPacket,true);
+			}
+
+
+		}
+
+	}
+
+
+	return;
 
 	//start 過濾C3
 	var len = 0;
 	var passcount = 0;
 	const chunkType = (data.readUInt8(0))>>6;
 	const headerLength = (chunkType == 0 ? 11 : (chunkType == 1 ? 7 : (chunkType == 2 ? 3 : 0 ) ) );
-	const chunkSize = 128;
+
 	while (len < data.length) {
 		var obj = data[len];
+
 		var nextAbove = (passcount+1) * chunkSize + headerLength+1;
+
 		if (obj == 0xC3 && len == nextAbove) {
-			console.log('0xC3 -> from above in :', (passcount+1)*128 + headerLength+1,len);
+			console.log('0xC3 -> from above in :%d', (passcount+1)*chunkSize + headerLength+1);
 			data = Buffer.concat([data.slice(0,len),data.slice(len+1,data.length)],data.length-1);
+			console.log('>>>>>>%d<<<<<<', data[len]);
 			passcount++;
+
 		}else
 		{
 			len++;
 		}
 	}
+
+
+
 	//end 過濾C3
 	console.log('::::PASS 0xC3 value (%d)::::', passcount);
-	var s = "";
-	for (var i = 0; i < data.length; i++) {
-		s = s + ","+ data[i];
-	}
-	console.log("[Debug] chunkPacket size:%d, data size:%d", chunkPacket.length, data.length);
+	// var s = "";
+	// for (var i = 0; i < data.length; i++) {
+	// 	s = s + ","+ data[i];
+	// }
+	return; ///
 
 	if (!this.message || this.message.bytesRemaining == 0) {
 		this.message = new RTMPMessage(data);
 		this.message.on('complete', this.onMessage.bind(this));
 	}
-	this.message.parseData(data);
+
+
+	if (!dd){
+		dd = new Buffer(data);
+	}else
+	{
+		dd = Buffer.concat([dd, data]);
+	}
+	// console.log("[Debug] chunkPacket size:%d, data size:%d", chunkPacket.length, data.length);
+	var filter = this.filterPacket(dd);
+
+	if (filter.header.bodySize <= (dd.length - filter.header.headerOffest)) {
+
+		var size = filter.header.offset;
+
+		var a = amfUtils.amf0DecodeOne(filter.header.bodyBuf);
+
+		var body = filter.header.bodyBuf.slice(a.len, filter.header.bodyBuf.length);
+		var b = amfUtils.amf0DecodeOne(body);
+		body = body.slice(b.len, body.length);
+		log.logHex(body);
+
+		var c = amfUtils.amf0DecodeOne(body);
+
+		body = body.slice(c.len, body.length);
+
+		var d = amfUtils.amf0DecodeOne(body);
+
+		body = body.slice(d.len, body.length);
+
+		if (body.length == 0) {
+			console.log('DEBUG BODY = 0');
+			dd = dd.slice(size, dd.length);
+		}
+
+		console.log(a,b,c,d);
+		// if (dd.byteLength > 0) {
+		// 	console.log('### 2 ####');
+		// 	filter = this.filterPacket(dd);
+		// 	console.log(amfUtils.amf0DecodeOne(filter.header.bodyBuf));;
+		// }
+
+
+
+		// dd = undefined;
+		// this.message.parseData(data);
+	}else
+	{
+		// this.message.parseData(data);
+	}
+	// console.log('length ------------ ', this.message.rawData.length);
+	// this.message.parseData(data);
 };
 
 RTMPClient.prototype.onMessage = function() {
@@ -264,6 +478,12 @@ RTMPClient.prototype.pingResponse = function (num) {
 	log.logHex(rtmpBuffer);
 	this.socket.write(rtmpBuffer);
 };
+RTMPClient.prototype.pingResponse2 = function (num) {
+	var rtmpBuffer = new Buffer('c2000700000000', 'hex');
+	rtmpBuffer.writeUInt32BE(num, 3);
+	log.logHex(rtmpBuffer);
+	this.socket.write(rtmpBuffer);
+}
 /**
  * 0x05 – Window Acknowledgement Size
  * @param size
@@ -507,13 +727,15 @@ RTMPClient.prototype.deleteStream = function () {
 
 };
 
-RTMPClient.prototype.filterPacket = function (data) {
+RTMPClient.prototype.filterPacket = function (data, doFindC3) {
 	var chunk1st = data.readUInt8(data);
 	var fmt = chunk1st >> 6;
 	var CSID = chunk1st & (0x3f);
 	var iRTMPPacket = {header:{fmt:fmt, CSID:CSID}};
 	var headerBytesLength = 0;
 	var offset = 1;
+	var find = 0;
+
 	if (fmt === 0) {
 		headerBytesLength = 12; //header (full header).
 		var header = data.slice(0,headerBytesLength);
@@ -526,17 +748,19 @@ RTMPClient.prototype.filterPacket = function (data) {
 		var streamID = header.readUInt32LE(offset); //Message ID
 		offset += 4;
 
-		var body = data.slice(12, 12 + bodySize);
-		console.log(' fmt:%d \n csid:%d \n timestamp:%s \n bodySize:%d \n typeID(message):%d(%s) \n streamID:%d \n ' +
-			'offset:%d \n data-len: %d \n',
-			fmt, CSID,timestamp, bodySize,typeID, "0x" + typeID.toString(16), streamID,
-			offset,data.length
-		);
+		if (typeof doFindC3 != 'undefined' && doFindC3 == true) {
+			find = parseInt(bodySize / this.socket.rtmpChunkSize);
+			bodySize = bodySize + find;
+		}
+
+		var body = data.slice(headerBytesLength, headerBytesLength + bodySize);
+
 		offset += bodySize;
 
 		iRTMPPacket.header = {
 			fmt: fmt,
 			CSID: CSID,
+			headerOffest:headerBytesLength,
 			timestamp: timestamp,
 			bodySize: bodySize,
 			typeID: typeID,
@@ -554,9 +778,12 @@ RTMPClient.prototype.filterPacket = function (data) {
 		offset += 3;
 		var typeID = basicHeader.readUInt8(offset);
 		offset += 1;
+		offset += bodySize;
+
 		iRTMPPacket.header = {
 			fmt: fmt,
 			CSID: CSID,
+			headerOffest:headerBytesLength,
 			timestamp: timestamp,
 			bodySize: bodySize,
 			typeID: typeID,
@@ -571,6 +798,7 @@ RTMPClient.prototype.filterPacket = function (data) {
 		iRTMPPacket.header = {
 			fmt: fmt,
 			CSID: CSID,
+			headerOffest:headerBytesLength,
 			timestamp: timestamp,
 			offset: offset
 		};
@@ -581,11 +809,18 @@ RTMPClient.prototype.filterPacket = function (data) {
 		iRTMPPacket.header = {
 			fmt: fmt,
 			CSID: CSID,
+			headerOffest:headerBytesLength,
 			offset: offset
 		}
 
 	}
-
+	/*
+	console.log(' fmt:%d \n csid:%d \n timestamp:%s \n bodySize:%d \n typeID(message):%d(%s) \n streamID:%d \n ' +
+		'offset:%d \n data-len: %d \n',
+		fmt, CSID,timestamp, bodySize,typeID, "0x" + typeID.toString(16), streamID,
+		offset,data.length
+	);
+	*/
 	return iRTMPPacket;
 };
 
@@ -605,7 +840,6 @@ RTMPClient.prototype.connectResponse = function () {
 
 	var self = this;
 
-	self.isVideoStream = true;
 	self.callbackfunc = function (data) {
 
 		try {
@@ -632,6 +866,8 @@ RTMPClient.prototype.connectResponse = function () {
 
 			// console.log('Set Chunk Size (Message Type ID=1)', iPacket.header.bodyBuf.readUInt32BE(0));
 
+			self.socket.rtmpChunkSize = iPacket.header.bodyBuf.readUInt32BE(0);
+
 			data = data.slice(iPacket.header.offset, data.length);
 
 			iPacket = self.filterPacket(data); //id = 1
@@ -640,6 +876,13 @@ RTMPClient.prototype.connectResponse = function () {
 			var cmd = amfUtils.decodeAmf0Cmd(iPacket.header.bodyBuf);
 
 			// console.log('Data(Message Type ID=6)', amfUtils.amf0DecodeOne(iPacket.header.bodyBuf.slice(19,iPacket.header.bodyBuf.length)));
+
+			data = data.slice(iPacket.header.offset, data.length);
+			console.log('connectResponse : %d', data);
+			if (data.length == 18 && data.readUInt8(8) == 0x04) {
+				var num = data.readInt32BE(14); // get timestamp value
+				this.pingResponse(num);
+			}
 
 			self.callbackfunc = undefined;
 
