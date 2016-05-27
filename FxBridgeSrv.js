@@ -37,7 +37,10 @@ function connect(uri, socket) {
         //#1-1 送給Client連線成功
         if (socket.isConnect)
             socket.write(JSON.stringify({"NetStatusEvent":"Connected.amfIsReady"}));
-
+        
+        rtmp.connectResponse();
+        
+        
         //LNX 11,7,700,203
         //MAC 10,0,32,18
         //MAC 11,8,800,94
@@ -66,7 +69,7 @@ function connect(uri, socket) {
             var cmd = data.commandName;
             var tranId = data.transactionId;
             var argument = data.arguments;
-            debug('INFO :: cmd:%s, argument:%s', cmd, argument);
+            debug('INFO :: cmd:%s, argument:%s', cmd, Object.keys(argument));
             //這邊暫時忽略_result訊息
             if(cmd != '_result') {
                 if (socket.isConnect)
