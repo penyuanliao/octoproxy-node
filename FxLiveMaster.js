@@ -188,7 +188,13 @@ function onread_url_param(nread, buffer) {
         assign(namespace, function (worker) {
 
             if (typeof worker === 'undefined') {
-                handle.close();
+                worker = clusters["*"];
+                if (!worker) {
+                    handle.close();
+                }else{
+                    worker[0].send({'evt':'c_init',data:source}, handle,[{ track: false, process: false }]);
+                }
+
             }else{
                 worker.send({'evt':'c_init',data:source}, handle,[{ track: false, process: false }]);
             };
@@ -275,12 +281,14 @@ function assign(namespace, cb) {
 
     }else if (cfg.balance === "leastconn") { //Each server with the lowest number of connections
 
-        cluster = clusters[namespace][0];
+        cluster = clusters[namespace];
 
         if (!cluster) {
             console.error('Error not found Cluster server');
+            if (cb) cb(undefined);
             return;
         }
+        cluster = clusters[0];
 
         var stremNum = cluster.length;
         for (var n = 0; n < stremNum; n++) {
