@@ -97,6 +97,7 @@ libvp62Cl.prototype.connect = function (uri) {
         debug("RTMPClient Connected!");
 
         if (self.rtmpConnectListener) {
+            rtmp.isVideoStream = true;
             rtmp.connectResponse();
             rtmp.on('status',function (cmd) {
                 if (cmd.name == "connect_result") {
