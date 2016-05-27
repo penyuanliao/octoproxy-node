@@ -2,7 +2,7 @@
 
 NOW=$(date +"%Y%m%d");
 
-export NODE_ENV='';
+export NODE_ENV='DEV';
 export DEBUG_FD=3;
 export DEBUG="rtmp:*,daemon,Connect";
 
