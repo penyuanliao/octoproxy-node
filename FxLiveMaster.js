@@ -281,16 +281,17 @@ function assign(namespace, cb) {
 
     }else if (cfg.balance === "leastconn") { //Each server with the lowest number of connections
 
-        cluster = clusters[namespace];
+        var group = clusters[namespace];
 
-        if (!cluster) {
+        if (!group) {
             console.error('Error not found Cluster server');
             if (cb) cb(undefined);
             return;
         }
-        cluster = clusters[0];
+        var stremNum = group.length;
 
-        var stremNum = cluster.length;
+        cluster = group[0];
+
         for (var n = 0; n < stremNum; n++) {
             //檢查最小連線數
             if (cluster.nodeInfo.connections < clusters[namespace][n].nodeInfo.connections){
