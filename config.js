@@ -15,10 +15,9 @@ config.numCPUs = require('os').cpus().length;
  bFMSPort:1935,
  bNodePort:80
 * */
-
-
+/** 開發環境設定 **/
 if (config.env == 'development') {
-    config.bFMSHost = "127.0.0.1";
+    config.bFMSHost = "43.251.76.111";
     config.bFMSPort = 443;
     config.srvOptions = {
         'host': '0.0.0.0',
@@ -32,10 +31,10 @@ if (config.env == 'development') {
         'webNum':0,
         'cluster': [{
             file:'./FxBridgeSrv.js',
-            assign:'motest'
+            assign:'HallPic'
         },{
             file:'./FxBridgeSrv.js',
-            assign:'motest'
+            assign:'Hall'
         },{
             file:'./FxBridgeSrv.js',
             assign:'BacPlayerLight'
@@ -44,9 +43,14 @@ if (config.env == 'development') {
             assign:'video'
         }]
     };
-}
-else {
-    config.bFMSHost = "127.0.0.1";
+} else {
+    /** 伺服器環境設定 **/
+    if (config.env == 'QA'){
+        config.bFMSHost = "10.251.34.14"; //DEV
+    }else
+    {
+        config.bFMSHost = "10.251.40.14";
+    }
     config.bFMSPort = 1935;
     config.srvOptions = {
         'host': '0.0.0.0',
@@ -61,15 +65,28 @@ else {
             file:'./FxBridgeSrv.js',
             assign:'BacPlayerLight'
         },{
+            file:'./FxBridgeSrv.js',
+            assign:'Hall'
+        },{
+            file:'./FxBridgeSrv.js',
+            assign:'HallPic'
+        },{
+            file:'./FxBridgeSrv.js',
+            assign:'BacPlayerBM'
+        },{
             file:'../www/slot/slot.js',
             assign:'slotFX'
+        },{
+            file:'../www/demo/application3.js',
+            assign:'gm'
+        },{
+            file:'./solve/libvp62Srv.js',
+            assign:'*'
         }]
     };
 }
 config.assignRule = [];
-
-//if (config.assignRule.length < config.forkOptions.num) throw new Error("assignRule != forkOptions.num");
-
+/** FMS連線Port **/
 config.rtmpPort = 1935;
 //todo define the balance
 config.balance = 'leastconn';//roundrobin

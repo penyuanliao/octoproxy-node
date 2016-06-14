@@ -6,7 +6,7 @@
 
 // -------------------------- //
 
-```
+```shell script
 # config.js 設定檔案
 
 
@@ -15,14 +15,20 @@
 
 // ------ 以下是紀錄 ------ //
 
-分析RTMP紀錄
-第一個字節決定消息類型
-## HeaderType(fmt): 決定chunk message header編碼方式和大小,前兩個2bits 決定chunk message header length
-00 12 bytes 0x000000
-01 8 bytes 0x
-10 4 bytes
-11 1 bytes
-[1 2 4 8 16 32 64 128]
+# basicHeader 第一個字節 fmt(2b)
+
+    + fmt -> readUInt8(0) >> 6; ex: 12.. .... 位移 6 取值
+    (1) fmt = 0, header length = 11
+    (2) fmt = 1, header length = 7
+    (3) fmt = 2, header length = 3
+    (4) fmt = 3, header length = 0
+
+# basicHeader 第一個字節 csid(chunk stream ID)(6b)
+
+    + csid -> readUInt8(0) & (0x3f) ex: ..34 5678 mode 0x3f 最大值
+    (1) csid = 0,1,2,3,4
+
+# Header
 
 ## ChannelID
 
@@ -34,9 +40,9 @@ amf0Encode -> amf0EncodeOne -> amfXEncodeOne
 handshake::onResponse >
 
 
-CreateStream();
 
-```
+
+```script
 +--------------+					+--------------+
 | Client(Node) | 					| Server (FMS) |
 +--------------+ 					+--------------+
@@ -138,3 +144,20 @@ CreateStream();
 +------+--------+-----------+
 | 4b   | 4b     |  ~remain  |
 +------+--------+-----------+
+
+# Ping Request
+
+# Ping Response
+
+# Invoke Command
++-----+------+-----------+----------+--------+-----------+--------+
+| fmt | csid | timestamp | bodySize | typeid | stream id |  body  |
++-----+------+-----------+----------+--------+-----------+--------+
+|  2b |  6b  |     3B    |    3B    |   1B   |     3B    |        |
++-----+------+-----------+----------+--------+-----------+--------+
+    (1) Body
+     > Command-Name(AMF-String)
+     > Transaction-Id(AMF-Number)
+     > Command-Object(AMF-Object or AMF-Null)
+     > InvokeArguments(AMF-ALL)
+#

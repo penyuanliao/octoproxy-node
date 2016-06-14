@@ -3,7 +3,7 @@ var net = require('net');
 //var jphp = new jsonphp();
 
 var couchbase = require('couchbase');
-var cluster = new couchbase.Cluster('couchbase://127.0.0.1');
+var cluster = new couchbase.Cluster('couchbase://192.168.188.208');
 var bucket = cluster.openBucket('default');
 var viewQuery = couchbase.ViewQuery;
 const cbPort = 8787;
@@ -33,7 +33,7 @@ logSocket.prototype.insert = function(obj){
     self.counterList[obj["gameType"]] = nextIdNumber;
     if (!nextIdNumber) nextIdNumber = 0;
     var prefix = obj["gameType"] + "_" + nextIdNumber;
-    console.log('-------- insert %s --------', prefix);
+    // console.log('-------- insert %s --------', prefix);
     if (!obj["gameType"]) {
         console.error('Error LogObect has undefined gameType.');
         return;
@@ -44,7 +44,7 @@ logSocket.prototype.insert = function(obj){
             retry();
             return;
         }
-        console.log('success!:' + result);
+        // console.log('success!:' + result);
         // self.counterList[obj["gameType"]] = nextIdNumber;
         //process.exit(0);
     });
@@ -53,7 +53,8 @@ logSocket.prototype.insert = function(obj){
     function retry() {
         bucket.insert(prefix ,obj, function(err,result){
             if (err){
-                console.log('retry failed' , err, JSON.stringify(obj));
+                // console.log('retry failed' , err);
+                // console.log('ERROR - retry...:' + result);
                 return;
             }
 
@@ -73,7 +74,7 @@ logSocket.prototype.updateCount = function (cb) {
             self.counterList[results[i].key] = results[i].value;
         };
         if(cb) cb(results);
-        console.log('result:', results);
+        // console.log('result:', results);
     });
 
 };
@@ -84,7 +85,7 @@ logSocket.prototype.insertAutoIncrement = function (obj) {
     bucket.get(prefix, function (err, res) {
         if (err) {
             console.log('operation failed:', err);
-            
+
             init(prefix, function () {
                 autoIncrement(prefix, function (err, result) {
                     if (err){
@@ -94,7 +95,7 @@ logSocket.prototype.insertAutoIncrement = function (obj) {
                     console.log('success!:'+result);
                 });
             });
-            
+
         }else{
 
             autoIncrement(prefix, function (err, result) {
@@ -108,7 +109,7 @@ logSocket.prototype.insertAutoIncrement = function (obj) {
         }
 
     });
-    
+
     function init(prefix, cb) {
         bucket.insert(prefix, 0, cb);
     }
@@ -122,12 +123,11 @@ logSocket.prototype.insertAutoIncrement = function (obj) {
 
 
 logSocket.prototype.start = function(){
-    console.log('start!!');
     var self = this;
     var server = net.createServer(function (socket){
         //!!!! setEncoding onData event callback arg data is string not buffer...
         // socket.setEncoding("utf8");
-        console.log('client connect!!'+this);
+        console.log('client connect!!');
 
         socket.parent = this;
         socket.chunkBuffer = null;
@@ -163,10 +163,8 @@ logSocket.prototype.start = function(){
                     socket.chunkBuffer = socket.chunkBuffer.slice(data.byteLength, socket.chunkBuffer.length);
 
                     var tmps = String(data).replace(/\0+/g, "");
-                    console.log(' tmps:' + tmps.length);
                     if (tmps.length > 0){
                         var jsonObj = JSON.parse(tmps);
-                        console.log('jsonObj:'+jsonObj);
 
                         if (jsonObj.ts && self.timeBiased != -1) {
                             self.timeBiased = Math.abs(new Date().getTime() - Number(jsonObj.ts));
@@ -185,7 +183,6 @@ logSocket.prototype.start = function(){
                 pos = socket.chunkBuffer.indexOf('\u0000');
             }
 
-            console.log('socket.chunkBufSize:%d socket.chunkBuffer:%d', socket.chunkBufSize, socket.chunkBuffer.length);
             if (pos = 0 && socket.chunkBufSize == 1 || socket.chunkBuffer.length == 0) {
                 socket.chunkBufSize = 0;
                 socket.chunkBuffer = null;
@@ -194,7 +191,7 @@ logSocket.prototype.start = function(){
         });
 
         socket.on('end' , function(err){
-            console.log('end close....' +err);
+            console.log('end close....' + err);
             self.timeBiased = -1;
             socket.end();
         });
@@ -209,19 +206,14 @@ logSocket.prototype.start = function(){
     });
     server.parent = this;
 
-    server.close (function(){
-        console.log('server close!!');
-    });
-
     server.listen(cbPort , function(err){
         if (err) throw err;
         console.log('server bound port:', cbPort);
     });
     server.on('error', function (err) {
-        new Error("net.createServer error :", err.code);
+        console.error("net.createServer error :", err);
         if (err.code == "EADDRINUSE") {
-            debug('Info - Address in use, retrying...');
-            setImmediate(function () {
+            setTimeout(function () {
                 server.close();
                 server.listen(cbPort , function(err){
                     if (err) throw err;
@@ -230,29 +222,18 @@ logSocket.prototype.start = function(){
             },1000);
         }
     });
-
-    var netserver = net.createServer(function(socket){
-        socket.addListener("error",function(err){
-            socket.end && socket.end() || socket.destroy && socket.destroy();
-        });
-        var xml = '<?xml version="1.0"?>\n<!DOCTYPE cross-domain-policy SYSTEM \n"http://www.adobe.com/xml/dtds/cross-domain-policy.dtd">\n<cross-domain-policy>\n';
-        xml += '<site-control permitted-cross-domain-policies="master-only"/>\n';
-        xml += '<allow-access-from domain="*" to-ports="*"/>\n';
-        xml += '</cross-domain-policy>\n';
-        if(socket && socket.readyState == 'open'){
-            socket.write(xml);
-            socket.end();
-        }
-    });
-    netserver.addListener("error",function(err){
-        console.log('netServer error ');
-    });
-    netserver.listen(cbPort, '0.0.0.0');
-}
+};
 
 
 function onConnect(){
     console.log('Connect to flash!!')
+};
+function createGuid()
+{
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random()*16|0, v = c === 'x' ? r : (r&0x3|0x8);
+        return v.toString(16);
+    });
 }
 
 module.exports = logSocket;

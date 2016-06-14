@@ -63,8 +63,6 @@ RTMPClient.prototype.onSocketConnect = function() {
  * socket on data 事件
  * @param data
  */
-var vd_len = 0;
-var dd;
 RTMPClient.prototype.onData = function(data) {
 	// log("LOG::recieved RTMP data...", "(" + data.length + " bytes)");
 	var sock = this.socket;
@@ -78,6 +76,7 @@ RTMPClient.prototype.onData = function(data) {
 		};
 	};
 	if (sock.ackMaximum > 0) sock.sequenceNumber += data.length; //record by total chunk size
+	//取0.95 最大值 避免溢出
 	if (sock.sequenceNumber > (sock.ackMaximum * 0.95) && sock.ackMaximum > 0) {
 
 		log('Acknowledgement %s', sock.sequenceNumber);
