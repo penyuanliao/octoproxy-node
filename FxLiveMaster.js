@@ -143,6 +143,7 @@ function onread_url_param(nread, buffer) {
     debug("reload request header and assign");
 
     var handle = this;
+    handle.readStop();
     // nread > 0 read success
     if (nread < 0) return;
 
@@ -171,7 +172,7 @@ function onread_url_param(nread, buffer) {
         namespace = buffer.toString('utf8');
         namespace = namespace.replace("\0","");
         console.log('socket - namespace - ', namespace);
-        source = namespace;
+        source = buffer;
     }
 
     if ((buffer.byteLength == 0 || mode == "socket" || !headers) && !headers.swfPolicy) mode = "socket";
@@ -184,6 +185,8 @@ function onread_url_param(nread, buffer) {
     // }
     debug('connection:mode:',mode);
     if ((mode === 'ws' && isBrowser) || mode === 'socket' || mode === "flashsocket") {
+
+
 
         assign(namespace, function (worker) {
 
@@ -265,6 +268,7 @@ function assign(namespace, cb) {
         namespace = path[1];
     }else{
         namespace = path[1];
+        if (typeof namespace == 'undefined') namespace = path[0];
     }
     debug("assign::namespace: ", namespace);
     // url_param
