@@ -18,6 +18,8 @@ const libRtmp = require('./fxNodeRtmp').RTMP;
 const config = require('./config.js');
 const isWorker = ('NODE_CDID' in process.env);
 const isMaster = (isWorker === false);
+const NSLog  = fxNetSocket.logger.getInstance();
+NSLog.configure({logFileEnabled:true, level:'trace', dateFormat:'[yyyy-MM-dd hh:mm:ss]',filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100});
 
 var connections = []; //記錄連線物件
 var srv = createNodejsSrv(config.srvOptions.port);
@@ -29,7 +31,7 @@ var srv = createNodejsSrv(config.srvOptions.port);
  * @returns {RTMPClient}
  */
 function connect(uri, socket) {
-
+    console.log(uri);
     var rtmp = undefined;
     // #1 建立連線
     rtmp = libRtmp.RTMPClient.connect(uri.host,uri.port, function (){
@@ -37,7 +39,7 @@ function connect(uri, socket) {
         //#1-1 送給Client連線成功
         if (socket.isConnect)
             socket.write(JSON.stringify({"NetStatusEvent":"Connected.amfIsReady"}));
-        
+
         rtmp.connectResponse();
         
         
@@ -66,14 +68,14 @@ function connect(uri, socket) {
         if (message.messageHeader.messageType == 20) {
             //message 裡有Data結構為{commandName:FMS回傳的名稱(String), transactionId:傳輸編號(int),arguments:FMS回傳的變數(Array)};
             var data = message.data;
-            var cmd = data.commandName;
+            var cmd = data.commandName.value;
             var tranId = data.transactionId;
             var argument = data.arguments;
             debug('INFO :: cmd:%s, argument:%s', cmd, Object.keys(argument));
             //這邊暫時忽略_result訊息
             if(cmd != '_result') {
                 if (socket.isConnect)
-                    socket.write(JSON.stringify({"NetStatusEvent":"Data","cmd":cmd, args:argument}));
+                    socket.write(JSON.stringify({"NetStatusEvent":"Data","cmd":cmd, args:[argument.value]}));
             }else
             {
                 // rtmp.setWindowACK(2500000);
@@ -83,13 +85,17 @@ function connect(uri, socket) {
     // #3 FMS錯誤訊息事件
     rtmp.on("error", function (args) {
         console.log("RTMP ERROR", args);
+        if (socket.isConnect) {
+            socket.write(JSON.stringify({"NetStatusEvent":'Connected.Timeout'}))
+        }
+        onSocketClose(socket.name);
     });
     // #4 FMS關閉的事件
     rtmp.on('close', function (args) {
         console.log("RTMP connection closed");
         if(socket.isConnect){
             socket.write(JSON.stringify({"NetStatusEvent":"Connected.Close"}));
-            socket.destroy();
+            onSocketClose(socket.name);
         }
 
     });
@@ -147,7 +153,6 @@ function createNodejsSrv(port) {
             return;
         }
         setupFMSClient(client);
-
     });
 
     server.on('message', function (evt) {
@@ -205,8 +210,8 @@ function createNodejsSrv(port) {
         var removeItem = connections[name];
 
         if (typeof removeItem != 'undefined' && typeof removeItem.fms != 'undefined' && removeItem.fms) {
-
-            removeItem.fms.socket.destroy(); 
+            removeItem.ws.close();
+            removeItem.fms.socket.destroy();
             delete connections[name];
 
             console.log('disconnect count:', Object.keys(connections).length,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
@@ -265,7 +270,29 @@ function createNodejsSrv(port) {
 
     return server;
 }
+function onSocketClose(name) {
+    var removeItem = connections[name];
 
+    if (typeof removeItem != 'undefined' && typeof removeItem.fms != 'undefined' && removeItem.fms) {
+
+        if (removeItem.ws.isConnect ){
+            removeItem.ws.close();
+        }else
+        {
+            NSLog.log('trace','WS socket is close()');
+        }
+        if (removeItem.fms.socket.writable){
+            removeItem.fms.socket.destroy();
+        }else {
+            NSLog.log('trace','FMS socket is close()');
+        }
+        removeItem["fms"] = null;
+        removeItem["ws"] = null;
+        delete connections[name];
+
+        console.log('disconnect count:', Object.keys(connections).length,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
+    };
+}
 /* ------- ended testing logger ------- */
 /**
  * 程序錯誤會出現在這裡

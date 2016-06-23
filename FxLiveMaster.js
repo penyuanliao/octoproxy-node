@@ -14,6 +14,11 @@ const pheaders = parser.headers;
 const utilities = fxNetSocket.utilities;
 const daemon = fxNetSocket.daemon;
 const client = fxNetSocket.wsClient;
+const path   = require('path');
+const NSLog  = fxNetSocket.logger.getInstance();
+NSLog.configure({logFileEnabled:true, level:'trace', dateFormat:'[yyyy-MM-dd hh:mm:ss]',filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100});
+
+
 /** 建立連線 **/
 const TCP = process.binding("tcp_wrap").TCP;
 const uv = process.binding('uv');
@@ -72,6 +77,7 @@ function createServer(opt) {
         tcp_handle.onconnection = function (err ,handle) {
 
             if (err) throw new Error("client not connect.");
+            handle.onceRead = false;
             handle.onread = onread_url_param;
             handle.readStart(); //讀header封包
             //onread_roundrobin(handle); //平均分配資源
@@ -143,6 +149,12 @@ function onread_url_param(nread, buffer) {
     debug("reload request header and assign");
 
     var handle = this;
+
+    if (handle.onceRead)
+        handle.close();
+    else
+        handle.onceRead = true;
+
     handle.readStop();
     // nread > 0 read success
     if (nread < 0) return;
@@ -162,6 +174,10 @@ function onread_url_param(nread, buffer) {
     var isBrowser = (typeof general != 'undefined');
     var mode = "";
     var namespace = undefined;
+
+    var remoteInfo = {};
+    handle.getsockname(remoteInfo);
+
     if (general) {
         mode = general[0].match('HTTP/1.1') != null ? "http" : mode;
         mode = headers.iswebsocket  ? "ws" : mode;
@@ -171,7 +187,7 @@ function onread_url_param(nread, buffer) {
         mode = "socket";
         namespace = buffer.toString('utf8');
         namespace = namespace.replace("\0","");
-        console.log('socket - namespace - ', namespace);
+        NSLog.log('trace','socket - namespace - ', namespace);
         source = buffer;
     }
 
@@ -183,10 +199,19 @@ function onread_url_param(nread, buffer) {
     //     initSocket(handle, buffer);
     //     return;
     // }
-    debug('connection:mode:',mode);
+    NSLog.log('info','connection:mode:',mode);
     if ((mode === 'ws' && isBrowser) || mode === 'socket' || mode === "flashsocket") {
 
-
+        if(namespace.indexOf("policy-file-request") != -1 ) {
+            NSLog.log('warning','Clients(%s:%s) is none rtmp... to destroy.', remoteInfo.address, remoteInfo.port);
+            handle.close();
+            console.log('!!!! close();');
+            return;
+        }
+        if (namespace.length > 20 ){
+            NSLog.log('warning', 'namespace change figLeaf');
+            namespace = 'figLeaf';
+        }
 
         assign(namespace, function (worker) {
 
@@ -194,20 +219,25 @@ function onread_url_param(nread, buffer) {
                 worker = clusters["*"];
                 if (!worker) {
                     handle.close();
+                    console.log('!!!! close();');
                 }else{
+                    NSLog.log('trace','1. %s:%s Socket goto %s(*)', remoteInfo.address, remoteInfo.port,namespace);
                     worker[0].send({'evt':'c_init',data:source}, handle,[{ track: false, process: false }]);
                 }
 
             }else{
+                NSLog.log('trace','2. %s:%s Socket goto %s', remoteInfo.address, remoteInfo.port,namespace);
                 worker.send({'evt':'c_init',data:source}, handle,[{ track: false, process: false }]);
-            };
 
+            };
+            handle.close();
         });
 
     }else if(mode === 'http' && isBrowser)
     {
-
+        NSLog.log('trace','socket is http connection');
         handle.close();
+        console.log('!!!! close();');
         handle.readStop();
         handle = null;
         return;// current no http service
@@ -216,7 +246,9 @@ function onread_url_param(nread, buffer) {
         if (typeof worker === 'undefined') return;
         worker.send({'evt':'c_init',data:source}, handle,[{ track: false, process: false }]);
     }else {
+        NSLog.log('trace','socket mode not found.');
         handle.close();
+        console.log('!!!! close();');
         handle.readStop();
         handle = null;
         return;// current no http service
@@ -224,6 +256,7 @@ function onread_url_param(nread, buffer) {
 
     handle.readStop();
 };
+
 /**
  * 建立子執行緒
  * @param opt {cluster:[file:(String)<js filename>, assign:(String)<server assign rule>]}
@@ -270,12 +303,17 @@ function assign(namespace, cb) {
         namespace = path[1];
         if (typeof namespace == 'undefined') namespace = path[0];
     }
-    debug("assign::namespace: ", namespace);
+    NSLog.log('info',"assign::namespace: ", namespace);
     // url_param
     if (cfg.balance === "url_param") {
 
     }
     else if (cfg.balance === "roundrobin") {
+
+        if(typeof clusters[namespace] == 'undefined') {
+            if (cb) cb(undefined);
+            return;
+        }
 
         cluster = clusters[namespace][roundrobinNum[namespace]++];
 
@@ -287,8 +325,9 @@ function assign(namespace, cb) {
 
         var group = clusters[namespace];
 
-        if (!group) {
-            console.error('Error not found Cluster server');
+        if (!group || typeof group == 'undefined') {
+            // console.error('Error not found Cluster server');
+            NSLog.log('error','leastconn not found Cluster server');
             if (cb) cb(undefined);
             return;
         }
@@ -305,7 +344,8 @@ function assign(namespace, cb) {
         if (cb) cb(cluster);
     }else
     {
-        console.error('Error not found Cluster server');
+        // console.error('Error not found Cluster server');
+        NSLog.log('error','Not found Cluster server');
         if (cb) cb(undefined);
     }
 }

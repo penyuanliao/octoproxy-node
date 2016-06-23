@@ -8,7 +8,8 @@ var RTMPHandshake = require('./handshake');
 var RTMPMessage = require('./message');
 var amfUtils = require('./amfUtils');
 var log = require('./log');
-
+var logger = require('fxNetSocket').logger;
+var NSLog = logger.getInstance();
 var level ={'sendRTMPPacket':false};
 
 // flv header '464c56010d00000009000000001200836600000000000000'
@@ -28,7 +29,8 @@ var RTMPClient = module.exports = function(socket) {
 	this.socket.lastVideoDataSize = 0;
 	this.socket.firstSN = false;
 	this.socket.videoChunk = [];
-
+	console.log(NSLog);
+	NSLog.log('trace','RTMPClient run initialize.');
 	socket.on('connect', this.onSocketConnect.bind(this));
 };
 util.inherits(RTMPClient, events.EventEmitter);
@@ -40,6 +42,9 @@ RTMPClient.prototype.onSocketConnect = function() {
 		console.error('ERROR::RTMPClient.prototype.onSocketConnect >> handshake error');
 		log.warn('handshake error:',err);
 	});
+	this.handshake.on('s1recieved', function (s2chunk) {
+		self.fmsVersion = s2chunk.fmsVersion;
+	});
 	this.handshake.on('complete', (function() {
 		this.socket.chunkPacket = new Buffer(0);
 		this.socket.on('data', this.onData.bind(this));
@@ -49,11 +54,11 @@ RTMPClient.prototype.onSocketConnect = function() {
 		});
 		this.socket.on('error', function (e) {
 			self.emit('error',e);
-			console.log('socket error', e);
+			NSLog.log('error','Node RTMP socket error:', e);
 		});
 		this.socket.on('close', function () {
 			self.emit('close');
-			console.log('RTMP socket close');
+			NSLog.log('trace','RTMP socket close');
 		});
 		this.emit('connect');
 	}).bind(this));
@@ -228,7 +233,7 @@ RTMPClient.prototype.onData = function(data) {
 
 				var decodeLen = 0;
 				var cmd = amfUtils.amf0DecodeOne(bodyFilter);
-				// console.log('analyist ---', cmd);
+				console.log('analyist ---', cmd);
 				decodeLen += cmd.len;
 				
 				var tranID = undefined;
@@ -238,24 +243,24 @@ RTMPClient.prototype.onData = function(data) {
 
 				if (bodyFilter.length - decodeLen > 0){
 					tranID = amfUtils.amf0DecodeOne(bodyFilter.slice(decodeLen, bodyFilter.length));
-					// console.log('tranID ---', tranID);
+					console.log('tranID ---', tranID);
 					decodeLen += tranID.len;
 				}
 				if (bodyFilter.length - decodeLen > 0){
 
 					cmdObj = amfUtils.amf0DecodeOne(bodyFilter.slice(decodeLen, bodyFilter.length));
-					// console.log('cmdObj ---',cmdObj);
+					console.log('cmdObj ---',cmdObj);
 					decodeLen += cmdObj.len;
 				}
 				if (bodyFilter.length - decodeLen > 0){
-					// console.log('length:%d, decodeLen:%d', bodyFilter.length, decodeLen, bodyFilter.slice(bodyFilter.length-20, bodyFilter.length));
-					// log.logHex(bodyFilter.slice(decodeLen, bodyFilter.length));
+					console.log('length:%d, decodeLen:%d', bodyFilter.length, decodeLen, bodyFilter.slice(bodyFilter.length-20, bodyFilter.length));
+					log.logHex(bodyFilter.slice(decodeLen, bodyFilter.length));
 					cmdArgs = amfUtils.amf0DecodeOne(bodyFilter.slice(decodeLen, bodyFilter.length));
 					decodeLen += cmdArgs.len;
 				}
 				/**/
 				if (bodyFilter.length - decodeLen > 0){
-					// log.logHex(bodyFilter.slice(decodeLen, bodyFilter.length))
+					log.logHex(bodyFilter.slice(decodeLen, bodyFilter.length))
 					cmdArgs2 = amfUtils.amf0DecodeOne(bodyFilter.slice(decodeLen, bodyFilter.length));
 					decodeLen += cmdArgs2.len;
 				}
@@ -376,7 +381,7 @@ RTMPClient.prototype.fmsCall = function (commandName, arg) {
 RTMPClient.prototype.pingResponse = function (num) {
 	var rtmpBuffer = new Buffer('4200000000000604000700000000', 'hex');
 	rtmpBuffer.writeUInt32BE(num, 10);
-	// //console.log('windowACK: '+rtmpBuffer.hex());
+	console.log('pingResponse');
 	log.logHex(rtmpBuffer);
 	this.socket.write(rtmpBuffer);
 };
@@ -742,38 +747,53 @@ RTMPClient.prototype.connectResponse = function () {
 
 	var self = this;
 
+
 	self.callbackfunc = function (data) {
 
 		try {
 			var iPacket = self.filterPacket(data); //id = 5
-
 			console.log('Window Acknowledgement Size(Message Type ID=5)', iPacket.header.bodyBuf.readUInt32BE(0));
 
 			if (iPacket.header.typeID){
 				self.socket.ackMaximum = iPacket.header.bodyBuf.readUInt32BE(0);
 				self.socket.acknowledgementSize = iPacket.header.bodyBuf.readUInt32BE(0);
-				self.setWindowACK(iPacket.header.bodyBuf.readUInt32BE(0));
+				// self.setWindowACK(iPacket.header.bodyBuf.readUInt32BE(0));
 				// this.setBufferLength(0);
 			}
-
 			data = data.slice(iPacket.header.offset, data.length);
 
 			iPacket = self.filterPacket(data); //id = 6
 
-			// console.log('Set Peer Bandwidth(Message Type ID=6)', iPacket.header.bodyBuf.readUInt32BE(0));
+			console.log('Set Peer Bandwidth(Message Type ID=6)', iPacket.header.bodyBuf.readUInt32BE(0));
 
 			data = data.slice(iPacket.header.offset, data.length);
 
 			iPacket = self.filterPacket(data); //id = 1
 
-			// console.log('Set Chunk Size (Message Type ID=1)', iPacket.header.bodyBuf.readUInt32BE(0));
+			console.log('Set Chunk Size (Message Type ID=1)', iPacket.header.bodyBuf.readUInt32BE(0));
 
 			self.socket.rtmpChunkSize = iPacket.header.bodyBuf.readUInt32BE(0);
+			if (self.socket.rtmpChunkSize != 128 && self.socket.rtmpChunkSize != 4096){
+				self.socket.rtmpChunkSize = 128;
+			}
+			console.log('csid:',iPacket.header.CSID);
+			if (iPacket.header.CSID == 2)
+				data = data.slice(iPacket.header.offset, data.length);
 
-			data = data.slice(iPacket.header.offset, data.length);
+			iPacket = self.filterPacket(data, true); //id = 1
+			console.log(self.fmsVersion);
+			if (self.fmsVersion.indexOf('3.5.') != -1) {
+				for (var i = self.socket.rtmpChunkSize; i < iPacket.header.bodyBuf.length; i+=self.socket.rtmpChunkSize) {
+					var obj = iPacket.header.bodyBuf[i];
 
-			iPacket = self.filterPacket(data); //id = 1
+					if (obj == 0xc3) {
+						iPacket.header.bodyBuf = Buffer.concat([iPacket.header.bodyBuf.slice(0,i),iPacket.header.bodyBuf.slice(i+1,iPacket.header.bodyBuf.length)]);
+						console.log('iiiiiiii', i);
+					}
+				}
+			}
 
+			log.logHex(iPacket.header.bodyBuf);
 			// var dataLength = iPacket.header.bodyBuf.length;
 			var cmd = amfUtils.decodeAmf0Cmd(iPacket.header.bodyBuf);
 
@@ -797,6 +817,8 @@ RTMPClient.prototype.connectResponse = function () {
 		catch (e) {
 			// logMyErrors(e); // print to sys info
 			console.error('RTMPClient.prototype.connectResponse error:', e);
+			self.callbackfunc = undefined;
+			this.pingResponse(0);
 		}
 
 	};
