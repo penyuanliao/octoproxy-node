@@ -86,16 +86,20 @@ function connect(uri, socket) {
     rtmp.on("error", function (args) {
         console.log("RTMP ERROR", args);
         if (socket.isConnect) {
-            socket.write(JSON.stringify({"NetStatusEvent":'Connected.Timeout'}))
+            socket.write(JSON.stringify({"NetStatusEvent":'NetConnection.Connect.Timeout'}))
         }
-        onSocketClose(socket.name);
+        setTimeout(function () {
+            onSocketClose(socket.name);
+        },1000)
     });
     // #4 FMS關閉的事件
     rtmp.on('close', function (args) {
         console.log("RTMP connection closed");
         if(socket.isConnect){
-            socket.write(JSON.stringify({"NetStatusEvent":"Connected.Close"}));
-            onSocketClose(socket.name);
+            // socket.write(JSON.stringify({"NetStatusEvent":"NetConnection.Connect.Closed"}));
+            setTimeout(function () {
+                onSocketClose(socket.name);
+            },1000)
         }
 
     });
@@ -301,11 +305,11 @@ process.on('uncaughtException', function (err) {
     console.error(err.stack);
 });
 process.on('SIGQUIT',function () {
-    Info("IPC channel exit -1");
+    console.log("IPC channel exit -1");
     process.exit(-1);
 });
 process.on('disconnect', function () {
-    Info("sends a QUIT signal (SIGQUIT)");
+    console.log("sends a QUIT signal (SIGQUIT)");
     process.exit(0);
 });
 process.on('message', function (data, handle) {

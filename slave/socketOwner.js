@@ -55,7 +55,6 @@ socketOwner.prototype.controller = function (tell) {
             break;
         case "/restart":
             app.restart(command[1]);
-
     }
 };
 

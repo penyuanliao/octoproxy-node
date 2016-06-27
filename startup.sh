@@ -14,4 +14,4 @@ then
     export NODE_ENV=$1;
 fi
 
-node FxLiveMaster.js -p 80 2>&1 &
+node --max-old-space-size=8192 --nouse-idle-notification --always-compact FxLiveMaster.js -p 80 > "/dev/null" 2>&1 &

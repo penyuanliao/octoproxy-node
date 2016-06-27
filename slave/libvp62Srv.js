@@ -289,7 +289,7 @@ libvp62Srv.prototype.connect = function (uri, socket) {
         // header長度
         var header_size = chunk.readUInt8(0);
 
-        // console.log('header_size:%d, number:%d', header_size, chunk.readInt32BE(14));
+        console.log('header_size:%d, number:%d', header_size, chunk.readInt32BE(14));
 
         if (chunk[0] == 0x02 && chunk.byteLength == 18) {
             console.log(chunk);
@@ -316,10 +316,10 @@ libvp62Srv.prototype.onMessage = function (data) {
 
             var socket = new net.Socket({
                 handle:handle,
-                allowHalfOpen:srv.app.allowHalfOpen
+                allowHalfOpen:self.srv.app.allowHalfOpen
             });
             socket.readable = socket.writable = true;
-            socket.server = srv.app;
+            socket.server = self.srv.app;
             self.srv.app.emit("connection", socket);
             socket.emit("connect");
             socket.emit('data',new Buffer(data.data));

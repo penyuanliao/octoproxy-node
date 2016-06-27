@@ -17,13 +17,13 @@ config.numCPUs = require('os').cpus().length;
 * */
 /** 開發環境設定 **/
 if (config.env == 'development') {
-    config.bFMSHost = "43.251.76.111";
+    config.bFMSHost = "43.251.76.26"; //107 3.5
     config.bFMSPort = 443;
     config.srvOptions = {
         'host': '0.0.0.0',
         'port': config.appConfig.port,
         'closeWaitTime':5000,
-        'backlog': 511
+        'backlog': 2048
     };
     //建立第二台一樣服務只需複製一樣設定即可
     config.forkOptions = {
@@ -38,18 +38,15 @@ if (config.env == 'development') {
         },{
             file:'./FxBridgeSrv.js',
             assign:'BacPlayerLight'
-        },{
-            file:'./solve/libvp62Srv.js',
-            assign:'video'
         }]
     };
 } else {
     /** 伺服器環境設定 **/
     if (config.env == 'QA'){
-        config.bFMSHost = "10.251.34.14"; //DEV
+        config.bFMSHost = "10.251.34.14";
     }else
     {
-        config.bFMSHost = "10.251.40.14";
+        config.bFMSHost = "10.251.34.26";
     }
     config.bFMSPort = 1935;
     config.srvOptions = {
@@ -78,10 +75,7 @@ if (config.env == 'development') {
             assign:'slotFX'
         },{
             file:'../www/demo/application3.js',
-            assign:'gm'
-        },{
-            file:'./solve/libvp62Srv.js',
-            assign:'*'
+            assign:'figLeaf'
         }]
     };
 }

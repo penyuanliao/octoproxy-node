@@ -129,7 +129,7 @@ libvp62Cl.prototype.connect = function (uri) {
             rtmp.netStreamConnect(uri.video); //ex: play('ddabb');
         }
 
-    });;
+    },true);;
 
     // #2 接收FMS訊息
     rtmp.on('message', function (message) {
