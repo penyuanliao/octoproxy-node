@@ -16,33 +16,38 @@ const daemon = fxNetSocket.daemon;
 const client = fxNetSocket.wsClient;
 const path   = require('path');
 const NSLog  = fxNetSocket.logger.getInstance();
-NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:'trace', dateFormat:'[yyyy-MM-dd hh:mm:ss]',filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100});
-
-
+NSLog.configure({
+    logFileEnabled:true,
+    consoleEnabled:true,
+    level:'trace',
+    dateFormat:'[yyyy-MM-dd hh:mm:ss]',
+    filePath:__dirname+"/historyLog",
+    maximumFileSize: 1024 * 1024 * 100});
 /** 建立連線 **/
 const TCP = process.binding("tcp_wrap").TCP;
+const WriteWrap = process.binding('stream_wrap').WriteWrap;
 const uv = process.binding('uv');
 const fs  = require('fs');
 const net  = require('net');
 const evt = require('events');
 const cfg = require('./config.js');
-/** 所有視訊stream物件 **/
-var liveStreams = {};
 /** 多執行緒 **/
-var noop = {};
+function noop() {}
 const closeWaitTime = 5000;
-
+/** WebSocket Server **/
 var server;
+/** Sub Service **/
 var clusters = [];
+/** [roundrobin] Client go to sub-service index **/
 var roundrobinNum = [];
-
+/** clients request flashPolicy source response data **/
+const policy = '<?xml version=\"1.0\"?>\n<cross-domain-policy>\n<allow-access-from domain=\"*\" to-ports=\"80\"/>\n</cross-domain-policy>\n';
 NSLog.log('debug',"** Initialize FxLiveMaster.js **");
 
 initizatialSrv();
 
 /** cluster ended **/
 function initizatialSrv() {
-
 
     utilities.autoReleaseGC(); //** 手動 1 sec gc
 
@@ -52,7 +57,7 @@ function initizatialSrv() {
     NSLog.log('info', 'Ready start create server');
     createServer(cfg.srvOptions);
 
-};
+}
 
 /**
  * 建立tcp伺服器不使用node net
@@ -61,39 +66,45 @@ function initizatialSrv() {
 function createServer(opt) {
     if (!opt) {
         opt = {'host':'0.0.0.0', 'port': 8080,'backlog':511};
-    };
+    }
     var err, tcp_handle;
     try {
         tcp_handle = new TCP();
         err = tcp_handle.bind(opt.host, opt.port);
         if (err) {
-            throw new Error(err);
-        };
+            NSLog.log('error:','tcp_handle Bind:',err);
+            tcp_handle.close(close_callback);
+            return;
+        }
 
         err = tcp_handle.listen(opt.backlog);
 
         if (err) {
-            throw new Error(err);
-        };
+            NSLog.log('error:','tcp_handle listen:',err);
+            tcp_handle.close(close_callback);
+            return;
+        }
         tcp_handle.onconnection = function (err ,handle) {
-
             if (err) {
                 NSLog.log('error', 'onconnection Error on Exception accept.');
+                handle.close(close_callback);
                 return;
             }
             // user address, port
             var out = {};
+
             err = handle.getpeername(out);
             if (err) {
                 NSLog.log('error','uv.UV_EADDRINUSE');
                 handle.close(close_callback);
                 return;
             }
+            NSLog.log('info', 'Client Handle onConnection(%s:%s)', out.address, out.port);
 
             // console.log(out);
             handle.setNoDelay(true);
 
-            handle.setKeepAlive(true, 30);
+            // handle.setKeepAlive(true, 30); // handle(sec) socket(msecs)
 
             handle.onread = onread_url_param;
 
@@ -104,29 +115,30 @@ function createServer(opt) {
 
             //onread_roundrobin(handle); //平均分配資源
             handle.closeWaiting = setTimeout(function () {
-                NSLog.log('warning','CLOSE_WAIT %s:%s - Wait 5 sec timeout.',out.address, out.port);
+                NSLog.log('warning','CLOSE_WAIT %s:%s - Wait 5 sec timeout.', out.address, out.port);
                 handle.close(close_callback);
-            },closeWaitTime);
+            }, closeWaitTime);
         };
 
         server = tcp_handle;
+
     }
     catch (e) {
         NSLog.log('error','Create server error:', e);
         tcp_handle.close(close_callback);
-    };
+    }
 
-    NSLog.log('listen:',opt.port);
-};
+    NSLog.log('debug','listen:',opt.port);
+}
 function reboot() {
     server.close();
-    server.onconnection = null;
+    server.onconnection = noop;
     delete server;
     server = null;
 
     createServer(cfg.srvOptions);
 
-};
+}
 function initSocket(sockHandle, buffer) {
     console.log('create socket');
     var socket = new net.Socket({
@@ -168,24 +180,29 @@ function onread_roundrobin(client_handle) {
 /** reload request header and assign **/
 function onread_url_param(nread, buffer) {
 
-    debug("reload request header and assign");
+    NSLog.log('debug',"reload request header and assign, nread:", nread);
 
     var handle = this;
     var self = server;
 
     // nread > 0 read success
-    if (nread < 0) return;
+    if (nread < 0) {
 
-    if (nread === 0) {
-        debug('not any data, keep waiting.');
-        return;
-    };
+        if (nread == uv.UV_ECONNRESET) {
+            NSLog.log('debug','connection reset by peer.');
+        }
+        // Error, end of file. -4095
+        if (nread === uv.UV_EOF) {
+            NSLog.log('debug','error UV_EOF: unexpected end of file.');
+            handle.close();
+            handleRelease(handle);
+            clearTimeout(handle.closeWaiting);
+        }
 
-    // Error, end of file.
-    if (nread === uv.UV_EOF) {
-        debug('error UV_EOF: unexpected end of file.');
-        handle.close();
-        handleRelease(handle);
+        if (nread === 0) {
+            NSLog.log('debug','not any data, keep waiting.');
+        }
+
         return;
     }
 
@@ -213,26 +230,29 @@ function onread_url_param(nread, buffer) {
         source = buffer;
     }
 
+    namespace = namespace.replace(/\/\w+\//i,'/'); //filter F5 load balance Rule
+
     if ((buffer.byteLength == 0 || mode == "socket" || !headers) && !headers.swfPolicy) mode = "socket";
     if (headers.unicodeNull != null && headers.swfPolicy && mode != 'ws') mode = "flashsocket";
 
-    // debug("sec-websocket-protocol:", headers["sec-websocket-protocol"]);
+    // NSLog.log('debug',"sec-websocket-protocol:", headers["sec-websocket-protocol"]);
     // if (headers["sec-websocket-protocol"] == 'admini') {
     //     initSocket(handle, buffer);
     //     return;
     // }
     // NSLog.log('info','connection:mode:',mode);
-    if ((mode === 'ws' && isBrowser) || mode === 'socket' || mode === "flashsocket") {
 
+    if ((mode === 'ws' && isBrowser) || mode === 'socket' || mode === "flashsocket") {
         if(namespace.indexOf("policy-file-request") != -1 ) {
 
-            NSLog.log('warning','Clients is none rtmp... to destroy.');
-            // handle.close(close_callback);
-            // handleRelease(handle);
-            // return;
-            namespace = 'figLeaf';
+            NSLog.log('trace',"When the incoming message contains the string '<policy-file-request/>\/0'");
+            tcp_write(handle, policy + '\0');
+            handle.close(close_callback);
+            handleRelease(handle);
+            return;
+            // namespace = 'figLeaf';
         }
-        if (namespace.length > 20 ){
+        if (namespace.length > 30 ){
             NSLog.log('warning', 'namespace change figLeaf');
             namespace = 'figLeaf';
         }
@@ -245,33 +265,33 @@ function onread_url_param(nread, buffer) {
                     handle.close();
                     console.log('!!!! close();');
                 }else{
-                    NSLog.log('trace','1. Socket goto %s(*)',namespace);
+                    NSLog.log('trace','1. Socket goto %s(*)', namespace);
                     worker[0].send({'evt':'c_init',data:source}, handle,{ track: false, process: false , keepOpen:false});
                 }
 
             }else{
-                NSLog.log('trace','2. Socket goto %s',namespace);
+                NSLog.log('trace','2. Socket goto %s', namespace);
                 worker.send({'evt':'c_init',data:source}, handle,{ track: false, process: false , keepOpen:false});
-            };
+            }
             handle.readStop();
         });
 
     }else if(mode === 'http' && isBrowser)
     {
         NSLog.log('trace','socket is http connection');
-        var socket = new net.Socket({
-            handle:handle,
-            allowHalfOpen:httpServer.allowHalfOpen
-        });
-        socket.readable = socket.writable = true;
-        socket.server = httpServer;
-        httpServer.emit("connection", socket);
-        socket.emit("connect");
-        socket.emit('data',new Buffer(buffer));
-        socket.resume();
-        // handle.close(close_callback);
-        // handleRelease(handle);
-        // handle = null;
+        // var socket = new net.Socket({
+        //     handle:handle,
+        //     allowHalfOpen:httpServer.allowHalfOpen
+        // });
+        // socket.readable = socket.writable = true;
+        // socket.server = httpServer;
+        // httpServer.emit("connection", socket);
+        // socket.emit("connect");
+        // socket.emit('data',new Buffer(buffer));
+        // socket.resume();
+        handle.close(close_callback);
+        handleRelease(handle);
+        handle = null;
         return;// current no http service
     }else {
         NSLog.log('trace','socket mode not found.');
@@ -282,7 +302,7 @@ function onread_url_param(nread, buffer) {
     }
 
     handle.readStop();
-};
+}
 
 function handleRelease(handle){
     handle.readStop();
@@ -297,9 +317,20 @@ function close_callback(opt) {
     else
         NSLog.log('info', 'callback handle has close.');
 }
+
+function tcp_write(handle, data, cb) {
+    var req = new WriteWrap();
+    req.handle = handle;
+    req.oncomplete = function (status, handle, req, err) {
+        console.log('oncomplete',status, err);
+    };
+    req.async = false;
+    var err = handle.writeUtf8String(req, data);
+}
+
 /**
  * 建立子執行緒
- * @param opt {cluster:[file:(String)<js filename>, assign:(String)<server assign rule>]}
+ * @param opt cluster:[file:(String)<js filename>, assign:(String)<server assign rule>]
  */
 function setupCluster(opt) {
     if (typeof opt === 'undefined') {
@@ -335,7 +366,7 @@ function setupCluster(opt) {
  */
 function assign(namespace, cb) {
     var cluster = undefined;
-
+    console.log(namespace);
     var path = namespace.split("/");
     if (path[2]) {
         namespace = path[1];
@@ -343,7 +374,7 @@ function assign(namespace, cb) {
         namespace = path[1];
         if (typeof namespace == 'undefined') namespace = path[0];
     }
-    NSLog.log('info',"assign::namespace: ", namespace);
+    NSLog.log('info',"assign::namespace:", namespace);
     // url_param
     if (cfg.balance === "url_param") {
 
@@ -393,6 +424,7 @@ function assign(namespace, cb) {
 /** process state **/
 process.on('uncaughtException', function (err) {
     console.error(err.stack);
+    NSLog.log('error', 'uncaughtException:', err.stack);
 });
 
 process.on("exit", function () {
@@ -402,9 +434,47 @@ process.on("SIGQUIT", function () {
     NSLog.log('info',"user quit node process");
 });
 
+// const http = require('http');
+// const httpServer = http.createServer(function (req,res) {
+//     res.writeHead(404, {
+//         "Content-Type": "text/html",
+//         "connection":"close",
+//         "transfer-encoding":"identity"});
+//     res.end();
+//     res.socket.destroy();
+//     req.socket.destroy();
+// });
 
-const http = require('http');
-httpServer = http.createServer(function (req,res) {
-    res.writeHead(404, {"Content-Type": "text/html"});
-    res.end();
-});
+function init() {
+
+    server.close();
+
+    server.onconnection = noop;
+
+    server = null;
+
+    createServer(cfg.srvOptions);
+}
+
+function pingServer() {
+    var sock = new net.Socket();
+    sock.connect('3000','127.0.0.1', function () {
+        sock.write('/fx/BacPlayerLight/g1');
+        setTimeout(function () {
+            sock.end();
+            sock.destroy();
+        },1000)
+    });
+    sock.on('error',function (err) {
+        NSLog.log('error',err);
+        setTimeout(function () {
+            sock.end();
+            sock.destroy();
+        },1000);
+        init();
+    });
+}
+
+
+
+

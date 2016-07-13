@@ -19,7 +19,7 @@ const config = require('./config.js');
 const isWorker = ('NODE_CDID' in process.env);
 const isMaster = (isWorker === false);
 const NSLog  = fxNetSocket.logger.getInstance();
-NSLog.configure({logFileEnabled:true, level:'trace', dateFormat:'[yyyy-MM-dd hh:mm:ss]',filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100});
+NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:'debug', dateFormat:'[yyyy-MM-dd hh:mm:ss]',filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100});
 
 var connections = []; //記錄連線物件
 var srv = createNodejsSrv(config.srvOptions.port);
@@ -35,13 +35,14 @@ function connect(uri, socket) {
     var rtmp = undefined;
     // #1 建立連線
     rtmp = libRtmp.RTMPClient.connect(uri.host,uri.port, function (){
-        debug("RTMPClient Connected!");
+        NSLog.log('debug', "RTMPClient %s:%s Connected!", rtmp.socket.remoteAddress, rtmp.socket.remotePort);
         //#1-1 送給Client連線成功
-        if (socket.isConnect)
-            socket.write(JSON.stringify({"NetStatusEvent":"Connected.amfIsReady"}));
-
+        rtmp.on('status', function (cmd) {
+            if (socket.isConnect)
+                socket.write(JSON.stringify({"NetStatusEvent":"Connected.amfIsReady"}));
+        });
         rtmp.connectResponse();
-        
+
         
         //LNX 11,7,700,203
         //MAC 10,0,32,18
@@ -58,6 +59,7 @@ function connect(uri, socket) {
             videoCodecs: 252, // video code
             videoFunction: 1
         });
+        NSLog.log('debug', 'sendInvoke FMS connect.');
 
         //完成後就可以自己送出要的事件
     });;
@@ -71,13 +73,14 @@ function connect(uri, socket) {
             var cmd = data.commandName.value;
             var tranId = data.transactionId;
             var argument = data.arguments;
-            debug('INFO :: cmd:%s, argument:%s', cmd, Object.keys(argument));
+            // debug('INFO :: cmd:%s, argument:%s', cmd, Object.keys(argument));
             //這邊暫時忽略_result訊息
             if(cmd != '_result') {
                 if (socket.isConnect)
                     socket.write(JSON.stringify({"NetStatusEvent":"Data","cmd":cmd, args:[argument.value]}));
             }else
             {
+                // NSLog.log('info','FMS _result:', cmd, argument);
                 // rtmp.setWindowACK(2500000);
             }
         };
@@ -147,10 +150,10 @@ function setupFMSClient(client) {
  */
 function createNodejsSrv(port) {
     var server = new FxConnection(port,{runListen: isMaster});
-
+    var self = this;
     server.on('connection', function (client) {
 
-        debug('Connection Clients name:%s (namespace %s)',client.name, client.namespace);
+        NSLog.log('info','Connection Clients name:%s (namespace %s)',client.name, client.namespace);
         if(client.namespace.indexOf("policy-file-request") != -1 ) {
             console.log('Clients is none rtmp... to destroy.');
             client.close();
@@ -160,7 +163,7 @@ function createNodejsSrv(port) {
     });
 
     server.on('message', function (evt) {
-        debug('message :', evt.data);
+        NSLog.log('trace','message :', evt.data);
         var socket = evt.client;
         const sockName = socket.name;
         var data = evt.data;
@@ -180,24 +183,27 @@ function createNodejsSrv(port) {
              * ---------------------------------- */
 
             if (event == "Connect") {
-                console.log('data', json["data"]);
+                NSLog.log('trace','data', json["data"]);
                 
             }else if (event == "close") {
                 socket.close();
 
             }else if (event == "Send") {
                 //測試用
-                console.log('data', json["data"]);
+                NSLog.log('trace','data', json["data"]);
 
                 _fms.fmsCall("setObj",json["data"]);
 
             }else if (typeof event != 'undefined' && event != null && event != ""){
-
-                _fms.fmsCall(event,json["data"]);
+                json["data"].unshift(event);
+                setTimeout(function () {
+                    _fms.fmsCall.apply(_fms, json["data"]);
+                },1);
+                // _fms.fmsCall(event,json["data"]);
 
             } else {
                 // todo call data
-                console.log('[JSON DATA]', json);
+                NSLog.log('trace','[JSON DATA]', json);
                 _fms.fmsCall( "serverHandlerAMF", json);
             };
         }else
@@ -209,7 +215,7 @@ function createNodejsSrv(port) {
 
     /** server client socket destroy **/
     server.on('disconnect', function (name) {
-        debug('disconnect_fxconnect_client.');
+        NSLog.log('trace','disconnect connect client(%s).', name);
 
         var removeItem = connections[name];
 
@@ -218,7 +224,7 @@ function createNodejsSrv(port) {
             removeItem.fms.socket.destroy();
             delete connections[name];
 
-            console.log('disconnect count:', Object.keys(connections).length,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
+            NSLog.log('debug','disconnect count:', Object.keys(connections).length,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
         };
 
     });
@@ -231,7 +237,7 @@ function createNodejsSrv(port) {
      * **/
     server.on('httpUpgrade', function (req, client, head) {
 
-        debug('## HTTP upgrade ##');
+        NSLog.log('debug','## HTTP upgrade ##');
         var _get = head[0].split(" ");
 
         var socket = client.socket;
@@ -294,7 +300,7 @@ function onSocketClose(name) {
         removeItem["ws"] = null;
         delete connections[name];
 
-        console.log('disconnect count:', Object.keys(connections).length,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
+        NSLog.log('debug','disconnect count:', Object.keys(connections).length,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
     };
 }
 /* ------- ended testing logger ------- */
@@ -302,14 +308,14 @@ function onSocketClose(name) {
  * 程序錯誤會出現在這裡
  */
 process.on('uncaughtException', function (err) {
-    console.error(err.stack);
+    NSLog.log('error', 'Process uncaughtException :',err.stack);
 });
 process.on('SIGQUIT',function () {
-    console.log("IPC channel exit -1");
+    NSLog.log('debug', "IPC channel exit -1");
     process.exit(-1);
 });
 process.on('disconnect', function () {
-    console.log("sends a QUIT signal (SIGQUIT)");
+    NSLog.log('debug', "sends a QUIT signal (SIGQUIT)");
     process.exit(0);
 });
 process.on('message', function (data, handle) {
@@ -320,7 +326,7 @@ process.on('message', function (data, handle) {
 
         if (data.evt == "c_init") {
 
-            debug("Conversion Socket.Hanlde from Child Process.");
+            NSLog.log('debug', "Conversion Socket.Hanlde from Child Process.");
 
             var socket = new net.Socket({
                 handle:handle,
@@ -336,7 +342,7 @@ process.on('message', function (data, handle) {
         }else if(data.evt == "processInfo") {
             process.send({"evt":"processInfo", "data" : {"memoryUsage":process.memoryUsage(),"connections": Object.keys(connections)}})
         }else{
-            debug('out of hand. dismiss message');
+            NSLog.log('debug', 'out of hand. dismiss message');
         };
 
     };
