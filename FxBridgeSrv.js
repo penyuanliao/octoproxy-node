@@ -19,7 +19,7 @@ const config = require('./config.js');
 const isWorker = ('NODE_CDID' in process.env);
 const isMaster = (isWorker === false);
 const NSLog  = fxNetSocket.logger.getInstance();
-NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:'debug', dateFormat:'[yyyy-MM-dd hh:mm:ss]',filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100});
+NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:'trace', dateFormat:'[yyyy-MM-dd hh:mm:ss]',filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100});
 
 var connections = []; //記錄連線物件
 var srv = createNodejsSrv(config.srvOptions.port);
@@ -77,7 +77,7 @@ function connect(uri, socket) {
             //這邊暫時忽略_result訊息
             if(cmd != '_result') {
                 if (socket.isConnect)
-                    socket.write(JSON.stringify({"NetStatusEvent":"Data","cmd":cmd, args:[argument.value]}));
+                    socket.write(JSON.stringify({"NetStatusEvent":"Data","cmd":cmd, args:argument}));
             }else
             {
                 // NSLog.log('info','FMS _result:', cmd, argument);
@@ -163,7 +163,7 @@ function createNodejsSrv(port) {
     });
 
     server.on('message', function (evt) {
-        NSLog.log('trace','message :', evt.data);
+        NSLog.log('debug','message :', evt.data);
         var socket = evt.client;
         const sockName = socket.name;
         var data = evt.data;
@@ -196,6 +196,7 @@ function createNodejsSrv(port) {
 
             }else if (typeof event != 'undefined' && event != null && event != ""){
                 json["data"].unshift(event);
+                NSLog.log('debug','!!!!! event :', event);
                 setTimeout(function () {
                     _fms.fmsCall.apply(_fms, json["data"]);
                 },1);

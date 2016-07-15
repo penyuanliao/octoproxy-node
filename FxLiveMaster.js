@@ -5,17 +5,24 @@
  * --expose-gc: manual gc().
  */
 
-const util = require('util');
-const debug = require('debug')('rtmp:LiveMaster');
-debug.log = console.log.bind(console); //file log 需要下這行
-const fxNetSocket = require('fxNetSocket');
-const parser = fxNetSocket.parser;
-const pheaders = parser.headers;
-const utilities = fxNetSocket.utilities;
-const daemon = fxNetSocket.daemon;
-const client = fxNetSocket.wsClient;
-const path   = require('path');
-const NSLog  = fxNetSocket.logger.getInstance();
+const util          = require('util');
+const debug         = require('debug')('rtmp:LiveMaster');
+debug.log           = console.log.bind(console); //file log 需要下這行
+const fxNetSocket   = require('fxNetSocket');
+const parser        = fxNetSocket.parser;
+const pheaders      = parser.headers;
+const utilities     = fxNetSocket.utilities;
+const daemon        = fxNetSocket.daemon;
+const client        = fxNetSocket.wsClient;
+const path          = require('path');
+const NSLog         = fxNetSocket.logger.getInstance();
+const TCP           = process.binding("tcp_wrap").TCP; // TCP連線
+const WriteWrap     = process.binding('stream_wrap').WriteWrap;
+const uv            = process.binding('uv');
+const fs            = require('fs');
+const net           = require('net');
+const evt           = require('events');
+const cfg           = require('./config.js');
 NSLog.configure({
     logFileEnabled:true,
     consoleEnabled:true,
@@ -23,17 +30,8 @@ NSLog.configure({
     dateFormat:'[yyyy-MM-dd hh:mm:ss]',
     filePath:__dirname+"/historyLog",
     maximumFileSize: 1024 * 1024 * 100});
-/** 建立連線 **/
-const TCP = process.binding("tcp_wrap").TCP;
-const WriteWrap = process.binding('stream_wrap').WriteWrap;
-const uv = process.binding('uv');
-const fs  = require('fs');
-const net  = require('net');
-const evt = require('events');
-const cfg = require('./config.js');
-/** 多執行緒 **/
-function noop() {}
 const closeWaitTime = 5000;
+const sendWaitClose = 5000;
 /** WebSocket Server **/
 var server;
 /** Sub Service **/
@@ -43,6 +41,9 @@ var roundrobinNum = [];
 /** clients request flashPolicy source response data **/
 const policy = '<?xml version=\"1.0\"?>\n<cross-domain-policy>\n<allow-access-from domain=\"*\" to-ports=\"80\"/>\n</cross-domain-policy>\n';
 NSLog.log('debug',"** Initialize FxLiveMaster.js **");
+
+/** 多執行緒 **/
+function noop() {}
 
 initizatialSrv();
 
@@ -174,7 +175,7 @@ function initSocket(sockHandle, buffer) {
 /** _handle Equal Division **/
 function onread_roundrobin(client_handle) {
     var worker = clusters.shift();
-    worker.send({'evt':'c_equal_division'}, client_handle,[{ track: false, process: false }]);
+    worker.send({'evt':'c_equal_division'}, client_handle, {keepOpen:false});
     clusters.push(worker);
 };
 /** reload request header and assign **/
@@ -235,13 +236,6 @@ function onread_url_param(nread, buffer) {
     if ((buffer.byteLength == 0 || mode == "socket" || !headers) && !headers.swfPolicy) mode = "socket";
     if (headers.unicodeNull != null && headers.swfPolicy && mode != 'ws') mode = "flashsocket";
 
-    // NSLog.log('debug',"sec-websocket-protocol:", headers["sec-websocket-protocol"]);
-    // if (headers["sec-websocket-protocol"] == 'admini') {
-    //     initSocket(handle, buffer);
-    //     return;
-    // }
-    // NSLog.log('info','connection:mode:',mode);
-
     if ((mode === 'ws' && isBrowser) || mode === 'socket' || mode === "flashsocket") {
         if(namespace.indexOf("policy-file-request") != -1 ) {
 
@@ -266,13 +260,20 @@ function onread_url_param(nread, buffer) {
                     console.log('!!!! close();');
                 }else{
                     NSLog.log('trace','1. Socket goto %s(*)', namespace);
-                    worker[0].send({'evt':'c_init',data:source}, handle,{ track: false, process: false , keepOpen:false});
+                    worker[0].send({'evt':'c_init',data:source}, handle,{keepOpen:false});
+                    setTimeout(function () {
+                        handle.close();
+                    }, sendWaitClose);
                 }
 
             }else{
                 NSLog.log('trace','2. Socket goto %s', namespace);
-                worker.send({'evt':'c_init',data:source}, handle,{ track: false, process: false , keepOpen:false});
+                worker.send({'evt':'c_init',data:source}, handle,{keepOpen:false});
+                setTimeout(function () {
+                    handle.close();
+                }, sendWaitClose);
             }
+
             handle.readStop();
         });
 
@@ -291,33 +292,31 @@ function onread_url_param(nread, buffer) {
         // socket.resume();
         handle.close(close_callback);
         handleRelease(handle);
-        handle = null;
         return;// current no http service
     }else {
         NSLog.log('trace','socket mode not found.');
         handle.close(close_callback);
         handleRelease(handle);
-        handle = null;
         return;// current no http service
     }
 
     handle.readStop();
 }
-
+/** handle dealloc ref **/
 function handleRelease(handle){
     handle.readStop();
     handle.onread = noop;
 
     handle = null;
 }
-/****/
+/** close complete **/
 function close_callback(opt) {
     if (opt)
         NSLog.log('info', 'callback handle(%s:%s) has close.',opt.address,opt.port);
     else
         NSLog.log('info', 'callback handle has close.');
 }
-
+/** TCP write string **/
 function tcp_write(handle, data, cb) {
     var req = new WriteWrap();
     req.handle = handle;
