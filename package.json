@@ -1,6 +1,6 @@
 {
   "name": "FxRTMPBridge",
-  "version": "0.2.2",
+  "version": "0.2.4",
   "private": true,
   "dependencies": {
     "buffertools": "^2.1.3",

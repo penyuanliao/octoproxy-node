@@ -22,7 +22,7 @@ const uv            = process.binding('uv');
 const fs            = require('fs');
 const net           = require('net');
 const evt           = require('events');
-const cfg           = require('./config.js');
+const cfg           = require('./conf/config.js');
 NSLog.configure({
     logFileEnabled:true,
     consoleEnabled:true,
@@ -32,6 +32,7 @@ NSLog.configure({
     maximumFileSize: 1024 * 1024 * 100});
 const closeWaitTime = 5000;
 const sendWaitClose = 5000;
+
 /** WebSocket Server **/
 var server;
 /** Sub Service **/
@@ -39,7 +40,7 @@ var clusters = [];
 /** [roundrobin] Client go to sub-service index **/
 var roundrobinNum = [];
 /** clients request flashPolicy source response data **/
-const policy = '<?xml version=\"1.0\"?>\n<cross-domain-policy>\n<allow-access-from domain=\"*\" to-ports=\"80\"/>\n</cross-domain-policy>\n';
+const policy = '<?xml version=\"1.0\"?>\n<cross-domain-policy>\n<allow-access-from domain=\"*\" to-ports=\"25\"/>\n</cross-domain-policy>\n';
 NSLog.log('debug',"** Initialize FxLiveMaster.js **");
 
 /** 多執行緒 **/
@@ -171,7 +172,6 @@ function initSocket(sockHandle, buffer) {
     socket.emit('data',buffer);
     socket.resume();
 }
-
 /** _handle Equal Division **/
 function onread_roundrobin(client_handle) {
     var worker = clusters.shift();
@@ -325,6 +325,9 @@ function tcp_write(handle, data, cb) {
     };
     req.async = false;
     var err = handle.writeUtf8String(req, data);
+    if (err) {
+        NSLog.log('error', 'tcp_write:', err);
+    }
 }
 
 /**
@@ -351,21 +354,21 @@ function setupCluster(opt) {
                 roundrobinNum[cluster.name] = 0;
             }
             clusters[cluster.name].push(cluster);
-        };
+        }
         NSLog.log('info',"Cluster active number:", num);
-    };
+    }
 }
 /**
  * 分流處理
- * url_param: todo config assignRule 區分
+ * url_param: config assignRule 區分
  * roundrobin: 輪詢規則不管伺服器使用者數量
  * leastconn: 檢查伺服器數量平均使用者
  * @param namespace
+ * @param cb callback
  * @returns {undefined}
  */
 function assign(namespace, cb) {
     var cluster = undefined;
-    console.log(namespace);
     var path = namespace.split("/");
     if (path[2]) {
         namespace = path[1];
@@ -425,55 +428,12 @@ process.on('uncaughtException', function (err) {
     console.error(err.stack);
     NSLog.log('error', 'uncaughtException:', err.stack);
 });
-
 process.on("exit", function () {
     NSLog.log('info',"Main Thread exit.");
 });
 process.on("SIGQUIT", function () {
     NSLog.log('info',"user quit node process");
 });
-
-// const http = require('http');
-// const httpServer = http.createServer(function (req,res) {
-//     res.writeHead(404, {
-//         "Content-Type": "text/html",
-//         "connection":"close",
-//         "transfer-encoding":"identity"});
-//     res.end();
-//     res.socket.destroy();
-//     req.socket.destroy();
-// });
-
-function init() {
-
-    server.close();
-
-    server.onconnection = noop;
-
-    server = null;
-
-    createServer(cfg.srvOptions);
-}
-
-function pingServer() {
-    var sock = new net.Socket();
-    sock.connect('3000','127.0.0.1', function () {
-        sock.write('/fx/BacPlayerLight/g1');
-        setTimeout(function () {
-            sock.end();
-            sock.destroy();
-        },1000)
-    });
-    sock.on('error',function (err) {
-        NSLog.log('error',err);
-        setTimeout(function () {
-            sock.end();
-            sock.destroy();
-        },1000);
-        init();
-    });
-}
-
 
 
 

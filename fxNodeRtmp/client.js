@@ -229,7 +229,7 @@ RTMPClient.prototype.onData = function(data) {
 				}
 				continue;
 			}else{
-				NSLog.log('info','+ ------------ AMF0 Decode --------------- +');
+				NSLog.log('trace','+ ------------ AMF0 Decode --------------- +');
 				var decodeLen = 0;
 				var cmd = amfUtils.amf0DecodeOne(bodyFilter);
 				NSLog.log('trace','+ CommandName : ', cmd);
@@ -278,7 +278,7 @@ RTMPClient.prototype.onData = function(data) {
 				if (bodyFilter.length != decodeLen) {
 					NSLog.log('error'," Parse Data: decode Length (%d) != bodySize Length (%d)", decodeLen, bodyFilter.length );
 				}
-				NSLog.log('info','+ --------------------------------------- +');
+				NSLog.log('trace','+ --------------------------------------- +');
 
 				this.emit('message',{
 					messageHeader:{messageType:20},
@@ -378,6 +378,7 @@ RTMPClient.prototype.fmsCall = function (commandName, arg) {
 	while (count < arguments.length) {
 		args.push(arguments[count++]);
 	}
+	NSLog.log("trace","fmsCall:",args);
 	var body = amfUtils.amf0Encode(args);
 	var buf = new Buffer(s1.byteLength + s2.byteLength).fill(0x0);
 	s1.write(buf.slice(0,s1.byteLength));
@@ -394,7 +395,7 @@ RTMPClient.prototype.pingResponse = function (num) {
 	var rtmpBuffer = new Buffer('4200000000000604000700000000', 'hex');
 	rtmpBuffer.writeUInt32BE(num, 10);
 	NSLog.log('trace','pingResponse:', rtmpBuffer.toString('hex'));
-	log.logHex(rtmpBuffer);
+	// log.logHex(rtmpBuffer);
 	this.socket.write(rtmpBuffer);
 };
 RTMPClient.prototype.pingResponse2 = function (num) {

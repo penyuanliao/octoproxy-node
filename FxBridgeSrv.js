@@ -15,11 +15,11 @@ const FxConnection = fxNetSocket.netConnection;
 const parser = fxNetSocket.parser;
 const utilities = fxNetSocket.utilities;
 const libRtmp = require('./fxNodeRtmp').RTMP;
-const config = require('./config.js');
+const config = require('./conf/config.js');
 const isWorker = ('NODE_CDID' in process.env);
 const isMaster = (isWorker === false);
 const NSLog  = fxNetSocket.logger.getInstance();
-NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:'trace', dateFormat:'[yyyy-MM-dd hh:mm:ss]',filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100});
+NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:'debug', dateFormat:'[yyyy-MM-dd hh:mm:ss]',filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100});
 
 var connections = []; //記錄連線物件
 var srv = createNodejsSrv(config.srvOptions.port);
@@ -31,7 +31,6 @@ var srv = createNodejsSrv(config.srvOptions.port);
  * @returns {RTMPClient}
  */
 function connect(uri, socket) {
-    console.log(uri);
     var rtmp = undefined;
     // #1 建立連線
     rtmp = libRtmp.RTMPClient.connect(uri.host,uri.port, function (){
@@ -62,7 +61,7 @@ function connect(uri, socket) {
         NSLog.log('debug', 'sendInvoke FMS connect.');
 
         //完成後就可以自己送出要的事件
-    });;
+    });
 
     // #2 接收FMS訊息
     rtmp.on('message', function (message) {
@@ -87,7 +86,7 @@ function connect(uri, socket) {
     });
     // #3 FMS錯誤訊息事件
     rtmp.on("error", function (args) {
-        console.log("RTMP ERROR", args);
+        NSLog.log('error',"RTMP ERROR", args);
         if (socket.isConnect) {
             socket.write(JSON.stringify({"NetStatusEvent":'NetConnection.Connect.Timeout'}))
         }
@@ -97,7 +96,7 @@ function connect(uri, socket) {
     });
     // #4 FMS關閉的事件
     rtmp.on('close', function (args) {
-        console.log("RTMP connection closed");
+        NSLog.log('info',"RTMP connection closed");
         if(socket.isConnect){
             // socket.write(JSON.stringify({"NetStatusEvent":"NetConnection.Connect.Closed"}));
             setTimeout(function () {
@@ -113,7 +112,7 @@ function connect(uri, socket) {
 
         if (chunk[0] == 0x02 && chunk.byteLength == 18) {
 
-            console.log('basicHeader fmt:%d, number:%d', header_size >> 6, chunk.readInt32BE(14));
+            NSLog.log('info','basicHeader fmt:%d, number:%d', header_size >> 6, chunk.readInt32BE(14));
 
            var num = chunk.readInt32BE(14);
            rtmp.pingResponse(num);
@@ -135,7 +134,7 @@ function setupFMSClient(client) {
         path:"rtmp://" + config.bFMSHost + ":" + config.bFMSPort + client.namespace,
         app:client.namespace.substr(1,client.namespace.length)
     };
-    debug('Bridge of fms:',uri.path);
+    NSLog.log('info','Bridge of fms:', uri.path);
     //建立FMS連線
     _rtmp = connect(uri, client);
     //設定一下名稱跟client一樣

@@ -10,15 +10,10 @@ config.env = process.env.NODE_ENV;
  * Backlog: pending connections
  * **/
 config.numCPUs = require('os').cpus().length;
-/*
- bFMSHost:"10.251.34.14",
- bFMSPort:1935,
- bNodePort:80
-* */
 /** 開發環境設定 **/
 if (config.env == 'development') {
     config.bFMSHost = "43.251.76.26"; //107 3.5
-    config.bFMSPort = 443;
+    config.bFMSPort = 1935;
     config.srvOptions = {
         'host': '0.0.0.0',
         'port': config.appConfig.port,
@@ -41,13 +36,9 @@ if (config.env == 'development') {
         }]
     };
 } else {
+    
     /** 伺服器環境設定 **/
-    if (config.env == 'QA'){
-        config.bFMSHost = "10.251.34.14";
-    }else
-    {
-        config.bFMSHost = "10.251.34.26";
-    }
+    config.bFMSHost = "10.251.76.111";
     config.bFMSPort = 1935;
     config.srvOptions = {
         'host': '0.0.0.0',
@@ -71,7 +62,7 @@ if (config.env == 'development') {
             file:'./FxBridgeSrv.js',
             assign:'BacPlayerBM'
         },{
-            file:'../www/slot/slot.js',
+            file:'../www/slot/MainSlot.js',
             assign:'slotFX'
         },{
             file:'../www/demo/application3.js',
