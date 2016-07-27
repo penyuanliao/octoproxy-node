@@ -397,7 +397,7 @@ function assign(namespace, cb) {
     }else if (cfg.balance === "leastconn") { //Each server with the lowest number of connections
 
         var group = clusters[namespace];
-
+        NSLog.log('trace',"group:",group.length);
         if (!group || typeof group == 'undefined') {
             // console.error('Error not found Cluster server');
             NSLog.log('error','leastconn not found Cluster server');

@@ -18,7 +18,7 @@ const FxConnection = fxNetSocket.netConnection;
 const parser = fxNetSocket.parser;
 const utilities = fxNetSocket.utilities;
 const libRtmp = require('../fxNodeRtmp').RTMP;
-const config = require('../config.js');
+const config = require('../conf/config.js');
 const isWorker = ('NODE_CDID' in process.env);
 const isMaster = (isWorker === false);
 

@@ -29,6 +29,9 @@ if (config.env == 'development') {
             assign:'HallPic'
         },{
             file:'./FxBridgeSrv.js',
+            assign:'HallPic'
+        },{
+            file:'./FxBridgeSrv.js',
             assign:'Hall'
         },{
             file:'./FxBridgeSrv.js',
