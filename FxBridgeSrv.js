@@ -15,13 +15,14 @@ const FxConnection = fxNetSocket.netConnection;
 const parser = fxNetSocket.parser;
 const utilities = fxNetSocket.utilities;
 const libRtmp = require('./fxNodeRtmp').RTMP;
-const config = require('./conf/config.js');
+const config = require('./config.js');
 const isWorker = ('NODE_CDID' in process.env);
 const isMaster = (isWorker === false);
 const NSLog  = fxNetSocket.logger.getInstance();
 NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:'debug', dateFormat:'[yyyy-MM-dd hh:mm:ss]',filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100});
 
 var connections = []; //記錄連線物件
+var connsCount = 0; //連線數
 var srv = createNodejsSrv(config.srvOptions.port);
 
 /**
@@ -141,6 +142,7 @@ function setupFMSClient(client) {
     _rtmp.name = client.name;
     //存在array裡面方便讀取
     connections[client.name] = {ws:client, fms:_rtmp};
+    connsCount++;
 };
 /**
  * 建立NodeJS Server
@@ -223,7 +225,7 @@ function createNodejsSrv(port) {
             removeItem.ws.close();
             removeItem.fms.socket.destroy();
             delete connections[name];
-
+            connsCount--;
             NSLog.log('debug','disconnect count:', Object.keys(connections).length,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
         };
 
@@ -340,10 +342,12 @@ process.on('message', function (data, handle) {
             socket.resume();
             return;
         }else if(data.evt == "processInfo") {
-            process.send({"evt":"processInfo", "data" : {"memoryUsage":process.memoryUsage(),"connections": Object.keys(connections)}})
+            process.send({"evt":"processInfo", "data" : {"memoryUsage":process.memoryUsage(),"connections": connsCount}})
         }else{
             NSLog.log('debug', 'out of hand. dismiss message');
         };
-
+        
     };
 });
+
+
