@@ -21,7 +21,7 @@ var RTMPClient = module.exports = function(socket) {
 	// video stream //
 	this.isVideoStream = false; // 檢查有沒有送出createStream
 	this.callbackfunc = undefined; // 視訊事件出發回傳
-	this.streamChunkSize = 0; // 伺服器回傳chunkSize大小
+	this.streamChunkSize = 0; // 伺服器回傳chunkSize大小 (video stream)
 	this.videoname = undefined;
 	this.socket.acknowledgementSize = 2500000;
 	this.socket.ackMaximum = 0;
@@ -237,6 +237,7 @@ RTMPClient.prototype.onData = function(data) {
 				var decodeLen = 0;
 				var cmd = amfUtils.amf0DecodeOne(bodyFilter);
 				NSLog.log('trace','+ CommandName : ', cmd);
+
 				decodeLen   += cmd.len;
 				
 				var tranID   = undefined;
@@ -893,8 +894,10 @@ RTMPClient.prototype.connectResponse = function () {
 
 
 };
-
-
+/** command chunk size **/
+RTMPClient.prototype.__defineGetter__("setChunkSize", function () {
+	return this.socket.rtmpChunkSize;
+});
 
 RTMPClient.connect = function(host, port, connectListener) {
 	const DEFAULT_PORT = 1935;

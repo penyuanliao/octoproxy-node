@@ -19,7 +19,7 @@ const config = require('./config.js');
 const isWorker = ('NODE_CDID' in process.env);
 const isMaster = (isWorker === false);
 const NSLog  = fxNetSocket.logger.getInstance();
-NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:'debug', dateFormat:'[yyyy-MM-dd hh:mm:ss]',filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100});
+NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:'trace', dateFormat:'[yyyy-MM-dd hh:mm:ss]',filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100});
 
 var connections = []; //記錄連線物件
 var connsCount = 0; //連線數
