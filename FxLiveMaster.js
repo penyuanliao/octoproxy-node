@@ -22,7 +22,8 @@ const uv            = process.binding('uv');
 const fs            = require('fs');
 const net           = require('net');
 const evt           = require('events');
-const cfg           = require('./conf/config.js');
+const cfg           = require('./config.js');
+const gLBSrv        = require('./lib/gameLBSrv.js');
 NSLog.configure({
     logFileEnabled:true,
     consoleEnabled:true,
@@ -35,29 +36,40 @@ const sendWaitClose = 5000;
 
 /** WebSocket Server **/
 var server;
+/** mgmt srv **/
+var mServer;
 /** Sub Service **/
 var clusters = [];
+var clusterNum = 0;
 /** [roundrobin] Client go to sub-service index **/
 var roundrobinNum = [];
+/** casino load balance **/
+var gameLBSrv = new gLBSrv(cfg.gamSLB);
 /** clients request flashPolicy source response data **/
-const policy = '<?xml version=\"1.0\"?>\n<cross-domain-policy>\n<allow-access-from domain=\"*\" to-ports=\"25\"/>\n</cross-domain-policy>\n';
+const policy = '<?xml version=\"1.0\"?>\n<cross-domain-policy>\n<allow-access-from domain=\"*\" to-ports=\"ps\"/>\n</cross-domain-policy>\n';
 NSLog.log('debug',"** Initialize FxLiveMaster.js **");
 
 /** 多執行緒 **/
 function noop() {}
 
 initizatialSrv();
-
 /** cluster ended **/
 function initizatialSrv() {
 
     utilities.autoReleaseGC(); //** 手動 1 sec gc
+
+    NSLog.log('info' , 'Game server load balance enabled: [%s]', cfg.gamSLB.enabled);
+    if (cfg.gamSLB.enabled) {
+        // Initial start up on Game Server Load Balance.
+        gameLBSrv.init_daemon();
+    }
 
     // 1. setup child process fork
     setupCluster(cfg.forkOptions);
     // 2. create listen 80 port server
     NSLog.log('info', 'Ready start create server');
     createServer(cfg.srvOptions);
+    // setupMemagent();
 
 }
 
@@ -74,7 +86,7 @@ function createServer(opt) {
         tcp_handle = new TCP();
         err = tcp_handle.bind(opt.host, opt.port);
         if (err) {
-            NSLog.log('error:','tcp_handle Bind:',err);
+            NSLog.log('error','tcp_handle Bind:',err);
             tcp_handle.close(close_callback);
             return;
         }
@@ -82,22 +94,27 @@ function createServer(opt) {
         err = tcp_handle.listen(opt.backlog);
 
         if (err) {
-            NSLog.log('error:','tcp_handle listen:',err);
+            NSLog.log('error', util._exceptionWithHostPort(err, 'listen', opt.host, opt.port));
+
             tcp_handle.close(close_callback);
             return;
         }
         tcp_handle.onconnection = function (err ,handle) {
+
+            // user address, port
+            var out = {};
+            handle.getSockInfos = out;
+
             if (err) {
-                NSLog.log('error', 'onconnection Error on Exception accept.');
+                NSLog.log('error', util._errnoException(err, 'accept'));
+                rejectClientExcpetion(handle ,"UV_ERR_CON");
                 handle.close(close_callback);
                 return;
             }
-            // user address, port
-            var out = {};
 
             err = handle.getpeername(out);
             if (err) {
-                NSLog.log('error','uv.UV_EADDRINUSE');
+                rejectClientExcpetion(handle ,"UV_EADDRINUSE");
                 handle.close(close_callback);
                 return;
             }
@@ -112,12 +129,13 @@ function createServer(opt) {
 
             err = handle.readStart(); //讀header封包
             if(err){
+                rejectClientExcpetion(handle ,"UV_ERR_RS");
                 handle.close(close_callback);
             }
 
             //onread_roundrobin(handle); //平均分配資源
             handle.closeWaiting = setTimeout(function () {
-                NSLog.log('warning','CLOSE_WAIT %s:%s - Wait 5 sec timeout.', out.address, out.port);
+                rejectClientExcpetion(handle ,"CON_TIMEOUT");
                 handle.close(close_callback);
             }, closeWaitTime);
         };
@@ -161,8 +179,7 @@ function initSocket(sockHandle, buffer) {
             if (msg == '/reboot'){
                 ws.write('reboot main server.');
                 reboot();
-            }
-
+            };
             
         });
 
@@ -181,7 +198,7 @@ function onread_roundrobin(client_handle) {
 /** reload request header and assign **/
 function onread_url_param(nread, buffer) {
 
-    NSLog.log('debug',"reload request header and assign, nread:", nread);
+    // NSLog.log('debug',"reload request header and assign, nread:", nread);
 
     var handle = this;
     var self = server;
@@ -194,8 +211,9 @@ function onread_url_param(nread, buffer) {
         }
         // Error, end of file. -4095
         if (nread === uv.UV_EOF) {
-            NSLog.log('debug','error UV_EOF: unexpected end of file.');
-            handle.close();
+
+            rejectClientExcpetion(handle ,"UV_EOF");
+            handle.close(close_callback);
             handleRelease(handle);
             clearTimeout(handle.closeWaiting);
         }
@@ -230,8 +248,33 @@ function onread_url_param(nread, buffer) {
         // NSLog.log('trace','socket - namespace - ', namespace);
         source = buffer;
     }
+    // /(\w+)(\?|\&)([^=]+)\=([^&]+)/i < once
+    //  < multi
 
+    /** TODO 2016/08/17 -- Log Info **/
+    if (handle.getSockInfos) {
+        handle.getSockInfos.nread = nread; // buf size
+        handle.getSockInfos.path  = namespace;
+        handle.getSockInfos.mode  = mode;
+    }
+
+    /** TODO 2016/08/09 -- URL regex argument **/
     namespace = namespace.replace(/\/\w+\//i,'/'); //filter F5 load balance Rule
+    const originPath = namespace;
+    var args = utilities.parseUrl(namespace); //url arguments
+    if (args) {
+        namespace = args[0];
+        var ns_len = args.length;
+        var url_args = {};
+        for (var i = 1; i < ns_len; i++) {
+            var str = args[i].toString().replace(/(\?|\&)+/g,"");
+            var keyValue = str.split("=");
+            url_args[keyValue[0].toLowerCase()] = keyValue[1];
+        }
+        // NSLog.log("trace","url arguments:", url_args,namespace);
+    }
+
+
 
     if ((buffer.byteLength == 0 || mode == "socket" || !headers) && !headers.swfPolicy) mode = "socket";
     if (headers.unicodeNull != null && headers.swfPolicy && mode != 'ws') mode = "flashsocket";
@@ -239,43 +282,92 @@ function onread_url_param(nread, buffer) {
     if ((mode === 'ws' && isBrowser) || mode === 'socket' || mode === "flashsocket") {
         if(namespace.indexOf("policy-file-request") != -1 ) {
 
-            NSLog.log('trace',"When the incoming message contains the string '<policy-file-request/>\/0'");
             tcp_write(handle, policy + '\0');
+            rejectClientExcpetion(handle, "FL_POLICY");
             handle.close(close_callback);
             handleRelease(handle);
             return;
             // namespace = 'figLeaf';
         }
-        if (namespace.length > 30 ){
-            NSLog.log('warning', 'namespace change figLeaf');
-            namespace = 'figLeaf';
+
+        if (cfg.gamSLB.enabled && namespace == cfg.gamSLB.assign) {
+
+            var lbtimes;
+
+            var tokencode = gameLBSrv.getLoadBalancePath(url_args["gametype"], function (action, json) {
+                NSLog.log('trace','--------------------------');
+                NSLog.log('trace', 'action: %s, token code:%s', action, tokencode);
+                NSLog.log('trace','--------------------------');
+                var src = "";
+                if (json.action == gameLBSrv.LBActionEvent.ON_GET_PATH) {
+                    if (typeof lbtimes != 'undefined') clearTimeout(lbtimes);
+                    lbtimes = undefined;
+                    namespace = json.path.toString('utf8');
+                    var src_string = source.toString('utf8').replace(originPath, namespace);
+                    // var indx = source.indexOf(originPath);
+
+                    src = new Buffer(src_string);
+
+                    clusterEndpoint(namespace ,src);
+                }else if (json.action == gameLBSrv.LBActionEvent.ON_BUSY) {
+
+                    if (typeof lbtimes != 'undefined') clearTimeout(lbtimes);
+                    lbtimes = undefined;
+                    namespace = '/godead';
+                    var chgSrc = source.toString('utf8').replace(originPath, namespace);
+                    src = new Buffer(chgSrc);
+                    gameLBSrv.getGoDead(handle, src);
+
+                }
+
+            });
+
+            lbtimes = setTimeout(function () {
+                gameLBSrv.removeCallbackFunc(tokencode);
+                rejectClientExcpetion(handle, "CON_LB_TIMEOUT");
+                handle.close(close_callback);
+            }, sendWaitClose);
+
+        }else {
+            clusterEndpoint(namespace, source);
         }
 
-        assign(namespace, function (worker) {
+        function clusterEndpoint(lastnamspace, chgSource){
 
-            if (typeof worker === 'undefined') {
-                worker = clusters["*"];
-                if (!worker) {
-                    handle.close();
-                    console.log('!!!! close();');
+            assign(lastnamspace.toString(), function (worker) {
+
+                if (typeof chgSource != 'undefined') {
+                    source = chgSource;
+                }
+
+                if (typeof worker === 'undefined') {
+                    worker = clusters["*"]; //TODO 未來準備擋奇怪連線
+                    if (!worker) {
+                        rejectClientExcpetion(handle, "PROC_NOT_FOUND");
+                        handle.close(close_callback);
+                        console.log('!!!! close();');
+                    }else{
+                        NSLog.log('trace','1. Socket goto %s(*)', lastnamspace);
+                        worker[0].send({'evt':'c_init',data:source}, handle,{keepOpen:false});
+                        setTimeout(function () {
+                            rejectClientExcpetion(handle, "CON_VERIFIED");
+                            handle.close(close_callback);
+                        }, sendWaitClose);
+                    }
+
                 }else{
-                    NSLog.log('trace','1. Socket goto %s(*)', namespace);
-                    worker[0].send({'evt':'c_init',data:source}, handle,{keepOpen:false});
+                    NSLog.log('trace','2. Socket goto %s', lastnamspace);
+                    worker.send({'evt':'c_init',data:source}, handle,{keepOpen:false});
                     setTimeout(function () {
-                        handle.close();
+                        rejectClientExcpetion(handle, "CON_VERIFIED");
+                        handle.close(close_callback);
                     }, sendWaitClose);
                 }
 
-            }else{
-                NSLog.log('trace','2. Socket goto %s', namespace);
-                worker.send({'evt':'c_init',data:source}, handle,{keepOpen:false});
-                setTimeout(function () {
-                    handle.close();
-                }, sendWaitClose);
-            }
+                handle.readStop();
+            });
+        }
 
-            handle.readStop();
-        });
 
     }else if(mode === 'http' && isBrowser)
     {
@@ -290,11 +382,12 @@ function onread_url_param(nread, buffer) {
         // socket.emit("connect");
         // socket.emit('data',new Buffer(buffer));
         // socket.resume();
+        rejectClientExcpetion(handle, "CON_MOD_NOT_FOUND");
         handle.close(close_callback);
         handleRelease(handle);
         return;// current no http service
     }else {
-        NSLog.log('trace','socket mode not found.');
+        rejectClientExcpetion(handle, "CON_MOD_NOT_FOUND");
         handle.close(close_callback);
         handleRelease(handle);
         return;// current no http service
@@ -310,9 +403,31 @@ function handleRelease(handle){
     handle = null;
 }
 /** close complete **/
-function close_callback(opt) {
-    if (opt)
-        NSLog.log('info', 'callback handle(%s:%s) has close.',opt.address,opt.port);
+function close_callback() {
+
+    if (this.getSockInfos) {
+
+        var message;
+        var status = "error";
+
+        if (this.getSockInfos.exception) {
+            message = this.getSockInfos.exception.message;
+            // if (this.getSockInfos.exception.code == 0x302) status = "debug";
+            status = (this.getSockInfos.exception.code == 0x200) ? "info" : "error"
+        }
+        else {
+            message = "Reject the currently connecting client.";
+        }
+
+
+        NSLog.log( status, '{"msg":"%s", "ts": "%s", "src":"%s", "path":"%s", "mode":"%s"}',
+            message,
+            new Date().getTime(),
+            this.getSockInfos.address,
+            this.getSockInfos.mode,
+            this.getSockInfos.path
+        );
+    }
     else
         NSLog.log('info', 'callback handle has close.');
 }
@@ -346,7 +461,7 @@ function setupCluster(opt) {
             var env = process.env;
             env.NODE_CDID = i;
             //var cluster = proc.fork(opt.cluster,{silent:false}, {env:env});
-            var cluster = new daemon(opt.cluster[i].file,{silent:false}, {env:env}); //心跳系統
+            var cluster = new daemon(opt.cluster[i].file,[opt.cluster[i].assign], {env:env,silent:false}); //心跳系統
             cluster.init();
             cluster.name = opt.cluster[i].assign;
             if (!clusters[cluster.name]) {
@@ -356,6 +471,7 @@ function setupCluster(opt) {
             clusters[cluster.name].push(cluster);
         }
         NSLog.log('info',"Cluster active number:", num);
+        clusterNum = num;
     }
 }
 /**
@@ -397,13 +513,14 @@ function assign(namespace, cb) {
     }else if (cfg.balance === "leastconn") { //Each server with the lowest number of connections
 
         var group = clusters[namespace];
-        NSLog.log('trace',"group:",group.length);
+
         if (!group || typeof group == 'undefined') {
             // console.error('Error not found Cluster server');
             NSLog.log('error','leastconn not found Cluster server');
             if (cb) cb(undefined);
             return;
         }
+        NSLog.log('trace',"group:",group ? group.length : 0);
         var stremNum = group.length;
 
         cluster = group[0];
@@ -435,5 +552,11 @@ process.on("SIGQUIT", function () {
     NSLog.log('info',"user quit node process");
 });
 
+
+function rejectClientExcpetion(handle, name) {
+    if (typeof handle != "undefined") {
+        handle.getSockInfos.exception = utilities.errorException(name);
+    }
+}
 
 

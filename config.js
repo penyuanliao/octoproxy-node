@@ -1,7 +1,9 @@
 /**
  * Created by Benson.Liao on 16/1/5.
  */
-var config = module.exports = {};
+const nconf = require('fxNetSocket').nconf;
+var fsconf = new nconf('/Users/penyuan/Documents/Project/webstorms/configuration/info.json');
+var config = {};
 config.appConfig = appParames();
 config.env = process.env.NODE_ENV;
 /**
@@ -12,7 +14,7 @@ config.env = process.env.NODE_ENV;
 config.numCPUs = require('os').cpus().length;
 /** 開發環境設定 **/
 if (config.env == 'development') {
-    config.bFMSHost = "43.251.76.26"; //107 3.5
+    config.bFMSHost = '43.251.76.219';
     config.bFMSPort = 1935;
     config.srvOptions = {
         'host': '0.0.0.0',
@@ -38,11 +40,16 @@ if (config.env == 'development') {
             assign:'BacPlayerLight'
         }]
     };
+    config.gamSLB = {
+        enabled:true,
+        file: './unittest/GLBS.js',
+        assign:'/fxLB'
+    };
 } else {
     
     /** 伺服器環境設定 **/
-    config.bFMSHost = "10.251.76.111";
-    config.bFMSPort = 1935;
+    config.bFMSHost = fsconf.conf.bFMSSrv.host;
+    config.bFMSPort = fsconf.conf.bFMSSrv.port;
     config.srvOptions = {
         'host': '0.0.0.0',
         'port': config.appConfig.port,
@@ -71,6 +78,11 @@ if (config.env == 'development') {
             file:'../www/demo/application3.js',
             assign:'figLeaf'
         }]
+    };
+    config.gamSLB = {
+        enabled:true,
+        file: '../unittest/GLBS.js',
+        assign:'/fxLB'
     };
 }
 config.assignRule = [];
@@ -113,3 +125,25 @@ function appParames(){
 
     return args;
 }
+
+
+
+/* ************************************************************************
+ SINGLETON CLASS DEFINITION
+ ************************************************************************ */
+function configure() {
+    this.config = config;
+}
+configure.instance = null;
+
+/**
+ * Singleton getInstance definition
+ * @return singleton class
+ */
+configure.getInstance = function () {
+    if(this.instance === null) {
+        this.instance = new configure();
+    }
+    return this.instance.config;
+};
+module.exports = exports = configure.getInstance();
