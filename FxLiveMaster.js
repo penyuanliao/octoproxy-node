@@ -48,6 +48,8 @@ var gameLBSrv = new gLBSrv(cfg.gamSLB);
 /** clients request flashPolicy source response data **/
 const policy = '<?xml version=\"1.0\"?>\n<cross-domain-policy>\n<allow-access-from domain=\"*\" to-ports=\"ps\"/>\n</cross-domain-policy>\n';
 NSLog.log('debug',"** Initialize FxLiveMaster.js **");
+/** tracking socket close **/
+const TRACE_SOCKET_IO = true;
 
 /** 多執行緒 **/
 function noop() {}
@@ -86,7 +88,7 @@ function createServer(opt) {
         tcp_handle = new TCP();
         err = tcp_handle.bind(opt.host, opt.port);
         if (err) {
-            NSLog.log('error','tcp_handle Bind:',err);
+            NSLog.log('error','tcp_handle Bind:',err , opt.host, opt.port);
             tcp_handle.close(close_callback);
             return;
         }
@@ -274,8 +276,6 @@ function onread_url_param(nread, buffer) {
         // NSLog.log("trace","url arguments:", url_args,namespace);
     }
 
-
-
     if ((buffer.byteLength == 0 || mode == "socket" || !headers) && !headers.swfPolicy) mode = "socket";
     if (headers.unicodeNull != null && headers.swfPolicy && mode != 'ws') mode = "flashsocket";
 
@@ -291,7 +291,7 @@ function onread_url_param(nread, buffer) {
         }
 
         if (cfg.gamSLB.enabled && namespace == cfg.gamSLB.assign) {
-
+            NSLog.log('trace', 'gamSLB namspace:', namespace == cfg.gamSLB.assign);
             var lbtimes;
 
             var tokencode = gameLBSrv.getLoadBalancePath(url_args["gametype"], function (action, json) {
@@ -419,14 +419,18 @@ function close_callback() {
             message = "Reject the currently connecting client.";
         }
 
+        if (TRACE_SOCKET_IO) {
+            var now = new Date();
 
-        NSLog.log( status, '{"msg":"%s", "ts": "%s", "src":"%s", "path":"%s", "mode":"%s"}',
-            message,
-            new Date().getTime(),
-            this.getSockInfos.address,
-            this.getSockInfos.mode,
-            this.getSockInfos.path
-        );
+            NSLog.log( status, '{"msg":"%s", "ts": "%s", "src":"%s", "mode":"%s", "path":"%s"}',
+                message,
+                now.getFullYear() + '/' + (now.getMonth() + 1) + '/' + now.getDate() + " " + now.getHours() + ':' + now.getMinutes() + ':' + now.getSeconds(),
+                this.getSockInfos.address,
+                this.getSockInfos.mode,
+                this.getSockInfos.path
+            );
+        }
+
     }
     else
         NSLog.log('info', 'callback handle has close.');
@@ -520,7 +524,6 @@ function assign(namespace, cb) {
             if (cb) cb(undefined);
             return;
         }
-        NSLog.log('trace',"group:",group ? group.length : 0);
         var stremNum = group.length;
 
         cluster = group[0];
@@ -551,7 +554,20 @@ process.on("exit", function () {
 process.on("SIGQUIT", function () {
     NSLog.log('info',"user quit node process");
 });
+process.on('message', function (data, handle) {
+    var json = data;
+    if (typeof json === 'string') {
 
+    }else if(typeof json === 'object'){
+
+        if(data.evt == "processInfo") {
+            process.send({"evt":"processInfo", "data" : {"memoryUsage":process.memoryUsage(),"connections": 0}})
+        }else{
+            NSLog.log('debug', 'out of hand. dismiss message');
+        }
+
+    }
+});
 
 function rejectClientExcpetion(handle, name) {
     if (typeof handle != "undefined") {
