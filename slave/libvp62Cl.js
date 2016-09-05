@@ -90,6 +90,7 @@ libvp62Cl.prototype.setupFMSClient = function (namespace) {
     {
         debug("ERROR video of repeated impact to ", namespace);
     };
+    this.rtmp = _rtmp;
 
 };
 
@@ -181,14 +182,6 @@ libvp62Cl.prototype.connect = function (uri) {
         AMF0_DATA:      0x12,
         METADATA:       0x18
     };
-    const CODEC_ID = {
-        H263:           0x02,
-        SCREEN_VIDEO:   0x03,
-        ON2_VP6:        0x04,
-        ON2_VP62:       0x05,
-        SCREEN_VIDEO02: 0x06,
-        AVC:            0x07
-    };
     const CONTROL_ID = {
         KEY_FRAME_ON2_VP6:     0x14,
         KEY_FRAME_H264:        0x17,
@@ -197,34 +190,42 @@ libvp62Cl.prototype.connect = function (uri) {
         INFO_ON2_VP6:          0x54,
         HE_AAC:                0xaf
     };
-    var preBasicHeader = {fmt:0,csid:0,timestamp:0, bodysize:0};
     rtmp.nbufs = undefined;
     rtmp.videoStreamID = 0;
+
+    const hdrSize = rtmp.BasicHeaderSize;
+
     rtmp.on('videoData', function (data) {
         chunkIdx++;
         // ------------------------------ //
         //        First One Packet        //
         // ------------------------------ //
-        const hdrSize = [12, 8, 4 , 1];
+
         var fmt,csid;
         var timestamp, body_size, typeID, streamID, ctrl;
         var curr_nbufs, nbufs, subPackageCount;
         var offset = 0;
         var schunksize = rtmp.streamChunkSize;
+        var packet;
 
         /* detect packet size */
         if (!rtmp.nbufs || rtmp.nbufs.length == 0)
             rtmp.nbufs = new Buffer(data);
         else
         {
-            console.log('concat ', rtmp.nbufs.length, data.length);
             rtmp.nbufs = Buffer.concat([rtmp.nbufs, data], rtmp.nbufs.length + data.length);
         }
-        var is_rtmp_type = rtmp.RTMP_ReadPacket(rtmp.nbufs);
 
-        console.log("RTMP_ReadPacket - ",is_rtmp_type == 1);
+        var _count = 0;
+        while (rtmp.nbufs.length > 0 && rtmp.nbufs.length > hdrSize[rtmp.nbufs[0] >> 6]) {
 
-        while (rtmp.nbufs.length > 0 && rtmp.RTMP_ReadPacket(rtmp.nbufs)) {
+            _count++;
+
+
+            var is_rtmp_type = rtmp.RTMP_ReadPacket(rtmp.nbufs);
+
+            console.log("RTMP_ReadPacket - ",is_rtmp_type == 1);
+
             /////rtmp.streamChunkSize/////
             nbufs = rtmp.nbufs;
             // rtmp.RTMP_ReadPacket(rtmp.nbufs);
@@ -254,27 +255,31 @@ libvp62Cl.prototype.connect = function (uri) {
                 var end = ((body_size % schunksize == 0) ? 1 : 0);
                 subPackageCount = subPackageCount - end;
 
-                NSLog.log('debug','nbufs(%s) > body_size(%s) [cur(%s), nbufs(%s)] end:%s', (body_size + hdrSize[fmt]) , rtmp.nbufs.length, data[0], nbufs[0], end);
+                NSLog.log('debug','body_size(%s) > total(%s) [cur(%s), nbufs(%s)] end:%s', (body_size + hdrSize[fmt]) , rtmp.nbufs.length, data[0], nbufs[0], end);
 
-                if ((body_size + hdrSize[fmt]) >= rtmp.nbufs.length) {
-
-                    if (rtmp.nbufs[0] == 0x44 || rtmp.nbufs[0] == 0x02 || rtmp.nbufs[0] == 0x04) {
-
-                    }else {
-                        NSLog.log("debug", "//// RESET DATA (%s, %s)////", rtmp.nbufs.length, data.length);
-                        // rtmp.nbufs = undefined;
-                    }
-                    // return;
+                if ((body_size + hdrSize[fmt]) > rtmp.nbufs.length) {
+                    NSLog.log("debug", "//// RTMPPacket_IsNotReady() ////");
+                    NSLog.log('debug', "chunkIdx:%s,count:%s \nBodySize: %s", chunkIdx,_count, body_size)
+                    return;
                 }
 
                 curr_nbufs = rtmp.nbufs.slice(0, hdrSize[fmt] + body_size + subPackageCount);
                 var firstOnes = curr_nbufs[0].toString(16);
-                var pre = rtmp.nbufs.length;
-
+                NSLog.log('info','pre-nbufs:%s , curr_nbufs:%s', rtmp.nbufs.length, curr_nbufs.length);
                 //移除資料
                 rtmp.nbufs = rtmp.nbufs.slice((hdrSize[fmt] + body_size + subPackageCount), rtmp.nbufs.length);
 
-                NSLog.log('fatal',"nbufs size:%s > %s (%s)",pre,rtmp.nbufs.length, (pre - rtmp.nbufs.length));
+                NSLog.log('info', "\n----------------\nchunkIdx:%s,count:%s\nBasicHeader:0x%s\nFmt:%s\nCSID: %s\nTimestamp: %s\nBodySize: %s\nTypeID:%s\nStreamID:%s\nctrl:%s\nnbufs:%s\n",
+                    chunkIdx,_count,firstOnes, fmt, csid, timestamp, body_size, typeID, streamID, 0, rtmp.nbufs.length);
+                if (rtmp.nbufs.length > 0) {
+                    console.log('curr-least:0x%s', curr_nbufs[curr_nbufs.length-1].toString(16));
+                    console.log('Next-basicHeader:0x%s', rtmp.nbufs[0].toString(16));
+                    console.log('curr index of 0x00:%s', curr_nbufs.lastIndexOf(0x00));
+                    console.log('index of 0x00:%s', rtmp.nbufs.indexOf(0x00),rtmp.nbufs[rtmp.nbufs.indexOf(0x00)+1]);
+                    console.log('----------------');
+                }
+                /**/
+
                 if (typeID == RTMP_TYPE.VIDEO) {
                     var videoData = curr_nbufs.slice(offset,curr_nbufs.length);
                     ctrl = videoData.readUInt8(0);
@@ -299,6 +304,7 @@ libvp62Cl.prototype.connect = function (uri) {
                         var header;
                         if (self.flvHeader) {
                             header = new Buffer(24);
+                            header.write("FLV",0);
                             header[13] = 0x09;
                             self.writeUInt24BE(header, body_size, 14);
                             header.writeUInt32BE(timestamp, 17);
@@ -317,8 +323,9 @@ libvp62Cl.prototype.connect = function (uri) {
                             var curr = Buffer.concat([header,videoData.slice(0,videoData.length)], header.length + videoData.length);
                             self.flvHeader = false;
                             self.fxFile.write(curr);
-                            NSLog.log('warning','------- END -------');
-                            self.emit(self.StreamEvent.VIDEO_DATA, curr);
+                            NSLog.log('info','------- END -------', curr[curr.length]);
+                            var vb= curr.toString('base64');
+                            self.emit(self.StreamEvent.VIDEO_DATA, vb);
                         }
 
                         NSLog.log('trace', " Write size:%s(%s)",header.length + videoData.length -1,videoData.slice(1,videoData.length).length);
@@ -333,56 +340,46 @@ libvp62Cl.prototype.connect = function (uri) {
                         NSLog.log("warning", "H264 Not support !!");
                     }
 
-                }else if (typeID == RTMP_TYPE.AUDIO)
-                {
-                    ctrl = nbufs.readUInt8(ffest);
-                    NSLog.log('warning','The audio stream Not support output!!');
-                }else if (typeID == RTMP_TYPE.METADATA){
+                }
+                else if (typeID == RTMP_TYPE.AUDIO) {
+                    ctrl = nbufs.readUInt8(offset);
+                    NSLog.log('warning','The audio stream Not support output!!');}
+                else if (typeID == RTMP_TYPE.METADATA){
                     NSLog.log('info', '----- Metadata -----');
-                }else if (typeID == RTMP_TYPE.AMF0_DATA){
+                }
+                else if (typeID == RTMP_TYPE.AMF0_DATA){
                     NSLog.log('info', '----- AMF0_DATA (0x12), %s bytes, %s total -----', (hdrSize[fmt] + body_size), rtmp.nbufs.length);
 
                     NSLog.log('info', '----- %s -----', rtmp.nbufs.length);
 
-                }else if (typeID == RTMP_TYPE.USER_CTRL_MSG){
+                }
+                else if (typeID == RTMP_TYPE.USER_CTRL_MSG){
                     NSLog.log('info', '----- User Control Message (0x02), %s bytes -----',(hdrSize[fmt] + body_size));
 
                     var num = curr_nbufs.readInt32BE(14);
                     
-                    console.log(rtmp.nbufs.slice(0,50).toString('hex'), num);
+                    console.log(curr_nbufs);
 
                     rtmp.pingResponse(num);
 
-                }else {
+                }
+                else {
 
                     var chks = rtmp.nbufs.slice(0,12);
-                    log.logHex(chks);
+                    console.log(chks);
                     console.log('ERROR !!!!!!!!!!!!!!! ERROR');
 
                 }
 
 
-                NSLog.log('info', "\n----------------\nBasicHeader:%s\nFmt:%s\nCSID: %s\nTimestamp: %s\nBodySize: %s\nTypeID:%s\nStreamID:%s\nctrl:%s\nnbufs:%s\n----------------",
-                    firstOnes, fmt, csid, timestamp, body_size, typeID, streamID, ctrl, rtmp.nbufs.length);
 
-                preBasicHeader = {fmt:fmt,csid:csid,timestamp:timestamp, bodySize:body_size};
-
-            }else {
-                var slice = parseInt(preBasicHeader.bodySize/schunksize);
-                if (rtmp.nbufs.length <= 0 || (hdrSize[fmt] + preBasicHeader.bodySize + slice) > rtmp.nbufs.length ) return;
-
-
-                var pre = preBasicHeader.bodySize;
-
-                if (pre > rtmp.nbufs.length) {
-                    NSLog.log("error", "pre(%s) > nbufs(%s)", pre, rtmp.nbufs.length);
-                    return;
-                }
+            }else if (fmt == 2 || fmt == 3){
 
                 /* extended header : 0xC4 */
 
                 if (rtmp.nbufs[0] == 0xC4) {
-                    NSLog.log('verbose',"0xC4 extended header (%s timestamp:%s)", rtmp.nbufs[hdrSize[fmt]] >> 6, data.length-1, preBasicHeader.bodySize - 8);
+                    NSLog.log('verbose','');
+                    NSLog.log('verbose',"0xC4 extended header (%s timestamp:)", rtmp.nbufs[hdrSize[fmt]] >> 6, data.length-1);
                     // log.logHex(rtmp.nbufs);
                     rtmp.nbufs = rtmp.nbufs.slice(rtmp.nbufs.length, rtmp.nbufs.length);
                     return;
@@ -395,15 +392,20 @@ libvp62Cl.prototype.connect = function (uri) {
                 //unkown header
                 // curr_nbufs = rtmp.nbufs.slice(1, preBasicHeader.bodySize + slice);
 
-                NSLog.log('verbose',"Format(%s) nbufs size pre:%s > %s (%s)",rtmp.nbufs[0],pre,rtmp.nbufs.length, (pre - rtmp.nbufs.length));
+                NSLog.log('verbose',"Format(%s) nbufs size : %s",rtmp.nbufs[0].toString(16),rtmp.nbufs.length );
                 NSLog.log('trace', '---------------------------------');
                 NSLog.log('debug', fmt, csid);
                 // NSLog.log('debug', "Next Packet:*%s %s", curr_nbufs[hdrSize[fmt]], hdrSize[fmt]+1);
                 NSLog.log('debug', "hex:", rtmp.nbufs.slice(0,16));
-                NSLog.log('debug', "source Length:", rtmp.nbufs.length);
+                NSLog.log('debug', "nbufs.length:", rtmp.nbufs.length);
+                NSLog.log('debug', "indexof :", rtmp.nbufs.indexOf(0x00), rtmp.nbufs[rtmp.nbufs.indexOf(0x00)+1]);
                 NSLog.log('debug', "basic header:%s, current:%s", rtmp.nbufs[0],data[0]);
                 NSLog.log('trace', '---------------------------------');
-
+                if (rtmp.nbufs.indexOf(0x00) == -1) {
+                    rtmp.nbufs = undefined;
+                    return;
+                }
+                rtmp.nbufs = rtmp.nbufs.slice(rtmp.nbufs.indexOf(0x00)+1, rtmp.nbufs.length);
                 // rtmp.nbufs = rtmp.nbufs.slice((hdrSize[fmt] + preBasicHeader.bodySize), rtmp.nbufs.length);
             }
         }
@@ -506,6 +508,7 @@ libvp62Cl.prototype.StreamEvent = {
     "CHUNK_SIZE":   "onSetChunkSize",
     "BANDWIDTH" :   "onBandwidth",
     "SAMPLE_ACCESS":"onSampleAccess",
+    "GET_FPS":      "onGetFPS",
     "STATUS":       "onStatus"
 };
 
