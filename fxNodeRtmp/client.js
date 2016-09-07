@@ -15,7 +15,7 @@ var level ={'sendRTMPPacket':false};
 // flv header '464c56010d00000009000000001200836600000000000000'
 var RTMPClient = module.exports = function(socket) {
 	this.socket = socket;
-	this.socket.rtmpChunkSize = 128;
+	this.socket.rtmpChunkSize = 128; //fms3.5=128, fms4.5=4096
 	this.uptime = os.uptime();
 	this.state = 'connecting';
 	// video stream //
@@ -625,6 +625,8 @@ RTMPClient.prototype.streamPlay = function(name) {
 				NSLog.log('info','amfObj onMetaData:', amfObj);
 				self.emit('onMetaData', amfObj);
 				data = data.slice(iPacket.header.offset, data.length);
+				self.v_metadata = amfObj;
+				self.emit("onMetadata", amfObj);
 			}
 		}
 
@@ -910,23 +912,6 @@ RTMPClient.connect = function(host, port, connectListener) {
 		client.on('connect', connectListener);
 	return client;
 };
-// RTMPClient.connectComplete = function (host, port, complete) {
-// 	var rtmp = libRtmp.RTMPClient.connect(host,port, function () {
-// 		rtmp.sendInvoke('connect', 1, {
-// 			app: "motest/g1",
-// 			flashVer: "MAC 10,0,32,18",
-// 			tcUrl: "rtmp://43.251.76.107:23/motest/g1",
-// 			fpad: false,
-// 			capabilities: 15.0,
-// 			audioCodecs: 0.0,
-// 			videoCodecs: 252.0,
-// 			videoFunction: 1.0
-// 		});
-// 	});
-// };
-
-
-
 
 /** ============================= **/
 /**       RTMP_ReadPacket()       **/
@@ -1022,10 +1007,28 @@ RTMPClient.prototype.RTMP_ReadPacketType = function (pt) {
 			self.setWindowACK(acknowledgement);
 		}
 		return acknowledgement;
-	}else if (pt.header.typeID == 0x06) {
+	}
+	else if (pt.header.typeID == 0x06) {
 		var cBandwidth = pt.header.bodyBuf.readUInt32BE(0);
 		NSLog.log('info','Set Peer Bandwidth(Message Type ID=6)', cBandwidth);
 		return cBandwidth;
+	}
+	else if (pt.header.typeID == 0x12) {
+		NSLog.log('info', 'TypeID:AMF0 Command(0x12)');
+
+		if (pt.header.bodySize > self.socket.rtmpChunkSize) {
+			for (var i = self.socket.rtmpChunkSize; i < pt.header.bodyBuf.length; i+=self.socket.rtmpChunkSize) {
+				var obj = pt.header.bodyBuf[i];
+				if (obj == 0xc3) {
+					pt.header.bodyBuf = Buffer.concat([pt.header.bodyBuf.slice(0,i),pt.header.bodyBuf.slice(i+1,pt.header.bodyBuf.length)]);
+				}
+			}
+		}
+
+		if (pt.header.CSID == 4) {
+			var amfObj = amfUtils.amf0Decode(pt.header.bodyBuf);
+			return amfObj;
+		}
 	}
 	else if (pt.header.typeID == 0x14) {
 
@@ -1039,10 +1042,9 @@ RTMPClient.prototype.RTMP_ReadPacketType = function (pt) {
 				}
 			}
 		}
-		// var dataLength = iPacket.header.bodyBuf.length;
 		var cmd = amfUtils.decodeAmf0Cmd(pt.header.bodyBuf);
 
-		NSLog.log('info', '_result() Value:%s', JSON.stringify(cmd));
+		// NSLog.log('info', '_result() Value:%s', JSON.stringify(cmd));
 
 		return cmd;
 
