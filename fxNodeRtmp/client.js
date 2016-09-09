@@ -814,8 +814,7 @@ RTMPClient.prototype.netStreamConnect = function (name) {
 RTMPClient.prototype.connectResponse = function () {
 
 	var self = this;
-
-
+	
 	self.callbackfunc = function (data) {
 
 		try {
@@ -824,16 +823,11 @@ RTMPClient.prototype.connectResponse = function () {
 
 			var iPacket = self.filterPacket(data); //id = 5
 
+			/** FMS Connect error **/
 			if (iPacket.header.typeID != 0x05 && iPacket.header.bodySize != 4) {
 				NSLog.log('error', 'FMS Connect error');
-				var cmd = connectError(data, iPacket);
+				connectError(data, iPacket);
 				self.callbackfunc = undefined;
-
-				// //紀錄一下connect回傳結果
-				// if (!self.resInvoke) self.resInvoke = {};
-				// self.resInvoke["connect" + cmd.cmd] = cmd;
-				cmd.name = "connect" + cmd.cmd;
-				self.emit('status', cmd);
 				return;
 			}
 			NSLog.log('trace','.... RTMPClient connectResponse Start Decoder ....')
@@ -869,9 +863,10 @@ RTMPClient.prototype.connectResponse = function () {
 
 	};
 
-
+	/** send connect _result failed **/
 	function connectError(data, iPacket) {
 		var defChunkSize = self.socket.rtmpChunkSize;
+
 		if (iPacket.header.bodySize > defChunkSize) {
 			for (var i = defChunkSize; i < iPacket.header.bodyBuf.length; i += defChunkSize) {
 				var obj = iPacket.header.bodyBuf[i];
@@ -880,13 +875,26 @@ RTMPClient.prototype.connectResponse = function () {
 				}
 			}
 		}
-		var cmd = amfUtils.decodeAmf0Cmd(iPacket.header.bodyBuf);
-		data = data.slice(iPacket.header.offset, data.length);
-		console.log(cmd);
-		return cmd;
+
+		while (data.length > 0) {
+			iPacket = self.filterPacket(data); //id = 5
+			if( iPacket.header.fmt > 2) {
+				NSLog.log('Chunk has not Packet!!', iPacket.header.fmt);
+				break;
+			}
+			var obj = self.RTMP_ReadPacketType(iPacket);
+			if (obj.cmd == "_error") {
+				self.emit('error', {name:'error',info:obj.info});
+			}else if (obj.cmd == "close"){
+				self.emit('status', {name:obj.cmd});
+			}
+			data = data.slice(iPacket.header.offset, data.length);
+		}
+
+
+		return 1;
 
 	}
-
 
 };
 /** command chunk size **/
