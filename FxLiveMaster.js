@@ -30,6 +30,8 @@ NSLog.configure({
     level:'trace',
     dateFormat:'[yyyy-MM-dd hh:mm:ss]',
     filePath:__dirname+"/historyLog",
+    id:"octoproxy",
+    remoteEnabled: false,
     maximumFileSize: 1024 * 1024 * 100});
 const closeWaitTime = 5000;
 const sendWaitClose = 5000;
@@ -289,9 +291,11 @@ function onread_url_param(nread, buffer) {
             return;
             // namespace = 'figLeaf';
         }
+        //const chk_assign = cfg.gamSLB.assign.split(",").indexOf(namespace);
+        const chk_assign = (namespace == cfg.gamSLB.assign);
 
-        if (cfg.gamSLB.enabled && namespace == cfg.gamSLB.assign) {
-            NSLog.log('trace', 'gamSLB namspace:', namespace == cfg.gamSLB.assign);
+        if (cfg.gamSLB.enabled && chk_assign) {
+            NSLog.log('trace', 'gamSLB namspace:', chk_assign);
             var lbtimes;
 
             var tokencode = gameLBSrv.getLoadBalancePath(url_args["gametype"], function (action, json) {
@@ -458,16 +462,19 @@ function setupCluster(opt) {
         opt = { 'cluster': [0] };
     }
     var num = Number(opt.cluster.length);
+    var env = process.env;
+    var assign, moss;
     if (num != 0) { //
         for (var i = 0; i < num; i++) {
 
             // file , fork.settings, args
-            var env = process.env;
+            moss = opt.cluster[i].mxoss || 1024;
+            assign = utilities.trimAny(opt.cluster[i].assign);
             env.NODE_CDID = i;
             //var cluster = proc.fork(opt.cluster,{silent:false}, {env:env});
-            var cluster = new daemon(opt.cluster[i].file,[opt.cluster[i].assign], {env:env,silent:false}); //心跳系統
+            var cluster = new daemon(opt.cluster[i].file,[assign], {env:env,silent:false,execArgv:["--nouse-idle-notification","--expose-gc", "--max-old-space-size=" + moss]}); //心跳系統
             cluster.init();
-            cluster.name = opt.cluster[i].assign;
+            cluster.name = assign;
             if (!clusters[cluster.name]) {
                 clusters[cluster.name] = [];
                 roundrobinNum[cluster.name] = 0;
@@ -514,9 +521,22 @@ function assign(namespace, cb) {
 
         if (cb) cb(cluster);
 
-    }else if (cfg.balance === "leastconn") { //Each server with the lowest number of connections
-
-        var group = clusters[namespace];
+    }
+    else if (cfg.balance === "leastconn") { //Each server with the lowest number of connections
+        var clusterName = namespace;
+        var group = clusters[clusterName];
+        // todo more namespace
+        if (typeof group == "undefined") {
+            for (var more in clusters) {
+                var chk_assign = more.split(",").indexOf(namespace);
+                console.log(more,chk_assign);
+                if (chk_assign != -1) {
+                    clusterName = more;
+                    break;
+                }
+            }
+            group = clusters[clusterName];
+        }
 
         if (!group || typeof group == 'undefined') {
             // console.error('Error not found Cluster server');
@@ -530,8 +550,8 @@ function assign(namespace, cb) {
 
         for (var n = 0; n < stremNum; n++) {
             //檢查最小連線數
-            if (cluster.nodeInfo.connections < clusters[namespace][n].nodeInfo.connections){
-                cluster = clusters[namespace][n];
+            if (cluster.nodeInfo.connections < clusters[clusterName][n].nodeInfo.connections){
+                cluster = clusters[clusterName][n];
             }
         }
         if (cb) cb(cluster);

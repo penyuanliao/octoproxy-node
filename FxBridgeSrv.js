@@ -7,20 +7,22 @@
  * --expose-gc: manual gc().
  */
 
-const debug = require('debug')('rtmp:BridgeSrv');
-debug.log = console.log.bind(console); //file log 需要下這行
-const fxNetSocket = require('fxNetSocket');
-const net = require('net');
-const FxConnection = fxNetSocket.netConnection;
-const parser = fxNetSocket.parser;
-const utilities = fxNetSocket.utilities;
-const libRtmp = require('./fxNodeRtmp').RTMP;
-const config = require('./config.js');
-const isWorker = ('NODE_CDID' in process.env);
-const isMaster = (isWorker === false);
-const NSLog  = fxNetSocket.logger.getInstance();
-NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:'trace', dateFormat:'[yyyy-MM-dd hh:mm:ss]',filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100});
-
+const debug         = require('debug')('rtmp:BridgeSrv');
+debug.log           = console.log.bind(console); //file log 需要下這行
+const fxNetSocket   = require('fxNetSocket');
+const net           = require('net');
+const FxConnection  = fxNetSocket.netConnection;
+const parser        = fxNetSocket.parser;
+const utilities     = fxNetSocket.utilities;
+const libRtmp       = require('./fxNodeRtmp').RTMP;
+const config        = require('./config.js');
+const path          = require('path');
+const isWorker      = ('NODE_CDID' in process.env); //檢查是否啟動worker
+const isMaster      = (isWorker === false);
+const NSLog         = fxNetSocket.logger.getInstance();
+const fileName      = path.basename(require.main.filename) + process.argv[2];
+NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:'trace', dateFormat:'[yyyy-MM-dd hh:mm:ss]',fileName:fileName,filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100,
+                id:process.argv[2], remoteEnabled: false});
 var connections = []; //記錄連線物件
 var connsCount = 0; //連線數
 var srv = createNodejsSrv(config.srvOptions.port);
@@ -217,7 +219,7 @@ function createNodejsSrv(port) {
 
     /** server client socket destroy **/
     server.on('disconnect', function (name) {
-        NSLog.log('trace','disconnect connect client(%s).', name);
+        NSLog.log('info','disconnect connect client(%s).', name);
 
         var removeItem = connections[name];
 

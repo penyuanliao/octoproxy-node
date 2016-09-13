@@ -1,6 +1,6 @@
 {
   "name": "FxRTMPBridge",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "dependencies": {
     "buffertools": "^2.1.3",
@@ -12,8 +12,9 @@
   },
   "scripts": {
     "compress": "tar -zcvf ../FxRTMPBridge.tgz ../FxRTMPBridge/",
-    "start": "node --max-old-space-size=8192 --nouse-idle-notification --always-compact --expose-gc FxLiveMaster.js -p 80 > /dev/null 2>&1 &",
-    "test": "echo $npm_package_config_debug"
+    "start": "sudo sh startup.sh",
+    "test": "echo $npm_package_config_debug",
+    "clean": ""
   },
   "description": "# FxNetSocket [lib all] # FxLiveMaster.js"
 }

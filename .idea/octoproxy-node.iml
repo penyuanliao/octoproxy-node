@@ -5,7 +5,7 @@
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="Node.js v4.3.2 Core Modules" level="application" />
-    <orderEntry type="library" name="FxRTMPBridge node_modules" level="project" />
-    <orderEntry type="library" name="www" level="application" />
+    <orderEntry type="library" name="SVN" level="application" />
+    <orderEntry type="library" name="octoproxy-node node_modules" level="project" />
   </component>
 </module>

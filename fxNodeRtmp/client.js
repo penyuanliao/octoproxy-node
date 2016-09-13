@@ -546,6 +546,18 @@ RTMPClient.prototype.streamPlay = function(name) {
 	var body = Buffer.concat([header,cmdName, tranID, cmdObj, stramName], header.length + cmdName.length + tranID.length + cmdObj.length + stramName.length);
 
 	self.callbackfunc = function (data) {
+		/*
+		while (data.length > 0){
+			var iPacket = self.filterPacket(data);
+			var obj = self.RTMP_ReadPacketType(iPacket);
+			if (iPacket.header.typeID == 0x09) {
+				self.emit('videoData', data);
+				self.callbackfunc = undefined;
+				return;
+			}
+			data = data.slice(iPacket.header.offset, data.length);
+		}*/
+
 		// self.callbackfunc = null;
 		// #1 server SetChunkSize
 		var iPacket = self.filterPacket(data);
@@ -553,7 +565,7 @@ RTMPClient.prototype.streamPlay = function(name) {
 		if (iPacket.header.CSID == 2 && iPacket.header.typeID == 0x01) {
 			var chunkSize = iPacket.header.bodyBuf.readUInt32BE(0);
 			NSLog.log('info','server SetChunkSize(4): ', chunkSize);
-			self.streamChunkSize = chunkSize;
+			self.setRTMPChunkSize = chunkSize;
 
 			data = data.slice(iPacket.header.offset, data.length);
 		}
@@ -897,10 +909,6 @@ RTMPClient.prototype.connectResponse = function () {
 	}
 
 };
-/** command chunk size **/
-RTMPClient.prototype.__defineGetter__("setChunkSize", function () {
-	return this.socket.rtmpChunkSize;
-});
 
 RTMPClient.connect = function(host, port, connectListener) {
 	const DEFAULT_PORT = 1935;
@@ -984,25 +992,31 @@ RTMPClient.prototype.RTMP_ReadPacket = function (buf) {
 
 RTMPClient.prototype.RTMP_ReadPacketType = function (pt) {
 	var self = this;
+	var num;
 	if (pt.header.typeID == 0x01) {
 		var chunksize = pt.header.bodyBuf.readUInt32BE(0);
-		NSLog.log('info','Set Chunk Size (Message Type ID=0x01)', chunksize);
-		self.socket.rtmpChunkSize = chunksize;
-		if (chunksize != 128 && chunksize != 4096){
-
-			NSLog.log('warning','SetChunkSize typeid:%s, bodysize:%s', pt.header.typeID, pt.header.bodySize);
-
-			self.socket.rtmpChunkSize = 128;
-		}
+		self.setRTMPChunkSize = chunksize;
 		return chunksize;
 	}
 	else if (pt.header.typeID == 0x04) {
 
-		var num = pt.header.bodyBuf.readInt32BE(2); // get timestamp value
+		var eventType = pt.header.bodyBuf.readUInt16BE(0);
 
-		NSLog.log('info', 'Ping Request(0x04) Event timestamp:%s', num);
+		if (eventType == 0){
+			num = pt.header.bodyBuf.readUInt32BE(2);
+			self.emit("streamBegin", num);
+		}
+		else if (eventType == 6) {
+			var num = pt.header.bodyBuf.readInt32BE(2); // get timestamp value
+			self.pingResponse(num);
+			NSLog.log('info', '(Message Type ID=0x04) Ping Request(%s) Event timestamp:%s', eventType, num);
+			self.setPingTimestamp = num;
+		}
+		else if (eventType == 7) {
+			// client接收不到這個訊息
+		}
 
-		self.pingResponse(num);
+
 		return num;
 	}
 	else if (pt.header.typeID == 0x05) {
@@ -1020,6 +1034,9 @@ RTMPClient.prototype.RTMP_ReadPacketType = function (pt) {
 		var cBandwidth = pt.header.bodyBuf.readUInt32BE(0);
 		NSLog.log('info','Set Peer Bandwidth(Message Type ID=6)', cBandwidth);
 		return cBandwidth;
+	}
+	else if (pt.header.typeID == 0x09) {
+		return true;
 	}
 	else if (pt.header.typeID == 0x12) {
 		NSLog.log('info', 'TypeID:AMF0 Command(0x12)');
@@ -1060,6 +1077,30 @@ RTMPClient.prototype.RTMP_ReadPacketType = function (pt) {
 
 };
 
+/** command chunk size **/
+RTMPClient.prototype.__defineGetter__("getRTMPChunkSize", function () {
+	return this.socket.rtmpChunkSize;
+});
+RTMPClient.prototype.__defineSetter__("setRTMPChunkSize", function (chunksize) {
+	NSLog.log('info','Set Chunk Size (Message Type ID=0x01)', chunksize);
+	this.socket.rtmpChunkSize = chunksize;
+
+	if (chunksize != 128 && chunksize != 4096) {
+
+		NSLog.log('warning','Customize Chunk size %s!!??', chunksize);
+
+		// this.socket.rtmpChunkSize = 128;
+	}
+
+});
+RTMPClient.prototype.__defineGetter__("getPingTimestamp", function () {
+	return this._pingTimestamp;
+});
+RTMPClient.prototype.__defineSetter__("setPingTimestamp", function (timestamp) {
+	this._pingTimestamp = timestamp;
+});
+
+
 RTMPClient.prototype.BasicHeaderSize = [12, 8, 4 , 1];
 
 RTMPClient.prototype.PacketType = {
@@ -1090,6 +1131,12 @@ RTMPClient.prototype.Code_ID = {
 	SCREEN_VIDEO02: 0x06,
 	AVC:            0x07
 };
+
+RTMPClient.prototype.Event_Type = {
+	STREAM_BEGIN:	0,
+	PING_REQUEST:	6,
+	Ping_RESPONSE:	7
+}
 
 RTMPClient.prototype.CONTROL_ID = {
 	KEY_FRAME_ON2_VP6:     0x14,

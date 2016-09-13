@@ -1,8 +1,7 @@
 /**
  * Created by Benson.Liao on 16/1/5.
  */
-const nconf = require('fxNetSocket').nconf;
-var fsconf = new nconf('/Users/penyuan/Documents/Project/webstorms/configuration/info.json');
+const nconf = require('fxNetSocket').nconf('/Users/penyuan/Documents/Project/webstorms/configuration/info.json');
 var config = {};
 config.appConfig = appParames();
 config.env = process.env.NODE_ENV;
@@ -11,33 +10,31 @@ config.env = process.env.NODE_ENV;
  *
  * Backlog: pending connections
  * **/
+
 config.numCPUs = require('os').cpus().length;
 /** 開發環境設定 **/
 if (config.env == 'development') {
-    config.bFMSHost = '43.251.76.219';
+    config.bFMSHost = "";
     config.bFMSPort = 1935;
     config.srvOptions = {
         'host': '0.0.0.0',
         'port': config.appConfig.port,
         'closeWaitTime':5000,
-        'backlog': 2048
+        'backlog': 511
     };
     //建立第二台一樣服務只需複製一樣設定即可
+    //合併服務用逗號區隔ex:'Hall, Hall2'
+    //會清除空白符號
     config.forkOptions = {
         'webCluster':'',
         'webNum':0,
         'cluster': [{
             file:'./FxBridgeSrv.js',
-            assign:'HallPic'
+            assign:'DTFight.PlayerLight, RouPlayerBM, SicBoPlayerBM, HallPic, Hall, BacPlayerLight',
+            mxoss: 2048
         },{
-            file:'./FxBridgeSrv.js',
-            assign:'HallPic'
-        },{
-            file:'./FxBridgeSrv.js',
-            assign:'Hall'
-        },{
-            file:'./FxBridgeSrv.js',
-            assign:'BacPlayerLight'
+            file:'./slave/remoteSrv.js',
+            assign:'administrator'
         }]
     };
     config.gamSLB = {
@@ -48,8 +45,8 @@ if (config.env == 'development') {
 } else {
     
     /** 伺服器環境設定 **/
-    config.bFMSHost = fsconf.conf.bFMSSrv.host;
-    config.bFMSPort = fsconf.conf.bFMSSrv.port;
+    config.bFMSHost = nconf.bFMSSrv.host;
+    config.bFMSPort = nconf.bFMSSrv.port;
     config.srvOptions = {
         'host': '0.0.0.0',
         'port': config.appConfig.port,
@@ -72,16 +69,19 @@ if (config.env == 'development') {
             file:'./FxBridgeSrv.js',
             assign:'BacPlayerBM'
         },{
-            file:'../www/slot/MainSlot.js',
+            file:'../slot/MainSlot.js',
             assign:'slotFX'
         },{
-            file:'../www/demo/application3.js',
+            file:'../slotNoJP/MainSlot.js',
+            assign:'slotFX2'
+        },{
+            file:'../demo/application3.js',
             assign:'figLeaf'
         }]
     };
     config.gamSLB = {
         enabled:true,
-        file: '../unittest/GLBS.js',
+        file: '../../LoadBalancer/NodeLB.js',
         assign:'/fxLB'
     };
 }
@@ -100,10 +100,8 @@ function appParames(){
     var args = {};
     process.argv.forEach(function(element, index, arr) {
         // Processing
-
         if (element === "-p") {
             var port = parseInt(process.argv[index + 1]);
-
             args["port"] = !isNaN(port) ? port : ((config.env == 'development') ? 8000:80);
         }else if (element === "-f") {
             var fileName = process.argv[index + 1];
@@ -112,7 +110,7 @@ function appParames(){
                 throw "fileName no definition.";
             }
             args["fileName"] = fileName.split(" ");
-        }else if (element === "-v" ){
+        }else if (element === "-v" ) {
             var rtmpHost = process.argv[index + 1];
             if (!rtmpHost && typeof rtmpHost != "undefined" && rtmpHost !=0) {
                 throw "RTMP Host no definition.";
