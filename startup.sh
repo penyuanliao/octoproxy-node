@@ -14,4 +14,4 @@ fi
 # 建立資料夾
 [ -d historyLog ] || mkdir historyLog
 
-node --max-old-space-size=8192 --nouse-idle-notification --always-compact --expose-gc FxLiveMaster.js -p 80 > "/dev/null" 2>&1 &
+node --max-old-space-size=8192 --nouse-idle-notification --always-compact --expose-gc octoproxy.js -p 80 > "/dev/null" 2>&1 &

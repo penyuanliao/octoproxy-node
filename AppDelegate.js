@@ -32,6 +32,8 @@ NSLog.configure({
     filePath:__dirname+"/historyLog",
     id:"octoproxy",
     remoteEnabled: false,
+    /*console:console,*/
+    trackBehaviorEnabled: false, // toDB server [not implement]
     maximumFileSize: 1024 * 1024 * 100});
 const closeWaitTime = 5000;
 const sendWaitClose = 5000;
@@ -299,7 +301,7 @@ AppDelegate.prototype.createServer = function (opt) {
                     }
 
                     if (typeof worker === 'undefined') {
-                        worker = this.clusters["*"]; //TODO 未來準備擋奇怪連線
+                        worker = self.clusters["*"]; //TODO 未來準備擋奇怪連線
                         if (!worker) {
                             self.rejectClientExcpetion(handle, "PROC_NOT_FOUND");
                             handle.close(close_callback);
@@ -449,6 +451,11 @@ AppDelegate.prototype.setupCluster = function (opt) {
                 this.roundrobinNum[cluster.name] = 0;
             }
             this.clusters[cluster.name].push(cluster);
+
+            cluster.emitter.on('socket_handle', function (message, handle) {
+                
+            })
+
         }
         NSLog.log('info',"Cluster active number:", num);
         this.clusterNum = num;
@@ -532,6 +539,7 @@ AppDelegate.prototype.assign = function (namespace, cb) {
     }
 };
 
+
 AppDelegate.prototype.BindingProcEvent = function () {
     /** process state **/
     process.on('uncaughtException', function (err) {
@@ -558,8 +566,36 @@ AppDelegate.prototype.BindingProcEvent = function () {
 
         }
     });
-}
+};
 
+/**
+ * clusters attribute
+ * + clusters[key][0]
+ * //not implement//
+ */
+AppDelegate.prototype.management = function () {
+
+var clusters = this.clusters;
+    var list = [];
+    var keys = Object.keys(clusters);
+
+    for (var i = 0; i < keys.length; i++) {
+        var key = keys[i];
+        var obj = {};
+        obj.name = key;
+        obj.client = clusters[key][0].nodeInfo.connections;
+    }
+
+};
+/** not implement **/
+AppDelegate.prototype.ebbMoveAssign = function (handle, source, namespace) {
+    var worker = clusters[namespace];
+    worker[0].send({'evt':'c_init',data:source}, handle,{keepOpen:false});
+    setTimeout(function () {
+        self.rejectClientExcpetion(handle, "CON_VERIFIED");
+        handle.close(close_callback);
+    }, sendWaitClose);
+};
 
 
 module.exports = exports = AppDelegate;
