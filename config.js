@@ -1,7 +1,6 @@
 /**
  * Created by Benson.Liao on 16/1/5.
  */
-const nconf = require('fxNetSocket').nconf('/Users/penyuan/Documents/Project/webstorms/configuration/info.json');
 var config = {};
 config.appConfig = appParames();
 config.env = process.env.NODE_ENV;
@@ -30,12 +29,16 @@ if (config.env == 'development') {
         'webNum':0,
         'cluster': [{
             file:'./FxBridgeSrv.js',
-            assign:'DTFight.PlayerLight, RouPlayerBM, SicBoPlayerBM, HallPic, Hall, BacPlayerLight',
+            assign:'BacPlayerLight',//RouPlayerBM
             mxoss: 2048
         },{
-            file:'./slave/remoteSrv.js',
+            file:'./FxBridgeSrv.js',
+            assign:'Hall, HallPic',
+            mxoss: 2048
+        }/*,{
+            file:'./lib/remoteSrv.js',
             assign:'administrator'
-        }]
+        }*/]
     };
     config.gamSLB = {
         enabled:true,
@@ -45,43 +48,18 @@ if (config.env == 'development') {
 } else {
     
     /** 伺服器環境設定 **/
-    config.bFMSHost = nconf.bFMSSrv.host;
-    config.bFMSPort = nconf.bFMSSrv.port;
+    config.bFMSHost = require('fxNetSocket').getConfiguration("OctoProxy");
+    config.bFMSPort = "1935";
     config.srvOptions = {
         'host': '0.0.0.0',
         'port': config.appConfig.port,
         'closeWaitTime':5000,
         'backlog': 511
     };
-    config.forkOptions = {
-        'webCluster':'',
-        'webNum':0,
-        'cluster': [{
-            file:'./FxBridgeSrv.js',
-            assign:'BacPlayerLight'
-        },{
-            file:'./FxBridgeSrv.js',
-            assign:'Hall'
-        },{
-            file:'./FxBridgeSrv.js',
-            assign:'HallPic'
-        },{
-            file:'./FxBridgeSrv.js',
-            assign:'BacPlayerBM'
-        },{
-            file:'../slot/MainSlot.js',
-            assign:'slotFX'
-        },{
-            file:'../slotNoJP/MainSlot.js',
-            assign:'slotFX2'
-        },{
-            file:'../demo/application3.js',
-            assign:'figLeaf'
-        }]
-    };
+    config.forkOptions = require('fxNetSocket').getConfig('../configuration/Assign.json');
     config.gamSLB = {
         enabled:true,
-        file: '../../LoadBalancer/NodeLB.js',
+        file: '../LoadBalancer/NodeLB.js',
         assign:'/fxLB'
     };
 }

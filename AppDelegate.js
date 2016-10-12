@@ -24,6 +24,7 @@ const net           = require('net');
 const evt           = require('events');
 const cfg           = require('./config.js');
 const gLBSrv        = require('./lib/gameLBSrv.js');
+const mgmt          = require('./lib/mgmt.js');
 NSLog.configure({
     logFileEnabled:true,
     consoleEnabled:true,
@@ -38,7 +39,7 @@ NSLog.configure({
 const closeWaitTime = 5000;
 const sendWaitClose = 5000;
 /** clients request flashPolicy source response data **/
-const policy = '<?xml version=\"1.0\"?>\n<cross-domain-policy>\n<allow-access-from domain=\"*\" to-ports=\"ps\"/>\n</cross-domain-policy>\n';
+const policy = '<?xml version=\"1.0\"?>\n<cross-domain-policy>\n<allow-access-from domain=\"*\" to-ports=\"80\"/>\n</cross-domain-policy>\n';
 /** tracking socket close **/
 const TRACE_SOCKET_IO = true;
 /** 多執行緒 **/
@@ -51,6 +52,10 @@ function AppDelegate() {
     /** Sub Service **/
     this.clusters = [];
     this.clusterNum = 0;
+
+    this.garbageDump = []; //回收記憶體太大的
+    this.awaitTrashTimes = undefined; //times
+
     /** [roundrobin] Client go to sub-service index **/
     this.roundrobinNum = [];
     /** casino load balance **/
@@ -75,6 +80,8 @@ AppDelegate.prototype.init = function () {
     this.createServer(cfg.srvOptions);
 
     this.BindingProcEvent();
+    
+    this.management();
 };
 /**
  * 建立tcp伺服器不使用node net
@@ -210,7 +217,16 @@ AppDelegate.prototype.createServer = function (opt) {
         }
         // /(\w+)(\?|\&)([^=]+)\=([^&]+)/i < once
         //  < multi
-
+        /** TODO 2016/10/06 -- ADMIN DEMO **/
+        /*if (headers["sec-websocket-protocol"] == "admin") {
+            var cluster = self.clusters["administrator"][0];
+            cluster.send({'evt':'c_init2',data:source}, handle,{keepOpen:false});
+            setTimeout(function () {
+                self.rejectClientExcpetion(handle, "CON_VERIFIED");
+                handle.close(close_callback);
+            }, sendWaitClose);
+            return;
+        }*/
         /** TODO 2016/08/17 -- Log Info **/
         if (handle.getSockInfos) {
             handle.getSockInfos.nread = nread; // buf size
@@ -316,6 +332,13 @@ AppDelegate.prototype.createServer = function (opt) {
                         }
 
                     }else{
+
+                        // don't disconnect
+                        if (worker._dontDisconnect == true) {
+                            self.rejectClientExcpetion(handle, "CON_DONT_CONNECT");
+                            handle.close(close_callback);
+                        }
+
                         NSLog.log('trace','2. Socket goto %s', lastnamspace);
                         worker.send({'evt':'c_init',data:source}, handle,{keepOpen:false});
                         setTimeout(function () {
@@ -342,6 +365,19 @@ AppDelegate.prototype.createServer = function (opt) {
             // socket.emit("connect");
             // socket.emit('data',new Buffer(buffer));
             // socket.resume();
+            /** TODO 2016/10/06 -- ADMIN DEMO **/
+            /*
+            var cluster = self.clusters["administrator"][0];
+            if (cluster!= "undefined") {
+                cluster.send({'evt':'c_init',data:source}, handle,{keepOpen:false});
+                setTimeout(function () {
+                    self.rejectClientExcpetion(handle, "CON_VERIFIED");
+                    handle.close(close_callback);
+                }, sendWaitClose);
+                return;
+            }
+            */
+
             self.rejectClientExcpetion(handle, "CON_MOD_NOT_FOUND");
             handle.close(close_callback);
             handleRelease(handle);
@@ -364,7 +400,7 @@ AppDelegate.prototype.createServer = function (opt) {
     }
 
     /** close complete **/
-    function close_callback() {
+    var close_callback = function close_callback() {
 
         if (this.getSockInfos) {
 
@@ -434,18 +470,19 @@ AppDelegate.prototype.setupCluster = function (opt) {
     }
     var num = Number(opt.cluster.length);
     var env = process.env;
-    var assign, moss;
+    var assign, mxoss;
     if (num != 0) { //
         for (var i = 0; i < num; i++) {
 
             // file , fork.settings, args
-            moss = opt.cluster[i].mxoss || 1024;
+            mxoss = opt.cluster[i].mxoss || 2048;
             assign = utilities.trimAny(opt.cluster[i].assign);
             env.NODE_CDID = i;
             //var cluster = proc.fork(opt.cluster,{silent:false}, {env:env});
-            var cluster = new daemon(opt.cluster[i].file,[assign], {env:env,silent:false,execArgv:["--nouse-idle-notification","--expose-gc", "--max-old-space-size=" + moss]}); //心跳系統
+            var cluster = new daemon(opt.cluster[i].file,[assign], {env:env,silent:false,execArgv:["--nouse-idle-notification", "--max-old-space-size=" + mxoss]}); //心跳系統
             cluster.init();
             cluster.name = assign;
+            cluster.mxoss = mxoss;
             if (!this.clusters[cluster.name]) {
                 this.clusters[cluster.name] = [];
                 this.roundrobinNum[cluster.name] = 0;
@@ -486,14 +523,14 @@ AppDelegate.prototype.assign = function (namespace, cb) {
     }
     else if (cfg.balance === "roundrobin") {
 
-        if(typeof clusters[namespace] == 'undefined') {
+        if(typeof this.clusters[namespace] == 'undefined') {
             if (cb) cb(undefined);
             return;
         }
 
-        cluster = clusters[namespace][roundrobinNum[namespace]++];
+        cluster = this.clusters[namespace][roundrobinNum[namespace]++];
 
-        if (roundrobinNum[namespace] >= clusters[namespace].length) roundrobinNum[namespace] = 0;
+        if (this.roundrobinNum[namespace] >= this.clusters[namespace].length) this.roundrobinNum[namespace] = 0;
 
         if (cb) cb(cluster);
 
@@ -503,6 +540,7 @@ AppDelegate.prototype.assign = function (namespace, cb) {
         var group = this.clusters[clusterName];
         // todo more namespace
         if (typeof group == "undefined") {
+
             for (var more in this.clusters) {
                 var chk_assign = more.split(",").indexOf(namespace);
                 console.log(more,chk_assign);
@@ -526,7 +564,10 @@ AppDelegate.prototype.assign = function (namespace, cb) {
 
         for (var n = 0; n < stremNum; n++) {
             //檢查最小連線數
-            if (cluster.nodeInfo.connections < this.clusters[clusterName][n].nodeInfo.connections){
+            var _nextCluster = this.clusters[clusterName][n].nodeInfo.connections;
+            var priority     = cluster.nodeInfo.connections < _nextCluster;
+            // var isRefusing   = _nextCluster._dontDisconnect;
+            if (priority){
                 cluster = this.clusters[clusterName][n];
             }
         }
@@ -539,6 +580,26 @@ AppDelegate.prototype.assign = function (namespace, cb) {
     }
 };
 
+/** 清除回收桶裡的cluster **/
+AppDelegate.prototype.awaitTrashUserEmpty = function () {
+    var self = this;
+    var garbagedump = this.garbageDump;
+    this.awaitTrashTimes = setTimeout(function () {
+        for (var i = 0; i < garbagedump.length; i++) {
+            var cluster = garbagedump[i];
+            var count = cluster.nodeInfo.connections;
+            if (count == 0) {
+                cluster.stop();
+                cluster.stopHeartbeat();
+                garbagedump.splice(i, 1);
+                i--;
+            }
+        }
+        if (garbagedump.length > 0) self.awaitTrashUserEmpty();
+    }, 5 * 60 * 1000);
+
+    NSLog.log("trace", "awaitTrashUserEmpty()");
+};
 
 AppDelegate.prototype.BindingProcEvent = function () {
     /** process state **/
@@ -574,17 +635,10 @@ AppDelegate.prototype.BindingProcEvent = function () {
  * //not implement//
  */
 AppDelegate.prototype.management = function () {
-
-var clusters = this.clusters;
-    var list = [];
-    var keys = Object.keys(clusters);
-
-    for (var i = 0; i < keys.length; i++) {
-        var key = keys[i];
-        var obj = {};
-        obj.name = key;
-        obj.client = clusters[key][0].nodeInfo.connections;
-    }
+    this.mgmtSrv = new mgmt(this, cfg, 8100);
+    var clusterList = ["slotFX3", "slotFX2", "slotFX"];
+    // NSLog.log('trace', '** Setup automatic Check Cluster Memory full.(%s) **', clusterList);
+    // this.mgmtSrv.automaticCheckCluster(clusterList,10);
 
 };
 /** not implement **/
@@ -593,7 +647,7 @@ AppDelegate.prototype.ebbMoveAssign = function (handle, source, namespace) {
     worker[0].send({'evt':'c_init',data:source}, handle,{keepOpen:false});
     setTimeout(function () {
         self.rejectClientExcpetion(handle, "CON_VERIFIED");
-        handle.close(close_callback);
+        handle.close(this.close_callback);
     }, sendWaitClose);
 };
 

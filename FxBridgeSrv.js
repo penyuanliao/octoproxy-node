@@ -21,8 +21,8 @@ const isWorker      = ('NODE_CDID' in process.env); //檢查是否啟動worker
 const isMaster      = (isWorker === false);
 const NSLog         = fxNetSocket.logger.getInstance();
 const fileName      = path.basename(require.main.filename) + process.argv[2];
-NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:'trace', dateFormat:'[yyyy-MM-dd hh:mm:ss]',fileName:fileName,filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100,
-                id:process.argv[2], remoteEnabled: false});
+NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:'info', dateFormat:'[yyyy-MM-dd hh:mm:ss]',fileName:fileName,filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100,
+                id:process.argv[2], remoteEnabled: true});
 var connections = []; //記錄連線物件
 var connsCount = 0; //連線數
 var srv = createNodejsSrv(config.srvOptions.port);
@@ -145,7 +145,50 @@ function setupFMSClient(client) {
     //存在array裡面方便讀取
     connections[client.name] = {ws:client, fms:_rtmp};
     connsCount++;
-};
+}
+/** not implement **/
+function ebbStream(sockList) {
+    if (typeof sockList != 'object') {
+        NSLog.log("error", "type of cannot %s", typeof sockList);
+        return;
+    }
+    var max = sockList.length;
+    var isObject = false;
+    var keys;
+    if (sockList.constructor == Object) {
+        keys = Object.keys(sockList);
+        max = keys.length;
+        isObject = true;
+    }
+    var count = 1;
+
+    function ebbStreamRun() {
+
+        if (count*511 > max){
+            run_ebb(0, max);
+        }else {
+            run_ebb(0, count*511);
+            count++;
+        }
+    }
+
+    function run_ebb(start, ended) {
+        var i = start;
+
+        while (i < ended) {
+
+            if (isObject) {
+                sockList[keys[i]]._handle;
+                process.send("socket_handle", socket._handle);
+            }
+
+            i++;
+        }
+        if (ended < max) return setTimeout(ebbStreamRun, 100);
+    }
+    ebbStreamRun();
+}
+
 /**
  * 建立NodeJS Server
  * @param port
@@ -197,7 +240,7 @@ function createNodejsSrv(port) {
 
                 _fms.fmsCall("setObj",json["data"]);
 
-            }else if (typeof event != 'undefined' && event != null && event != ""){
+            }else if (typeof event != 'undefined' && event != null && event != "" && typeof json["data"] != "undefined"){
                 json["data"].unshift(event);
                 NSLog.log('debug','!!!!! event :', event);
                 setTimeout(function () {
@@ -305,8 +348,9 @@ function onSocketClose(name) {
         delete connections[name];
 
         NSLog.log('debug','disconnect count:', Object.keys(connections).length,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
-    };
+    }
 }
+
 /* ------- ended testing logger ------- */
 /**
  * 程序錯誤會出現在這裡
@@ -342,14 +386,11 @@ process.on('message', function (data, handle) {
             socket.emit("connect");
             socket.emit('data',new Buffer(data.data));
             socket.resume();
-            return;
         }else if(data.evt == "processInfo") {
             process.send({"evt":"processInfo", "data" : {"memoryUsage":process.memoryUsage(),"connections": connsCount}})
         }else{
             NSLog.log('debug', 'out of hand. dismiss message');
-        };
-        
-    };
+        }
+    }
 });
-
 
