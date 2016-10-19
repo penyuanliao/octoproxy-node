@@ -3,6 +3,7 @@
  * 多執行緒 執行
  * --always-compact: always full gc().
  * --expose-gc: manual gc().
+ * 2016.10.18 memory leak 1day 20MB
  */
 
 const util          = require('util');
@@ -25,6 +26,7 @@ const evt           = require('events');
 const cfg           = require('./config.js');
 const gLBSrv        = require('./lib/gameLBSrv.js');
 const mgmt          = require('./lib/mgmt.js');
+
 NSLog.configure({
     logFileEnabled:true,
     consoleEnabled:true,
@@ -64,7 +66,9 @@ function AppDelegate() {
     NSLog.log('debug',"** Initialize octoproxy.js **");
     this.init();
 }
-
+/**
+ * 初始化
+ * **/
 AppDelegate.prototype.init = function () {
     utilities.autoReleaseGC(); //** 手動 1 sec gc
     NSLog.log('info' , 'Game server load balance enabled: [%s]', cfg.gamSLB.enabled);
@@ -81,7 +85,7 @@ AppDelegate.prototype.init = function () {
 
     this.BindingProcEvent();
     
-    this.management();
+    // this.management();
 };
 /**
  * 建立tcp伺服器不使用node net
@@ -140,6 +144,7 @@ AppDelegate.prototype.createServer = function (opt) {
             handle.onread = onread_url_param;
 
             err = handle.readStart(); //讀header封包
+
             if(err){
                 self.rejectClientExcpetion(handle ,"UV_ERR_RS");
                 handle.close(close_callback);
@@ -147,6 +152,7 @@ AppDelegate.prototype.createServer = function (opt) {
 
             //onread_roundrobin(handle); //平均分配資源
             handle.closeWaiting = setTimeout(function () {
+                handle.closeWaiting = undefined;
                 self.rejectClientExcpetion(handle ,"CON_TIMEOUT");
                 handle.close(close_callback);
             }, closeWaitTime);
@@ -163,6 +169,7 @@ AppDelegate.prototype.createServer = function (opt) {
     NSLog.log('debug','listen:',opt.port);
 
     /** reload request header and assign **/
+    //noinspection JSUnresolvedFunction
     function onread_url_param(nread, buffer) {
 
         // NSLog.log('debug',"reload request header and assign, nread:", nread);
@@ -172,17 +179,19 @@ AppDelegate.prototype.createServer = function (opt) {
 
         // nread > 0 read success
         if (nread < 0) {
-
+            //noinspection JSUnresolvedVariable
             if (nread == uv.UV_ECONNRESET) {
                 NSLog.log('debug','connection reset by peer.');
             }
             // Error, end of file. -4095
             if (nread === uv.UV_EOF) {
 
-                rejectClientExcpetion(handle ,"UV_EOF");
+                self.rejectClientExcpetion(handle ,"UV_EOF");
                 handle.close(close_callback);
                 handleRelease(handle);
                 clearTimeout(handle.closeWaiting);
+                handle.closeWaiting = undefined;
+                handle = null;
             }
 
             if (nread === 0) {
@@ -194,6 +203,7 @@ AppDelegate.prototype.createServer = function (opt) {
 
         handle.readStop();
         clearTimeout(handle.closeWaiting);
+        handle.closeWaiting = undefined;
 
         var headers = pheaders.onReadTCPParser(buffer);
         var source = headers.source;
@@ -228,7 +238,7 @@ AppDelegate.prototype.createServer = function (opt) {
             return;
         }*/
         /** TODO 2016/08/17 -- Log Info **/
-        if (handle.getSockInfos) {
+        if (handle.getSockInfos && TRACE_SOCKET_IO) {
             handle.getSockInfos.nread = nread; // buf size
             handle.getSockInfos.path  = namespace;
             handle.getSockInfos.mode  = mode;
@@ -248,6 +258,7 @@ AppDelegate.prototype.createServer = function (opt) {
                 url_args[keyValue[0].toLowerCase()] = keyValue[1];
             }
             // NSLog.log("trace","url arguments:", url_args,namespace);
+            args = null;
         }
 
         if ((buffer.byteLength == 0 || mode == "socket" || !headers) && !headers.swfPolicy) mode = "socket";
@@ -260,6 +271,7 @@ AppDelegate.prototype.createServer = function (opt) {
                 self.rejectClientExcpetion(handle, "FL_POLICY");
                 handle.close(close_callback);
                 handleRelease(handle);
+                handle = null;
                 return;
                 // namespace = 'figLeaf';
             }
@@ -272,9 +284,9 @@ AppDelegate.prototype.createServer = function (opt) {
 
                 var tokencode = self.gameLBSrv.getLoadBalancePath(url_args["gametype"], function (action, json) {
                     NSLog.log('trace','--------------------------');
-                    NSLog.log('trace', 'action: %s, token code:%s', action, tokencode);
+                    NSLog.log('trace', 'action: %s, token code:%s', action);
                     NSLog.log('trace','--------------------------');
-                    var src = "";
+                    var src;
                     if (json.action == self.gameLBSrv.LBActionEvent.ON_GET_PATH) {
                         if (typeof lbtimes != 'undefined') clearTimeout(lbtimes);
                         lbtimes = undefined;
@@ -283,8 +295,9 @@ AppDelegate.prototype.createServer = function (opt) {
                         // var indx = source.indexOf(originPath);
 
                         src = new Buffer(src_string);
-
                         clusterEndpoint(namespace ,src);
+
+
                     }else if (json.action == self.gameLBSrv.LBActionEvent.ON_BUSY) {
 
                         if (typeof lbtimes != 'undefined') clearTimeout(lbtimes);
@@ -293,14 +306,16 @@ AppDelegate.prototype.createServer = function (opt) {
                         var chgSrc = source.toString('utf8').replace(originPath, namespace);
                         src = new Buffer(chgSrc);
                         self.gameLBSrv.getGoDead(handle, src);
-
+                        handleRelease(handle);
+                        handle = null;
                     }
 
+                    src = null;
                 });
 
                 lbtimes = setTimeout(function () {
                     self.gameLBSrv.removeCallbackFunc(tokencode);
-                    rejectClientExcpetion(handle, "CON_LB_TIMEOUT");
+                    self.rejectClientExcpetion(handle, "CON_LB_TIMEOUT");
                     handle.close(close_callback);
                 }, sendWaitClose);
 
@@ -321,13 +336,15 @@ AppDelegate.prototype.createServer = function (opt) {
                         if (!worker) {
                             self.rejectClientExcpetion(handle, "PROC_NOT_FOUND");
                             handle.close(close_callback);
-                            console.log('!!!! close();');
+                            NSLog.log('trace','!!!! close();');
+
                         }else{
                             NSLog.log('trace','1. Socket goto %s(*)', lastnamspace);
                             worker[0].send({'evt':'c_init',data:source}, handle,{keepOpen:false});
                             setTimeout(function () {
                                 self.rejectClientExcpetion(handle, "CON_VERIFIED");
                                 handle.close(close_callback);
+                                handle = null;
                             }, sendWaitClose);
                         }
 
@@ -337,6 +354,7 @@ AppDelegate.prototype.createServer = function (opt) {
                         if (worker._dontDisconnect == true) {
                             self.rejectClientExcpetion(handle, "CON_DONT_CONNECT");
                             handle.close(close_callback);
+                            handle = null;
                         }
 
                         NSLog.log('trace','2. Socket goto %s', lastnamspace);
@@ -344,10 +362,14 @@ AppDelegate.prototype.createServer = function (opt) {
                         setTimeout(function () {
                             self.rejectClientExcpetion(handle, "CON_VERIFIED");
                             handle.close(close_callback);
+                            handle = null;
                         }, sendWaitClose);
                     }
 
+                    //noinspection JSUnresolvedFunction
                     handle.readStop();
+                    source = null;
+                    lastnamspace = null;
                 });
             }
 
@@ -381,15 +403,17 @@ AppDelegate.prototype.createServer = function (opt) {
             self.rejectClientExcpetion(handle, "CON_MOD_NOT_FOUND");
             handle.close(close_callback);
             handleRelease(handle);
+            handle = null;
             return;// current no http service
         }else {
             self.rejectClientExcpetion(handle, "CON_MOD_NOT_FOUND");
             handle.close(close_callback);
             handleRelease(handle);
+            handle = null;
             return;// current no http service
         }
 
-        handle.readStop();
+        if (handle) handle.readStop();
     }
     /** handle dealloc ref **/
     function handleRelease(handle){
@@ -400,7 +424,7 @@ AppDelegate.prototype.createServer = function (opt) {
     }
 
     /** close complete **/
-    var close_callback = function close_callback() {
+    function close_callback() {
 
         if (this.getSockInfos) {
 
@@ -426,6 +450,14 @@ AppDelegate.prototype.createServer = function (opt) {
                     this.getSockInfos.mode,
                     this.getSockInfos.path
                 );
+                this.getSockInfos.exception = null;
+                this.getSockInfos.address = null;
+                this.getSockInfos.mode = null;
+                this.getSockInfos.path = null;
+                this.getSockInfos = null;
+                message = null;
+                status = null;
+                now = null;
             }
 
         }
@@ -437,7 +469,7 @@ AppDelegate.prototype.createServer = function (opt) {
         var req = new WriteWrap();
         req.handle = handle;
         req.oncomplete = function (status, handle, req, err) {
-            console.log('oncomplete',status, err);
+            NSLog.log('trace','oncomplete',status, err);
         };
         req.async = false;
         var err = handle.writeUtf8String(req, data);
@@ -448,7 +480,7 @@ AppDelegate.prototype.createServer = function (opt) {
 
 };
 AppDelegate.prototype.rejectClientExcpetion = function(handle, name) {
-    if (typeof handle != "undefined") {
+    if (typeof handle != "undefined" && TRACE_SOCKET_IO) {
         handle.getSockInfos.exception = utilities.errorException(name);
     }
 };
@@ -543,7 +575,7 @@ AppDelegate.prototype.assign = function (namespace, cb) {
 
             for (var more in this.clusters) {
                 var chk_assign = more.split(",").indexOf(namespace);
-                console.log(more,chk_assign);
+                // console.log(more,chk_assign);
                 if (chk_assign != -1) {
                     clusterName = more;
                     break;
