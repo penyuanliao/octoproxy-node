@@ -114,6 +114,8 @@ libvp62Cl.prototype.connect = function (uri) {
             rtmp.on('status',function (cmd) {
                 if (cmd.name == "connect_result") {
                     streamPlay()
+                }else if(cmd.name == "close") {
+                    rtmp.socket.destroy();
                 }
             })
         }
@@ -205,10 +207,10 @@ libvp62Cl.prototype.connect = function (uri) {
         var timestamp, body_size, typeID, streamID, ctrl;
         var curr_nbufs, nbufs, subPackageCount;
         var offset = 0;
-        var schunksize = rtmp.streamChunkSize;
+        var schunksize = rtmp.getRTMPChunkSize;
         var packet;
 
-        /* detect packet size */
+        /* (1) detect packet size */
         if (!rtmp.nbufs || rtmp.nbufs.length == 0)
             rtmp.nbufs = new Buffer(data);
         else
@@ -217,12 +219,12 @@ libvp62Cl.prototype.connect = function (uri) {
         }
 
         var _count = 0;
+        /** (2) read_packet **/
         while (rtmp.nbufs.length > 0 && rtmp.nbufs.length > hdrSize[rtmp.nbufs[0] >> 6]) {
 
             _count++;
 
-
-            var is_rtmp_type = rtmp.RTMP_ReadPacket(rtmp.nbufs);
+            var is_rtmp_type = rtmp.RTMP_ReadPacket(rtmp.nbufs); //檢查是否為一個Packet
 
             console.log("RTMP_ReadPacket - ",is_rtmp_type == 1);
 
@@ -231,22 +233,22 @@ libvp62Cl.prototype.connect = function (uri) {
             // rtmp.RTMP_ReadPacket(rtmp.nbufs);
             offset = 0;
             fmt = nbufs.readUInt8(offset) >> 6;
-            csid = nbufs.readUInt8(offset) & (0x3f); // (0)
+            csid = nbufs.readUInt8(offset) & (0x3f);         // (0)
             offset += 1;
             if (fmt == 0 || fmt == 1) {
                 //timestamp 3 bytes;
-                timestamp = nbufs.readUInt8(offset) << 16; // (1)
+                timestamp = nbufs.readUInt8(offset) << 16;   // (1)
                 timestamp += nbufs.readUInt8(offset+1) << 8; // (2)
                 timestamp += nbufs.readUInt8(offset+2);      // (3)
                 offset += 3;
-                body_size = nbufs.readUInt8(offset) << 16; // (4)
+                body_size = nbufs.readUInt8(offset) << 16;   // (4)
                 body_size += nbufs.readUInt8(offset+1) << 8; // (5)
                 body_size += nbufs.readUInt8(offset+2);      // (6)
                 offset += 3;
-                typeID = nbufs.readUInt8(offset);          // (7)
+                typeID = nbufs.readUInt8(offset);            // (7)
                 offset += 1;
                 if (fmt == 0) {
-                    streamID = nbufs.readUInt32LE(offset);     // (11)
+                    streamID = nbufs.readUInt32LE(offset);   // (11)
                     offset+=4;
                 }
 
@@ -378,15 +380,24 @@ libvp62Cl.prototype.connect = function (uri) {
                 /* extended header : 0xC4 */
 
                 if (rtmp.nbufs[0] == 0xC4) {
-                    NSLog.log('verbose','');
                     NSLog.log('verbose',"0xC4 extended header (%s timestamp:)", rtmp.nbufs[hdrSize[fmt]] >> 6, data.length-1);
-                    // log.logHex(rtmp.nbufs);
+
+
+                    var header = new Buffer(11);
+                    header[0] = 0x09;                          //(1)
+                    self.writeUInt24BE(header, rtmp.nbufs.length-1, 1);  //(3)
+                    header.writeUInt32BE(100, 4);        //(4)
+                    self.writeUInt24BE(header, 1, 8);   //(3)
+                    curr_nbufs = rtmp.nbufs.slice(1, rtmp.nbufs.length);
+
+                    curr_nbufs = Buffer.concat([header, curr_nbufs], header.length + curr_nbufs.length);
+                    self.emit(self.StreamEvent.VIDEO_DATA, curr_nbufs.toString('base64'));
+
                     rtmp.nbufs = rtmp.nbufs.slice(rtmp.nbufs.length, rtmp.nbufs.length);
                     return;
                 }
                 if (rtmp.nbufs[0] == 0xC2) {
                     NSLog.log('verbose',"0xC2 one size. ");
-                    log.logHex(rtmp.nbufs);
                 }
                 
                 //unkown header
@@ -475,14 +486,6 @@ libvp62Cl.prototype.onMessage = function (data) {
 
     };
 
-};
-
-const RTMP_PACKET_TYPE = {
-    CHUNK_SIZE:      1,
-    PING:            4,
-    AUDIO:           8,
-    VIDEO:           9,
-    METADATA:       22
 };
 
 
