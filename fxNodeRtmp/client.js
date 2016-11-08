@@ -2,7 +2,7 @@ var net = require('net'),
 	events = require('events'),
 	util = require('util'),
 	os = require('os');
-
+const path  = require('path');
 var AMF = require('./amf');
 var RTMPHandshake = require('./handshake');
 var RTMPMessage = require('./message');
@@ -11,6 +11,8 @@ var log = require('./log');
 var logger = require('fxNetSocket').logger;
 var NSLog = logger.getInstance();
 var level ={'sendRTMPPacket':false};
+
+const defaultObjectEncoding = 0;
 
 // flv header '464c56010d00000009000000001200836600000000000000'
 var RTMPClient = module.exports = function(socket) {
@@ -30,6 +32,9 @@ var RTMPClient = module.exports = function(socket) {
 	this.socket.firstSN = false;
 	this.socket.videoChunk = [];
 	this.socket.videoInfos = {};
+
+	this._objectEncoding = defaultObjectEncoding; //預設物件編碼
+
 
 	NSLog.log('trace','RTMPClient %s:%s run initialize.',socket.remoteAddress, socket.remotePort);
 	socket.on('connect', this.onSocketConnect.bind(this));
@@ -76,6 +81,12 @@ RTMPClient.prototype.onData = function(data) {
 	// var chunkPacket = sock.chunkPacket;
 
 	if ((data[0] == 0x02 || data[0] == 0x03 || data[0] == 0x04) && this.callbackfunc) {
+
+		if (data[0] == 0x02 && data.byteLength == 18) {
+			this.pingResponse(data.readInt32BE(14));
+			return;
+		}
+
 		if (this.callbackfunc instanceof Function) {
 			this.callbackfunc(data);
 			// this.callbackfunc = undefined;
@@ -136,7 +147,60 @@ RTMPClient.prototype.onData = function(data) {
 				NSLog.log('debug', 'onGetFPS()', cmd, obj);
 				return;
 
-			} else {
+			} else if (fmt <= 1 && csid == 4 && data[3] == 0 && data.readUInt8(7) == 0x14) {
+				// NetStream NetStatusEvent 收到UnpublishNotify??
+				var offset = (fmt == 0 ? 12:8);
+				var body_size = data.readUInt8(4) << 16;   // (4)
+				body_size += data.readUInt8(5) << 8; // (5)
+				body_size += data.readUInt8(6);      // (6)
+				var cmd = amfUtils.decodeAmf0Cmd(data.slice(offset, body_size));
+				NSLog.log('debug', 'NetStatusEvent: Data:%s, PacketSize:%s, cmd:%s',data.length, offset + body_size, cmd);
+				this.emit('status', cmd);
+				return;
+			} else if (fmt == 2 && csid == 4 && data.length > this.BasicHeaderSize[fmt]) {
+
+				// wait onGetFPS status fmt=2, csid=4, timestamp(3), content(string, number)
+				var obj = {};
+				obj["timestamp"] = parseInt(data.readUInt24BE(1));
+				if (obj.timestamp < 0 || obj.timestamp > 10000) {
+					this.emit('videoData',data);
+					return;
+				}
+
+				data = data.slice(4, data.length);
+				while (data.length > 0) {
+					log.logHex(data);
+
+					var oKey = this.decodeOne(data);
+					data = data.slice(parseInt(oKey["len"]), data.length);
+					var oVal = this.decodeOne(data);
+					data = data.slice(parseInt(oVal["len"]), data.length);
+
+					obj.cmd = oKey.value;
+					obj.value = oVal.value;
+
+					// NSLog.log( "trace" , "amfObj:%s, length:%s",JSON.stringify(obj),data.length);
+					this.emit('onGetFPS', {timestamp:obj.timestamp,cmd:obj.cmd, value:obj.value});
+
+					if (data[0] == 0x84) {
+						obj["timestamp"] = data.readUInt24BE(1);
+						data = data.slice(4, data.length);
+					}else if (data[0] == 0x02 && data[7] == 0x04) {
+
+						this.pingResponse(data.readInt32BE(14));
+						data = data.slice(18, data.length);
+					}else if (data[0] == 0x02) {
+						obj["timestamp"] = data.readUInt24BE(1);
+						obj["bodysize"] = data.readUInt24BE(4);
+						data = data.slice(12, data.length);
+					}else
+					{
+						break;
+					}
+				}
+
+
+			}else {
 
 				// if (data[0] == 68 && data.length > 8 && data[8] == 0x24) {
 				// 	var length = data.readUInt24BE(4);
@@ -161,40 +225,25 @@ RTMPClient.prototype.onData = function(data) {
 		return;
 	}
 
-	/**
-	 * #1 這邊主要處理0x03開頭有沒有
-	 * #2 0 > 沒有就認定是前個封包
-	 * #3 1 > 這個封包
-	 **/
-	// if (data[0] == 0x02 || (data.length == 18 && data[0] == 0x02)) {
-	// 	console.log('pingResponse1',data.length);
-	// 	var num = data.readInt32BE(14); // get timestamp value
-	// 	this.pingResponse(num);
-	// 	data = data.slice(18, data.length);
-	// 	if (data.length == 0) return;
-	// }
+	// invoke command //
 	sock.chunkPacket = Buffer.concat([sock.chunkPacket, data],sock.chunkPacket.length + data.length);
 	data = sock.chunkPacket;
 	var chunkSize = this.socket.rtmpChunkSize;
 	var filter = this.filterPacket(data,true);
-	var doPing1 = 0;
-
+	// The data received in the "echo ping request" and ping response time. //
 	if (filter.header.fmt == 0 && filter.header.CSID == 2 && filter.header.typeID == 0x04 && filter.header.offset == 18) {
 		NSLog.log('trace','PingResponse in front Packet data.');
 		var num = filter.header.bodyBuf.readInt32BE(0); // get timestamp value
 		this.pingResponse(num);
 		sock.chunkPacket = sock.chunkPacket.slice(filter.header.offset,sock.chunkPacket.length);
-		doPing1++;
 		return;
 	}
-
-
+	// more data...
 	if (filter.header.bodySize > data.length) {
 		var cmd = amfUtils.amf0DecodeOne(filter.header.bodyBuf);
 		NSLog.log('trace','[OUTPUT] waiting next chunk',cmd);
-		return;
 	}else {
-		var j = 0;
+
 		while (sock.chunkPacket.length > 0 && filter.header.bodySize <= sock.chunkPacket.length){
 
 			// console.log('#%d sock.chunkPacket.length %d filter.header.offset %d',j++, sock.chunkPacket.length,filter.header.offset);
@@ -219,7 +268,7 @@ RTMPClient.prototype.onData = function(data) {
 					}else
 					{
 						// for (var s = 0; s < bodyFilter.length; s++){
-						// 	if (bodyFilter[s] == 0xC3) NSLog.log('trace','Search slicing 0xC3:%d, doPing1:%d', s, doPing1);
+						// 	if (bodyFilter[s] == 0xC3) NSLog.log('trace','Search slicing 0xC3:%d', s);
 						// }
 					}
 					key += chunkSize;
@@ -546,6 +595,7 @@ RTMPClient.prototype.streamPlay = function(name) {
 	var body = Buffer.concat([header,cmdName, tranID, cmdObj, stramName], header.length + cmdName.length + tranID.length + cmdObj.length + stramName.length);
 
 	self.callbackfunc = function (data) {
+		NSLog.log("trace", "start stream Play data:", data.length);
 		/*
 		while (data.length > 0){
 			var iPacket = self.filterPacket(data);
@@ -645,13 +695,24 @@ RTMPClient.prototype.streamPlay = function(name) {
 		if(data.length > 0) {
 			iPacket = self.filterPacket(data);
 			if (iPacket.header.CSID == 4 && iPacket.header.typeID == 0x09) {
-				NSLog.log('trace',JSON.stringify(iPacket.header));
-				// log.logHex(data);
+				NSLog.log('info',"Order data :\n%s", JSON.stringify(iPacket.header), data.length);
+				if (iPacket.header.bodySize > 2) NSLog.log('error', 'First Video Data IS NOT 2-Bytes!!!');
+
 				self.emit('videoData', data);
 				self.callbackfunc = undefined;
 			}
-			// log.logHex(data);
 		}
+
+		// while (data.length > 0) {
+		// 	iPacket = self.filterPacket(data); //id = 5
+		// 	if( iPacket.header.fmt > 2) {
+		// 		NSLog.log('Chunk has not Packet!!', iPacket.header.fmt);
+		// 		break;
+		// 	}
+		// 	var obj = self.RTMP_ReadPacketType(iPacket);
+		// 	NSLog.log('trace','obj:%s', obj);
+		// 	data = data.slice(iPacket.header.offset, data.length);
+		// }
 
 		/*if (data.length > 0) {
 			NSLog.log('trace', '==☆== PLAYER RESULT (%d) ==☆==', data.length);
@@ -662,7 +723,7 @@ RTMPClient.prototype.streamPlay = function(name) {
 		}*/
 
 
-		console.log('play successful');
+		console.log('Stream Packet parser OK(%s)', data.length);
 	};
 	self.socket.write(body);
 
@@ -696,7 +757,7 @@ RTMPClient.prototype.deleteStream = function () {
 };
 
 RTMPClient.prototype.filterPacket = function (data, doFindC3) {
-	var chunk1st = data.readUInt8(data);
+	var chunk1st = data.readUInt8(0);
 	var fmt = chunk1st >> 6;
 	var CSID = chunk1st & (0x3f);
 	var iRTMPPacket = {header:{fmt:fmt, CSID:CSID}};
@@ -834,10 +895,9 @@ RTMPClient.prototype.connectResponse = function () {
 			NSLog.log('info', 'Connect Response chunk size:%s', data.length);
 
 			var iPacket = self.filterPacket(data); //id = 5
-
 			/** FMS Connect error **/
 			if (iPacket.header.typeID != 0x05 && iPacket.header.bodySize != 4) {
-				NSLog.log('error', 'FMS Connect error');
+				// NSLog.log('error', 'FMS Connect error');
 				connectError(data, iPacket);
 				self.callbackfunc = undefined;
 				return;
@@ -862,7 +922,7 @@ RTMPClient.prototype.connectResponse = function () {
 			// self.resInvoke["connect" + cmd.cmd] = cmd;
 			cmd.name = "connect" + cmd.cmd;
 			self.emit('status', cmd);
-			console.log(cmd);
+			// console.log(cmd);
 
 		}
 		catch (e) {
@@ -895,8 +955,10 @@ RTMPClient.prototype.connectResponse = function () {
 				break;
 			}
 			var obj = self.RTMP_ReadPacketType(iPacket);
+
 			if (obj.cmd == "_error") {
 				self.emit('error', {name:'error',info:obj.info});
+				self.emit('status',{name:'error',info:obj.info});
 			}else if (obj.cmd == "close"){
 				self.emit('status', {name:obj.cmd});
 			}
@@ -931,19 +993,44 @@ RTMPClient.connect = function(host, port, connectListener) {
 
 /** ============================= **/
 /**       RTMP_ReadPacket()       **/
-/** ============================= **/
+/** ============================= *
+ * @return {number}
+ */
 
-RTMPClient.prototype.RTMP_ReadPacket = function (buf) {
+RTMPClient.prototype.RTMP_ReadPacket = function (obj) {
+	var buf;
+
+	if (obj.constructor == Object)
+		buf = obj.buf;
+	else
+		buf = obj;
 	const format = buf[0];
 	const fmt 	 = format >> 6;
 	const csid 	= format & (0x3f);
 
-	if (fmt > 2) return 0;
+	if (fmt > 4 || csid > 6) return 0;
 
+	if (fmt == 3 && csid == 4) {
+		NSLog.log("info","RTMP_ReadPacket CSID : ", csid);
+		if (this.CONTROL_ID["KEY_FRAME_ON2_VP6"] == buf[1] ||
+			this.CONTROL_ID["KEY_FRAME_H264"] == buf[1] ||
+			this.CONTROL_ID["INTER_FRAME_ON2_VP6"] == buf[1] ||
+			this.CONTROL_ID["INTER_FRAME_H264"] == buf[1] ||
+			this.CONTROL_ID["INFO_ON2_VP6"] == buf[1] ||
+			this.CONTROL_ID["HE_AAC"] == buf[1])
+			return 1;
+		else
+			return 0;
+	}else if (fmt == 3 && csid == 2) {
+		if (buf[1] == 0x02)
+			return 1;
+		else
+			return 0;
+	}
 	const typeid = buf[7];
 
-	
-	console.log("RTMP_ReadPacket typeid : ", typeid);
+
+	NSLog.log("info","RTMP_ReadPacket TypeID : ", typeid);
 	switch (typeid)
 	{
 		case 0x01:
@@ -953,6 +1040,12 @@ RTMPClient.prototype.RTMP_ReadPacket = function (buf) {
 			return 1;
 			break;
 		case 0x04:
+
+			if (buf.length == 18 && csid == 2 && fmt == 0)
+			{
+				// I think is a ping request ??
+				// Server Ping Request (0x04)
+			}
 			return 1;
 			break;
 		case 0x05:
@@ -981,9 +1074,18 @@ RTMPClient.prototype.RTMP_ReadPacket = function (buf) {
 			return 1;
 			break;
 		case 0x14:
+			var iPacket = this.filterPacket(buf);
+
+			if (csid == 4) {
+				var cmd = amfUtils.decodeAmf0Cmd(iPacket.header.bodyBuf);
+				this.emit('status', cmd);
+				buf = buf.slice(iPacket.header.offset, buf.length);
+			}
+
+			NSLog.log("RTMP_ReadPacket ERROR:", iPacket);
 			return 1;
 			break;
-		case 0x16:
+		case 0x16: //streamData 複合屬性
 			return 1;
 			break;
 	}
@@ -1076,7 +1178,100 @@ RTMPClient.prototype.RTMP_ReadPacketType = function (pt) {
 	}
 
 };
+/** setup 1. **/
+RTMPClient.createRTMPNetStream = function (URL, completed) {
 
+	const DEFAULT_PORT = 1935;
+	var client;
+
+	var args = URL.match(/(rtmp|rtmpt):\/\/(\w+:{0,1}\w*@)?(\S+):([0-9]+)\/(\S+([0-9]+))/i);
+
+	if (typeof args == "undefined" && args) {
+		NSLog.log('error', new Error("URL input error."));
+	};
+	
+	var tcUrl = args[0];
+	var app   = path.dirname(args[5]);
+	var host  = args[3];
+	var port  = parseInt(args[4]);
+	
+	var socket = new net.Socket();
+	socket.connect(port || DEFAULT_PORT, host);
+
+	client = new RTMPClient(socket);
+
+	socket.on('error', function (err) {
+		// client.emit('error',err);
+	});
+
+	client.on('connect', function () {
+		NSLog.log('debug', "** RTMPClient %s:%s Connected!", socket.remoteAddress, socket.remotePort);
+
+		client.on('status', net_status);
+		client.isVideoStream = true;
+		client.connectResponse();
+		client.invoke_connect(app, tcUrl);
+	});
+
+	function net_status(cmd) {
+		if (cmd.name == "connect_result") {
+			// console.log(cmd,path.basename(tcUrl));
+			//完成後就可以自己送出要的事件
+			client.netStreamConnect("video0");
+			client.removeListener('status', net_status);
+		}else if(cmd.name == "close") {
+			client.socket.destroy();
+		}else if(cmd.name == "error") {
+			//todo error
+		}
+		// 完成事件
+		if (typeof completed != "undefined") completed(cmd);
+	}
+
+	return client;
+};
+
+/** setup 2. **/
+RTMPClient.prototype.invoke_connect = function (app, tcUrl) {
+	//LNX 11,7,700,203
+	//MAC 10,0,32,18
+	//MAC 11,8,800,94
+	//WIN 17,0,0,160
+	//#2-1 告訴FMS進行connect連線
+	this.sendInvoke('connect', 1, {
+		app: app, //app name
+		flashVer: "WIN 17,0,0,160", //flash version
+		tcUrl: tcUrl, //rtmp path
+		fpad: false, // unknown
+		capabilities: 239.0, // Content sharing
+		audioCodecs: 3575.0, // audio code
+		videoCodecs:  252.0, // video code
+		videoFunction:  1.0,
+		objectEncoding: this.objectEncoding
+	});
+};
+
+RTMPClient.prototype.decodeOne = function (buffer) {
+	if (this.objectEncoding == 0) {
+		return amfUtils.amf0DecodeOne(buffer);
+	}else{
+		return amfUtils.amf3DecodeOne(buffer);
+	}
+};
+RTMPClient.prototype.decodeAmfCmd = function (buffer) {
+	if (this.objectEncoding == 0) {
+		return amfUtils.decodeAmf0Cmd(buffer);
+	}else{
+		return amfUtils.decodeAmf3Cmd(buffer);
+	}
+};
+
+RTMPClient.prototype.__defineGetter__("objectEncoding", function () {
+	return this._objectEncoding;
+});
+RTMPClient.prototype.__defineSetter__("objectEncoding", function (value) {
+	this._objectEncoding = value;
+});
 /** command chunk size **/
 RTMPClient.prototype.__defineGetter__("getRTMPChunkSize", function () {
 	return this.socket.rtmpChunkSize;
@@ -1099,7 +1294,6 @@ RTMPClient.prototype.__defineGetter__("getPingTimestamp", function () {
 RTMPClient.prototype.__defineSetter__("setPingTimestamp", function (timestamp) {
 	this._pingTimestamp = timestamp;
 });
-
 
 RTMPClient.prototype.BasicHeaderSize = [12, 8, 4 , 1];
 
