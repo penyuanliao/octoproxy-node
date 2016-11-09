@@ -5,7 +5,6 @@ var log = require('./log');
 var AMF = require('./amf');
 var RTMPChunk = require('./chunk');
 var amfUtils = require('./amfUtils.js');
-
 function defineConstant(obj, name, value) {
     obj.__defineGetter__(name, function() { return value; });
 }
@@ -25,21 +24,36 @@ var RTMPMessage = module.exports = function() {
 	this.chunkBodySize = 0;
 }
 util.inherits(RTMPMessage, events.EventEmitter);
+
 defineConstants(RTMPMessage, {
+	/** @namespace RTMPMessage.RTMP_MESSAGE_TYPE_CHUNK_SIZE */
 	RTMP_MESSAGE_TYPE_CHUNK_SIZE:         0x01,
+	/** @namespace RTMPMessage.RTMP_MESSAGE_TYPE_BYTES_READ_REPORT */
 	RTMP_MESSAGE_TYPE_BYTES_READ_REPORT:  0x03,
+	/** @namespace RTMPMessage.RTMP_MESSAGE_TYPE_CONTROL */
 	RTMP_MESSAGE_TYPE_CONTROL:            0x04,
+	/** @namespace RTMPMessage.RTMP_MESSAGE_TYPE_SERVER_BW */
 	RTMP_MESSAGE_TYPE_SERVER_BW:          0x05,
+	/** @namespace RTMPMessage.RTMP_MESSAGE_TYPE_CLIENT_BW */
 	RTMP_MESSAGE_TYPE_CLIENT_BW:          0x06,
+	/** @namespace RTMPMessage.RTMP_MESSAGE_TYPE_AUDIO */
 	RTMP_MESSAGE_TYPE_AUDIO:              0x08,
+	/** @namespace RTMPMessage.RTMP_MESSAGE_TYPE_VIDEO */
 	RTMP_MESSAGE_TYPE_VIDEO:              0x09,
+	/** @namespace RTMPMessage.RTMP_MESSAGE_TYPE_FLEX_STREAM_SEND */
 	RTMP_MESSAGE_TYPE_FLEX_STREAM_SEND:   0x0F,
+	/** @namespace RTMPMessage.RTMP_MESSAGE_TYPE_FLEX_SHARED_OBJECT */
 	RTMP_MESSAGE_TYPE_FLEX_SHARED_OBJECT: 0x10,
+	/** @namespace RTMPMessage.RTMP_MESSAGE_TYPE_FLEX_MESSAGE */
 	RTMP_MESSAGE_TYPE_FLEX_MESSAGE:       0x11,
+	/** @namespace RTMPMessage.RTMP_MESSAGE_TYPE_INFO */
 	RTMP_MESSAGE_TYPE_INFO:               0x12,
+	/** @namespace RTMPMessage.RTMP_MESSAGE_TYPE_SHARED_OBJECT */
 	RTMP_MESSAGE_TYPE_SHARED_OBJECT:      0x13,
+	/** @namespace RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE */
 	RTMP_MESSAGE_TYPE_INVOKE:             0x14,
-	RTMP_MESSAGE_TYPE_FLASH_VIDEO:        0x16,
+	/** @namespace RTMPMessage.RTMP_MESSAGE_TYPE_FLASH_VIDEO */
+	RTMP_MESSAGE_TYPE_FLASH_VIDEO:        0x16
 });
 RTMPMessage.prototype.__defineGetter__('lastChunk', function() {
 	return (this.chunks.length) ? this.chunks[this.chunks.length-1] : null;
