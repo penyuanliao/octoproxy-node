@@ -111,29 +111,28 @@ RTMPClient.prototype.onData = function(data) {
 
 		// Listener FMS response packet
 		{
-			var fmt = data.readUInt8(0) >> 6;
-			var csid = data.readUInt8(0) & (0x3f);
+			const fmt = data.readUInt8(0) >> 6;
+			const csid = data.readUInt8(0) & (0x3f);
 			// csid = 2 is message type
 			if (csid == 2 && fmt < 4 && data.length == 18) {
 				var typeID = undefined;
 				var timestamp = undefined;
-				var dlength = undefined;
+				// var bodysize = undefined;
 				// chunk Msg Header length = 11;
-				if (fmt < 3) {
+				if (fmt < 2) {
 					typeID = data.readUInt8(7);
 				}
 				if (fmt <= 2) {
 					timestamp = data.readUInt24BE(1);
 				}
-				if (fmt <= 1) {
-					dlength = data.readUInt24BE(4);
-				}
+				// if (fmt <= 1) {
+				// 	bodysize = data.readUInt24BE(4);
+				// }
 
 				if (fmt == 0 && typeID == 0x04) {
 					// I think is a ping request ??
 					// Server Ping Request (0x04)
 					var num = data.readUInt32BE(14); // get timestamp value
-					
 					this.pingResponse(num);
 				}
 
@@ -141,8 +140,8 @@ RTMPClient.prototype.onData = function(data) {
 				return;
 
 			} else if (data.length == 28 && fmt <= 2 && data[7] == this.PacketType.PACKET_TYPE_METADATA) {
-				var cmd = amfUtils.amf0DecodeOne(data.slice(8,28));
-				var obj = amfUtils.amf0DecodeOne(data.slice(8+ cmd.len,28));
+				var cmd = this.amfDecodeOne(data.slice(8,28));
+				var obj = this.amfDecodeOne(data.slice(8+ cmd.len,28));
 				this.emit('onGetFPS', {cmd:cmd.value, value:obj.value});
 				NSLog.log('debug', 'onGetFPS()', cmd, obj);
 				return;
@@ -153,38 +152,40 @@ RTMPClient.prototype.onData = function(data) {
 				var body_size = data.readUInt8(4) << 16;   // (4)
 				body_size += data.readUInt8(5) << 8; // (5)
 				body_size += data.readUInt8(6);      // (6)
-				var cmd = amfUtils.decodeAmf0Cmd(data.slice(offset, body_size));
+				var cmd = this.decodeAmfCmd(data.slice(offset, body_size));
 				NSLog.log('debug', 'NetStatusEvent: Data:%s, PacketSize:%s, cmd:%s',data.length, offset + body_size, cmd);
 				this.emit('status', cmd);
 				return;
-			} else if (fmt == 2 && csid == 4 && data.length > this.BasicHeaderSize[fmt]) {
+			} else if (data.length > this.BasicHeaderSize[fmt] && ((fmt == 2 && csid == 4) || (fmt == 3 && data.length == 21))) {
 
 				// wait onGetFPS status fmt=2, csid=4, timestamp(3), content(string, number)
+				console.log('onGetFPS Length:%s',data.length);
+				log.logHex(data);
 				var obj = {};
+				var header_size = this.BasicHeaderSize[fmt];
 				obj["timestamp"] = parseInt(data.readUInt24BE(1));
-				if (obj.timestamp < 0 || obj.timestamp > 10000) {
+				if ( fmt < 3 && (obj.timestamp < 0 || obj.timestamp > 10000)) {
 					this.emit('videoData',data);
 					return;
 				}
 
-				data = data.slice(4, data.length);
+				data = data.slice(header_size, data.length);
 				while (data.length > 0) {
-					log.logHex(data);
 
-					var oKey = this.decodeOne(data);
+					var oKey = this.amfDecodeOne(data);
 					data = data.slice(parseInt(oKey["len"]), data.length);
-					var oVal = this.decodeOne(data);
+					var oVal = this.amfDecodeOne(data);
 					data = data.slice(parseInt(oVal["len"]), data.length);
 
 					obj.cmd = oKey.value;
 					obj.value = oVal.value;
 
-					// NSLog.log( "trace" , "amfObj:%s, length:%s",JSON.stringify(obj),data.length);
+					NSLog.log( "trace" , "amfObj:%s, length:%s",JSON.stringify(obj),data.length);
 					this.emit('onGetFPS', {timestamp:obj.timestamp,cmd:obj.cmd, value:obj.value});
 
 					if (data[0] == 0x84) {
 						obj["timestamp"] = data.readUInt24BE(1);
-						data = data.slice(4, data.length);
+						data = data.slice(header_size, data.length);
 					}else if (data[0] == 0x02 && data[7] == 0x04) {
 
 						this.pingResponse(data.readInt32BE(14));
@@ -1184,22 +1185,24 @@ RTMPClient.createRTMPNetStream = function (URL, completed) {
 	const DEFAULT_PORT = 1935;
 	var client;
 
-	var args = URL.match(/(rtmp|rtmpt):\/\/(\w+:{0,1}\w*@)?(\S+):([0-9]+)\/(\S+([0-9]+))/i);
+	var args = URL.match(/(rtmp|rtmpt):\/\/(\w+:{0,1}\w*@)?(\S+):([0-9]+)\/(\S+([0-9\.]+))/i);
 
 	if (typeof args == "undefined" && args) {
 		NSLog.log('error', new Error("URL input error."));
 	};
-	
-	var tcUrl = args[0];
-	var app   = path.dirname(args[5]);
+
+	var tcUrl = path.dirname(args[0]) + "/";
+	var app   = path.dirname(args[5]) + "/";
 	var host  = args[3];
 	var port  = parseInt(args[4]);
-	
+	console.log(tcUrl);
+	console.log(app);
 	var socket = new net.Socket();
 	socket.connect(port || DEFAULT_PORT, host);
 
 	client = new RTMPClient(socket);
-
+	client.isVideoStream = true;
+	client.connectResponse();
 	socket.on('error', function (err) {
 		// client.emit('error',err);
 	});
@@ -1208,8 +1211,8 @@ RTMPClient.createRTMPNetStream = function (URL, completed) {
 		NSLog.log('debug', "** RTMPClient %s:%s Connected!", socket.remoteAddress, socket.remotePort);
 
 		client.on('status', net_status);
-		client.isVideoStream = true;
-		client.connectResponse();
+
+
 		client.invoke_connect(app, tcUrl);
 	});
 
@@ -1251,7 +1254,10 @@ RTMPClient.prototype.invoke_connect = function (app, tcUrl) {
 	});
 };
 
-RTMPClient.prototype.decodeOne = function (buffer) {
+/** ========================= **/
+/**        AMF DECODER        **/
+/** ========================= **/
+RTMPClient.prototype.amfDecodeOne = function (buffer) {
 	if (this.objectEncoding == 0) {
 		return amfUtils.amf0DecodeOne(buffer);
 	}else{
