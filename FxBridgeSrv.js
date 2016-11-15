@@ -44,7 +44,6 @@ function connect(uri, socket) {
                 socket.write(JSON.stringify({"NetStatusEvent":"Connected.amfIsReady"}));
         });
         rtmp.connectResponse();
-
         
         //LNX 11,7,700,203
         //MAC 10,0,32,18
@@ -56,7 +55,7 @@ function connect(uri, socket) {
             flashVer: "MAC 10,0,32,18", //flash version
             tcUrl: uri.path, //rtmp path
             fpad: false, // unknown
-            capabilities: 9947.75, // unknown
+            capabilities: 239, // unknown
             audioCodecs: 3191, // audio code
             videoCodecs: 252, // video code
             videoFunction: 1
@@ -131,12 +130,14 @@ function connect(uri, socket) {
  */
 function setupFMSClient(client) {
     var _rtmp;
+    var bHost = getFMSServerIP(client);
     var uri = {
-        host:config.bFMSHost,
+        host:bHost,
         port:config.bFMSPort,
-        path:"rtmp://" + config.bFMSHost + ":" + config.bFMSPort + client.namespace,
+        path:"rtmp://" + bHost + ":" + config.bFMSPort + client.namespace,
         app:client.namespace.substr(1,client.namespace.length)
     };
+
     NSLog.log('info','Bridge of fms:', uri.path);
     //建立FMS連線
     _rtmp = connect(uri, client);
@@ -145,6 +146,32 @@ function setupFMSClient(client) {
     //存在array裡面方便讀取
     connections[client.name] = {ws:client, fms:_rtmp};
     connsCount++;
+}
+/**
+ * config.bExceptions = [ {"Host":"43.251.76.220", "rules":["/BacPlayerLight/V"]}];
+ * expection server
+ * @param client
+ * @returns {string}
+ */
+function getFMSServerIP(client) {
+    if (typeof config.bExceptions != "undefined" && config.bExceptions.constructor === Array)
+    {
+        for (var i = 0; i < config.bExceptions.length; i++) {
+            var host = config.bExceptions[i]["Host"];
+            var rules = config.bExceptions[i]["rules"];
+            console.log(typeof rules.length);
+            var len = (typeof rules.length != "undefined") ? rules.length : -1;
+            while (len-- >= 0) {
+                var rule = rules[len];
+                if (client.namespace.indexOf(rule) != -1) {
+                    return host;
+                }
+            }
+
+        }
+    }
+
+    return config.bFMSHost;
 }
 /** not implement **/
 function ebbStream(sockList) {
@@ -268,12 +295,12 @@ function createNodejsSrv(port) {
 
         if (typeof removeItem != 'undefined' && typeof removeItem.fms != 'undefined' && removeItem.fms) {
             removeItem.ws.close();
+            removeItem.fms.state = "closed";
             removeItem.fms.socket.destroy();
             delete connections[name];
-            connsCount--;
             NSLog.log('debug','disconnect count:', Object.keys(connections).length,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
         };
-
+        connsCount--;
     });
 
     /**
