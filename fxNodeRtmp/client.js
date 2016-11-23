@@ -113,6 +113,7 @@ RTMPClient.prototype.onData = function(data) {
 		{
 			const fmt = data.readUInt8(0) >> 6;
 			const csid = data.readUInt8(0) & (0x3f);
+			const onRead = (data.length > this.BasicHeaderSize[fmt]);
 			// csid = 2 is message type
 			if (csid == 2 && fmt < 4 && data.length == 18) {
 				var typeID = undefined;
@@ -139,14 +140,14 @@ RTMPClient.prototype.onData = function(data) {
 				// NSLog.log('debug','RTMP (User Control Message Ping Request)',data.toString('hex'));
 				return;
 
-			} else if (data.length == 28 && fmt <= 2 && data[7] == this.PacketType.PACKET_TYPE_METADATA) {
+			} else if (data.length == 28 && (fmt <= 2 && csid <= 4) && data[7] == this.PacketType.PACKET_TYPE_METADATA) {
 				var cmd = this.amfDecodeOne(data.slice(8,28));
 				var obj = this.amfDecodeOne(data.slice(8+ cmd.len,28));
 				this.emit('onGetFPS', {cmd:cmd.value, value:obj.value});
 				NSLog.log('debug', 'onGetFPS()', cmd, obj);
 				return;
 
-			} else if (fmt <= 1 && csid == 4 && data[3] == 0 && data.readUInt8(7) == 0x14) {
+			} else if (onRead && fmt <= 1 && csid == 4 && data[3] == 0  && data.readUInt8(7) == 0x14) {
 				// NetStream NetStatusEvent 收到UnpublishNotify??
 				var offset = (fmt == 0 ? 12:8);
 				var body_size = data.readUInt8(4) << 16;   // (4)
@@ -156,19 +157,19 @@ RTMPClient.prototype.onData = function(data) {
 				NSLog.log('debug', 'NetStatusEvent: Data:%s, PacketSize:%s, cmd:%s',data.length, offset + body_size, cmd);
 				this.emit('status', cmd);
 				return;
-			} else if (data.length > this.BasicHeaderSize[fmt] && ((fmt == 2 && csid == 4) || (fmt == 3 && data.length == 21))) {
+			} else if (onRead && ((fmt == 2 && csid == 4  && data.length <= 100) || (fmt == 3 && csid == 4 && data.length == 21))) {
 
 				// wait onGetFPS status fmt=2, csid=4, timestamp(3), content(string, number)
 				console.log('onGetFPS Length:%s',data.length);
-				log.logHex(data);
 				var obj = {};
 				var header_size = this.BasicHeaderSize[fmt];
 				obj["timestamp"] = parseInt(data.readUInt24BE(1));
-				if ( fmt < 3 && (obj.timestamp < 0 || obj.timestamp > 10000)) {
+				if ( fmt < 3 && (obj["timestamp"] > 0) && data.toString().indexOf('onGetFPS') == -1) {
 					this.emit('videoData',data);
 					return;
 				}
-
+				console.log('onGetFPS Length:%s', data.length);
+				log.logHex(data);
 				data = data.slice(header_size, data.length);
 				while (data.length > 0) {
 
@@ -692,28 +693,36 @@ RTMPClient.prototype.streamPlay = function(name) {
 				self.emit("onMetadata", amfObj);
 			}
 		}
+		/** H264 ERROR **/
+		// if(data.length > 0) {
+		// 	iPacket = self.filterPacket(data);
+		// 	if (iPacket.header.CSID == 4 && iPacket.header.typeID == 0x09) {
+		// 		NSLog.log('info',"Order data :\n%s", JSON.stringify(iPacket.header), data.length);
+		// 		if (iPacket.header.bodySize > 2 && typeof self.CONTROL_ID_Marker[iPacket.header.bodyBuf[0]] == "undefined") NSLog.log('error', 'First Video Data IS NOT 2-Bytes!!!');
+        //
+		// 		self.emit('videoData', data);
+		// 		self.callbackfunc = undefined;
+		// 	}
+		// }
 
-		if(data.length > 0) {
-			iPacket = self.filterPacket(data);
-			if (iPacket.header.CSID == 4 && iPacket.header.typeID == 0x09) {
-				NSLog.log('info',"Order data :\n%s", JSON.stringify(iPacket.header), data.length);
-				if (iPacket.header.bodySize > 2) NSLog.log('error', 'First Video Data IS NOT 2-Bytes!!!');
-
+		while (data.length > 0) {
+			iPacket = self.filterPacket(data); //id = 5
+			if( iPacket.header.fmt > 2) {
+				NSLog.log('Chunk has not Packet!!', iPacket.header.fmt);
+				break;
+			}
+			if (iPacket.header.typeID == 0x09) {
 				self.emit('videoData', data);
 				self.callbackfunc = undefined;
+				return;
+			}else {
+				// NSLog.log('info', 'NOT VIDEO----- ')
 			}
-		}
 
-		// while (data.length > 0) {
-		// 	iPacket = self.filterPacket(data); //id = 5
-		// 	if( iPacket.header.fmt > 2) {
-		// 		NSLog.log('Chunk has not Packet!!', iPacket.header.fmt);
-		// 		break;
-		// 	}
-		// 	var obj = self.RTMP_ReadPacketType(iPacket);
-		// 	NSLog.log('trace','obj:%s', obj);
-		// 	data = data.slice(iPacket.header.offset, data.length);
-		// }
+			var obj = self.RTMP_ReadPacketType(iPacket);
+			NSLog.log('trace','obj:%s', obj);
+			data = data.slice(iPacket.header.offset, data.length);
+		}
 
 		/*if (data.length > 0) {
 			NSLog.log('trace', '==☆== PLAYER RESULT (%d) ==☆==', data.length);
@@ -777,7 +786,7 @@ RTMPClient.prototype.filterPacket = function (data, doFindC3) {
 		offset += 1;
 		var streamID = header.readUInt32LE(offset); //Message ID
 		offset += 4;
-		var end = ((bodySize % this.socket.rtmpChunkSize == 0) ? 1 : 0);
+		var end = ((bodySize % this.socket.rtmpChunkSize == 0 && bodySize > 0) ? 1 : 0);
 		find = parseInt(bodySize / this.socket.rtmpChunkSize);
 		if (data[headerBytesLength + bodySize + find] != 0xC3) find = find - end;
 
@@ -814,7 +823,7 @@ RTMPClient.prototype.filterPacket = function (data, doFindC3) {
 		var typeID = basicHeader.readUInt8(offset);
 		offset += 1;
 
-		var end = ((bodySize % this.socket.rtmpChunkSize == 0) ? 1 : 0);
+		var end = ((bodySize % this.socket.rtmpChunkSize == 0 && bodySize > 0) ? 1 : 0);
 		find = parseInt(bodySize / this.socket.rtmpChunkSize);
 		if (data[headerBytesLength + bodySize + find] != 0xC3) find = find - end;
 
@@ -1028,9 +1037,14 @@ RTMPClient.prototype.RTMP_ReadPacket = function (obj) {
 		else
 			return 0;
 	}
+	else if (fmt == 2 && csid == 2) {
+
+		return 1;
+	}
+
+
+
 	const typeid = buf[7];
-
-
 	NSLog.log("info","RTMP_ReadPacket TypeID : ", typeid);
 	switch (typeid)
 	{
@@ -1078,12 +1092,13 @@ RTMPClient.prototype.RTMP_ReadPacket = function (obj) {
 			var iPacket = this.filterPacket(buf);
 
 			if (csid == 4) {
+				NSLog.log("error","decodeAmf0Cmd:", iPacket);
 				var cmd = amfUtils.decodeAmf0Cmd(iPacket.header.bodyBuf);
 				this.emit('status', cmd);
 				buf = buf.slice(iPacket.header.offset, buf.length);
 			}
 
-			NSLog.log("RTMP_ReadPacket ERROR:", iPacket);
+			NSLog.log("error","RTMP_ReadPacket ERROR:", iPacket);
 			return 1;
 			break;
 		case 0x16: //streamData 複合屬性
@@ -1323,6 +1338,21 @@ RTMPClient.prototype.PacketType = {
 	PACKET_TYPE_FLV:				0x16
 
 };
+RTMPClient.prototype.PacketTypeMarker = {
+	0x00: "PACKET_TYPE_NONE",
+	0x01: "PACKET_TYPE_CHUNK_SIZE",
+	0x03: "PACKET_TYPE_BYTES_READ",
+	0x04: "PACKET_TYPE_CONTROL",
+	0x05: "PACKET_TYPE_SERVERBW",
+	0x06: "PACKET_TYPE_CLIENTBW",
+	0x08: "PACKET_TYPE_AUDIO",
+	0x09: "PACKET_TYPE_VIDEO",
+	0x12: "PACKET_TYPE_METADATA",
+	0x13: "PACKET_TYPE_SHARED_OBJECT",
+	0x14: "PACKET_TYPE_INVOKE",
+	0x16: "PACKET_TYPE_FLV"
+}
+
 RTMPClient.prototype.Code_ID = {
 	H263:           0x02,
 	SCREEN_VIDEO:   0x03,
@@ -1332,11 +1362,13 @@ RTMPClient.prototype.Code_ID = {
 	AVC:            0x07
 };
 
-RTMPClient.prototype.Event_Type = {
-	STREAM_BEGIN:	0,
-	PING_REQUEST:	6,
-	Ping_RESPONSE:	7
-}
+RTMPClient.prototype.usrCtrlMsg = {
+	STREAM_BEGIN:	0x00,
+	PING_REQUEST:	0x06,
+	PING_RESPONSE:	0x07,
+	BUFFER_EMPTY:   0x1f,
+	BUFFER_READY:   0x20
+};
 
 RTMPClient.prototype.CONTROL_ID = {
 	KEY_FRAME_ON2_VP6:     0x14,
@@ -1345,4 +1377,12 @@ RTMPClient.prototype.CONTROL_ID = {
 	INTER_FRAME_H264:      0x27,
 	INFO_ON2_VP6:          0x54,
 	HE_AAC:                0xaf
+};
+RTMPClient.prototype.CONTROL_ID_Marker = {
+	0x14:"KEY_FRAME_ON2_VP6",
+	0x17:"KEY_FRAME_H264",
+	0x24:"INTER_FRAME_ON2_VP6",
+	0x27:"INTER_FRAME_H264",
+	0x54:"INFO_ON2_VP6",
+	0xaf:"HE_AAC"
 };
