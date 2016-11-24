@@ -57,7 +57,8 @@ var amf0dRules = {
 //    0x0D: amf0decUnsupported, // Has been never originally implemented by Adobe!
 //    0x0E: amf0decRecSet, // Has been never originally implemented by Adobe!
     0x0F: amf0decXmlDoc,
-    0x10: amf0decTypedObj
+    0x10: amf0decTypedObj,
+    0x11: switchToAmf3
 };
 
 var amf0eRules = {
@@ -821,6 +822,10 @@ function amf0decTypedObj(buf) {
     var obj = amf0decObject(buf.slice(className.len - 1));
     obj.value.__className__ = className.value;
     return { len: className.len + obj.len - 1, value: obj.value }
+}
+
+function switchToAmf3(buf) {
+    throw new Error("Error: switchToAmf3 encoding is not yet implemented!"); // TODO: Error
 }
 
 /**
