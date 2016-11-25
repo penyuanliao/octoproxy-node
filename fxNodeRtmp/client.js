@@ -15,7 +15,7 @@ var level ={'sendRTMPPacket':false};
 const defaultObjectEncoding = 0;
 
 // flv header '464c56010d00000009000000001200836600000000000000'
-var RTMPClient = module.exports = function(socket) {
+var RTMPClient = function(socket) {
 	this.socket = socket;
 	this.socket.rtmpChunkSize = 128; //fms3.5=128, fms4.5=4096
 	this.uptime = os.uptime();
@@ -35,10 +35,14 @@ var RTMPClient = module.exports = function(socket) {
 
 	this._objectEncoding = defaultObjectEncoding; //預設物件編碼
 
+	this.invokeHeader = new Buffer(8);
+	this.pauseTime = 0;
+
 
 	NSLog.log('trace','RTMPClient %s:%s run initialize.',socket.remoteAddress, socket.remotePort);
 	socket.on('connect', this.onSocketConnect.bind(this));
 };
+
 util.inherits(RTMPClient, events.EventEmitter);
 RTMPClient.prototype.onSocketConnect = function() {
 	// On connection send handshake
@@ -149,11 +153,17 @@ RTMPClient.prototype.onData = function(data) {
 
 			} else if (onRead && fmt <= 1 && csid == 4 && data[3] == 0  && data.readUInt8(7) == 0x14) {
 				// NetStream NetStatusEvent 收到UnpublishNotify??
-				var offset = (fmt == 0 ? 12:8);
+				var offset = this.BasicHeaderSize[fmt];
 				var body_size = data.readUInt8(4) << 16;   // (4)
 				body_size += data.readUInt8(5) << 8; // (5)
 				body_size += data.readUInt8(6);      // (6)
+				if ((body_size + offset) >= data.length) {
+					this.emit('videoData',data);
+					return;
+				}
+				console.log(data.slice(offset, body_size).length, body_size);
 				var cmd = this.decodeAmfCmd(data.slice(offset, body_size));
+
 				NSLog.log('debug', 'NetStatusEvent: Data:%s, PacketSize:%s, cmd:%s',data.length, offset + body_size, cmd);
 				this.emit('status', cmd);
 				return;
@@ -687,10 +697,13 @@ RTMPClient.prototype.streamPlay = function(name) {
 
 				var amfObj = amfUtils.amf0Decode(iPacket.header.bodyBuf);
 				NSLog.log('info','amfObj onMetaData:', amfObj);
-				self.emit('onMetaData', amfObj);
+				if (typeof amfObj != "undefined" && amfObj[0] == 'onMetaData') {
+					self.emit('onMetaData', amfObj);
+					self.v_metadata = amfObj;
+				}
+
 				data = data.slice(iPacket.header.offset, data.length);
-				self.v_metadata = amfObj;
-				self.emit("onMetadata", amfObj);
+
 			}
 		}
 		/** H264 ERROR **/
@@ -752,19 +765,90 @@ RTMPClient.prototype.deleteStream = function () {
 	var cmdName = amfUtils.amf0encString("deleteStream");
 	var tranID = amfUtils.amf0encNumber(0);
 	var cmdObj = amfUtils.amf0encNull();
-	var inkove = amfUtils.amf0encNumber(1);
+	var invoke = amfUtils.amf0encNumber(true);
 
-	var bodySize = cmdName.length + tranID.length + cmdObj.length + inkove.length;
+	var bodySize = cmdName.length + tranID.length + cmdObj.length + invoke.length;
 
 	header.writeUInt24BE(bodySize, offset);
 	offset += 3;
 	header.writeUInt8(0x11, offset++);
 
-	var buf = Buffer.concat([header, cmdName, tranID, cmdObj, inkove],( header.length + bodySize.length ));
+	var buf = Buffer.concat([header, cmdName, tranID, cmdObj, invoke],( offset + bodySize ));
 
 	this.sokcet.write(buf);
 
 };
+RTMPClient.prototype.close = function () {
+	var header = this.invokeHeader;
+	var offset = 0;
+	var timestamp = (new Date().getTime() - this.pauseTime);
+	var cmdName = amfUtils.amf0encString("closeStream");
+	var tranID = amfUtils.amf0encNumber(0);
+	var cmdObj = amfUtils.amf0encNull();
+	var bodySize = cmdName.length + tranID.length + cmdObj.length;
+
+	header.writeUInt8(0x88, offset++);// fmt = 2, chunk Stream ID = 8;
+	header.writeUInt24BE(timestamp, offset);
+	offset+=3;
+	header.writeUInt24BE(bodySize);
+	offset+=3;
+	header.writeUInt8(0x14, offset++); // invoke command
+
+	var buf = Buffer.concat([header, cmdName, tranID, cmdObj],( offset + bodySize ));
+
+	this.sokcet.write(buf);
+
+};
+RTMPClient.prototype.pause = function () {
+	var header = this.invokeHeader;
+	var offset = 0;
+	var timestamp = os.uptime() - this.uptime;
+
+	var cmdName = amfUtils.amf0encString("pause");
+	var tranID = amfUtils.amf0encNumber(0);
+	var cmdObj = amfUtils.amf0encNull();
+	var invoke = amfUtils.amf0encNumber(true);
+	var num = amfUtils.amf0encNumber(600);
+	var bodySize = cmdName.length + tranID.length + cmdObj.length + invoke.length + num.length;
+
+	header.writeUInt8(0x48, offset++);// fmt = 1, chunk Stream ID = 8;
+	header.writeUInt24BE(timestamp, offset);
+	offset+=3;
+	header.writeUInt24BE(bodySize);
+	offset+=3;
+	header.writeUInt8(0x14, offset++); // invoke command
+
+	var buf = Buffer.concat([header, cmdName, tranID, cmdObj, invoke, num],( offset + bodySize ));
+
+	this.sokcet.write(buf);
+
+	this.pauseTime = new Date().getTime();
+};
+RTMPClient.prototype.resume = function () {
+	var header = this.invokeHeader;
+	var offset = 0;
+	var timestamp = (new Date().getTime() - this.pauseTime);
+
+	var cmdName = amfUtils.amf0encString("pause");
+	var tranID = amfUtils.amf0encNumber(0);
+	var cmdObj = amfUtils.amf0encNull();
+	var invoke = amfUtils.amf0encNumber(false);
+	var num = amfUtils.amf0encNumber(600);
+	var bodySize = cmdName.length + tranID.length + cmdObj.length + invoke.length + num.length;
+
+	header.writeUInt8(0x88, offset++);// fmt = 2, chunk Stream ID = 8;
+	header.writeUInt24BE(timestamp, offset);
+	offset+=3;
+	header.writeUInt24BE(bodySize);
+	offset+=3;
+	header.writeUInt8(0x14, offset++); // invoke command
+
+	var buf = Buffer.concat([header, cmdName, tranID, cmdObj, invoke, num],( offset + bodySize ));
+
+	this.sokcet.write(buf);
+
+};
+
 
 RTMPClient.prototype.filterPacket = function (data, doFindC3) {
 	var chunk1st = data.readUInt8(0);
@@ -1030,15 +1114,47 @@ RTMPClient.prototype.RTMP_ReadPacket = function (obj) {
 			this.CONTROL_ID["HE_AAC"] == buf[1])
 			return 1;
 		else
+		{
+			log.logHex(buf);
 			return 0;
+		}
 	}else if (fmt == 3 && csid == 2) {
-		if (buf[1] == 0x02)
+		if (buf[1] == 0x02) {
 			return 1;
-		else
+		}else if (buf[2] == 0x20 || buf[2] == 0x1f) {
+			console.log('--------- 0xC2 - 0x20 - 0x1f ----------');
+
+			if (obj.constructor == Object) {
+				while ( buf[0]== 0xc2 &&(buf[2] == 0x20 || buf[2] == 0x1f)) {
+					var index = obj.buf.indexOf('c2002000000001');
+					if (index == 0) {
+						obj.buf = obj.buf.slice(index+7, obj.buf.length);
+					}else if ((index + 7) == obj.buf.length) {
+						obj.buf = obj.buf.slice(0, index);
+					}if ((index = obj.buf.indexOf('c2001f00000001')) == 0) {
+						obj.buf = obj.buf.slice(index+7, obj.buf.length);
+					}else if ((index + 7) == obj.buf.length) {
+						obj.buf = obj.buf.slice(0, index);
+					}else {
+						return 1;
+					}
+				}
+
+
+			}
+			log.logHex(obj.buf);
+			return 1;
+		}
+		else {
 			return 0;
+		}
+
 	}
 	else if (fmt == 2 && csid == 2) {
 
+		return 1;
+	}else if (fmt < 4 && csid <= 4) {
+		// 0x84
 		return 1;
 	}
 
@@ -1200,7 +1316,7 @@ RTMPClient.createRTMPNetStream = function (URL, completed) {
 	const DEFAULT_PORT = 1935;
 	var client;
 
-	var args = URL.match(/(rtmp|rtmpt):\/\/(\w+:{0,1}\w*@)?(\S+):([0-9]+)\/(\S+([0-9\.]+))/i);
+	var args = URL.match(/(rtmp|rtmpt):\/\/(\w+:{0,1}\w*@)?(\S+):([a-zA-Z0-9_]+)\/(\S+([a-zA-Z0-9_\.]+))/i);
 
 	if (typeof args == "undefined" && args) {
 		NSLog.log('error', new Error("URL input error."));
@@ -1210,6 +1326,7 @@ RTMPClient.createRTMPNetStream = function (URL, completed) {
 	var app   = path.dirname(args[5]) + "/";
 	var host  = args[3];
 	var port  = parseInt(args[4]);
+	var vName = path.basename(URL);
 	console.log(tcUrl);
 	console.log(app);
 	var socket = new net.Socket();
@@ -1235,7 +1352,8 @@ RTMPClient.createRTMPNetStream = function (URL, completed) {
 		if (cmd.name == "connect_result") {
 			// console.log(cmd,path.basename(tcUrl));
 			//完成後就可以自己送出要的事件
-			client.netStreamConnect("video0");
+			console.log(path.basename(URL));
+			client.netStreamConnect(vName);
 			client.removeListener('status', net_status);
 		}else if(cmd.name == "close") {
 			client.socket.destroy();
@@ -1376,7 +1494,9 @@ RTMPClient.prototype.CONTROL_ID = {
 	INTER_FRAME_ON2_VP6:   0x24,
 	INTER_FRAME_H264:      0x27,
 	INFO_ON2_VP6:          0x54,
-	HE_AAC:                0xaf
+	INFO_ON2_H264:         0x57,
+	HE_AAC:                0xaf,
+	ASAO_AUDIO:			   0x58
 };
 RTMPClient.prototype.CONTROL_ID_Marker = {
 	0x14:"KEY_FRAME_ON2_VP6",
@@ -1384,5 +1504,12 @@ RTMPClient.prototype.CONTROL_ID_Marker = {
 	0x24:"INTER_FRAME_ON2_VP6",
 	0x27:"INTER_FRAME_H264",
 	0x54:"INFO_ON2_VP6",
-	0xaf:"HE_AAC"
+	0x57:"INFO_ON2_H264",
+	0xaf:"HE_AAC",
+	0x58:"ASAO_AUDIO"
 };
+
+
+
+
+module.exports = RTMPClient;
