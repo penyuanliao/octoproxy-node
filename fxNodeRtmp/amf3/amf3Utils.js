@@ -48,6 +48,8 @@ deserializer.prototype.readTypeMarker = function () {
             return this.readXmlString();
         case AMF_Constants.AMF3_BYTEARRAY:
             return Buffer.from(this.readString());
+        case AMF_Constants.AMF3_DICTIONARY:
+            return this.readDictionArray();
         default:
             throw new Error("Unsupported type marker:"+ typeMarker, 4000);
     }
@@ -338,6 +340,22 @@ deserializer.prototype.readXmlString = function () {
     return string;
 };
 
+deserializer.prototype.readDictionArray = function () {
+
+    var dictArray = {};
+    var key = 0;
+    var typeMarker;
+    do {
+
+        dictArray[(key).toString()] = this.readTypeMarker();
+        typeMarker = this.readByte();
+        key = this.readByte();
+        // console.log(typeMarker,key, this.readObject() >> 1);
+    } while (typeMarker == AMF_Constants.AMF3_DICTIONARY);
+
+
+    return dictArray;
+};
 
 function serializer() {
     /**
@@ -426,14 +444,17 @@ serializer.prototype.writeTypeMarker = function(data, markerType) {
             case AMF_Constants.AMF3_XMLSTRING:
                 this.writeXml(data);
                 break;
+            case AMF_Constants.AMF3_DICTIONARY:
+                this.writeDictionArray(data);
+                break;
             default:
                 console.error(new Error("Parser Exception Unknown type marker " + markerType));
         }
     } else {
         // Detect Type Marker
         var type = (typeof data);
-        var ctor = data.constructor;
-        if (typeof data == "undefined" && data == null && !data) {
+        var construct = (data != null) ? data.constructor : null;
+        if (typeof data == "undefined" || data == null) {
             markerType = AMF_Constants.AMF3_NULL;
         }
         else if (type === "boolean") {
@@ -449,16 +470,17 @@ serializer.prototype.writeTypeMarker = function(data, markerType) {
         }else if (isFloat(data)) {
             markerType = AMF_Constants.AMF3_NUMBER;
         }else if (type === "string") {
-            markerType = AMF_Constants.AMF3_STRING
-        }else if (ctor === Array) {
+            markerType = AMF_Constants.AMF3_STRING;
+        }else if (construct === Array) {
             markerType = AMF_Constants.AMF3_ARRAY;
-        }else if (ctor === Object) {
+        }else if (construct === Object) {
             markerType = AMF_Constants.AMF3_OBJECT;
-        }else if (ctor === Date) {
+        }else if (construct === Date) {
             markerType = AMF_Constants.AMF3_DATE;
-        }else if (ctor == Buffer){
+        }else if (construct == Buffer){
             markerType = AMF_Constants.AMF3_BYTEARRAY;
-        }else if (data.search("<?xml") != -1) {
+        }
+        if (markerType === AMF_Constants.AMF3_STRING && data.search("<?xml") != -1) {
             markerType = AMF_Constants.AMF3_XMLSTRING;
         }
 
@@ -473,27 +495,26 @@ serializer.prototype.writeTypeMarker = function(data, markerType) {
  * @param num {number | boolean}
  */
 serializer.prototype.writeInteger = function (num) {
-    var buf;
     num &= 0x1fffffff;
     if ((num & 0xffffff80) == 0) {
         this.writeByte((num & 0x7f));
         return;
     }
     if ((num & 0xffffc000) == 0) {
-        this.writeByte(((num >> 7) | 0x80));
+        this.writeByte(((num >> 7) | 0x80) & 0xff);
         this.writeByte((num & 0x7f));
         return;
     }
     if ((num & 0xffe00000) == 0) {
-        this.writeByte(((num >> 14) | 0x80));
-        this.writeByte(((num >> 7) | 0x80));
+        this.writeByte(((num >> 14) | 0x80) & 0xff);
+        this.writeByte(((num >> 7) | 0x80) & 0xff);
         this.writeByte((num & 0x7f));
         return;
     }
     this.writeByte(((num >> 22) | 0x80));
-    this.writeByte(((num >> 15) | 0x80) & 0xff);
+    this.writeByte(((num >> 15) | 0x80) & 0xff);//
 
-    this.writeByte(((num >> 8) | 0x80) & 0xff);
+    this.writeByte(((num >> 8) | 0x80) & 0xff);//
     this.writeByte((num & 0xff));
 };
 
@@ -548,7 +569,7 @@ serializer.prototype.writeDate = function (date) {
  */
 serializer.prototype.writeArray = function (arr) {
     // arrays aren't reference here but still counted
-    this._referenceObjects.push(arr);
+    // this._referenceObjects.push(arr);
     var numeric = [];
     var string = [];
     var key,value,i;
@@ -655,7 +676,6 @@ serializer.prototype.writeObject = function (obj) {
         this._referenceDefinitions[className]["id"] = count;
         this._referenceDefinitions[className]["encoding"] = encoding;
         this._referenceDefinitions[className]["propertyNames"] = propertyNames;
-
         traitsInfo = AMF_Constants.AMF3_OBJECT_ENCODING;
         traitsInfo |= encoding << 2;
         traitsInfo |= (propertyNames.length << 4);
@@ -753,6 +773,25 @@ serializer.prototype.writeXml = function (xml) {
     this.writeBinaryString(str);
 
 };
+serializer.prototype.writeDictionArray = function (data) {
+    // if (this.writeObjectReference(data)) {
+    //     return;
+    // }
+    //d. 0a 0b 01 05 68..
+    //d2.0a 01 07 68 69
+    //1. 0a 01 00 04 01 01
+    //2. 0a 01 02 04 02 01
+
+    for (var i = 0; i < data.length; i++) {
+        var obj = data[i];
+        // this.writeByte(0x0a);
+        // this.writeObject(obj);
+        this.writeTypeMarker(obj, null);
+        if (i < data.length-1) this.writeInteger(0x11);
+    }
+
+};
+
 /**
  * Check if the given object is in the reference table, write the reference if it exists,
  * otherwise add the object to the reference table
@@ -764,8 +803,10 @@ serializer.prototype.writeObjectReference = function (object) {
     ref = (ref != -1) ? ref : false;
     // quickly handle object references
     if (ref !== false) {
+
         ref <<= 1;
         this.writeInteger(ref);
+
         return true;
     }
 
@@ -811,6 +852,13 @@ serializer.prototype.writeDouble = function (num) {
     this.stream.writeDoubleBE(num, this.offset);
 
     this.offset += 8;
+};
+serializer.prototype.encodeDynamic = function (str) {
+    var hex = Number(str.length).toString(16);
+    var hexHeader = '00' + (hex.length % 2 == 1 ? "0":"") + hex;
+    var buf = new Buffer(hexHeader, 'hex');
+    var data = new Buffer(str);
+    return Buffer.concat([buf, data], buf.length + data.length);
 };
 
 
@@ -928,7 +976,7 @@ TypeLoader.getMappedClassName = function (className) {
 };
 TypeLoader.loadType = function (className) {
     var cls = TypeLoader.getMappedClassName(className);
-    if (typeof cls === "undefined" || cls) {
+    if (typeof cls === "undefined" || !cls) {
         console.error('TypeLoader.loadType ', className);
     }
     return cls;

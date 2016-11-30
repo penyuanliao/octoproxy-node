@@ -63,16 +63,20 @@ AbstractMessage.prototype.generateId = function () {
     return (S4() + S4() + "-" + S4() + "-4" + S4().substr(0,3) + "-" + S4() + "-" + S4() + S4() + S4()).toUpperCase();
 };
 /**
- * Create a new Acknowledge Message
- * @param message {*}
- * @constructor
+ * current timestamp
+ * @return {String} timestamp
  */
 AbstractMessage.prototype.time = function () {
     return new Date().getTime().toString().substr(0,10) + '00';
 };
+/**
+ *
+ * @param message {String}
+ * @constructor AcknowledgeMessage
+ */
 function AcknowledgeMessage(message) {
     // AsyncMessage.call(this);
-    console.log(this.constructor.name, "AcknowledgeMessage");
+    // console.log(this.constructor.name, "AcknowledgeMessage");
 
     this.clientId    = this.generateId();
     this.destination = null;
@@ -82,18 +86,20 @@ function AcknowledgeMessage(message) {
     this.headers     = {};
     this.body        = null;
 
+    this.correlationId = undefined;
+
     if (message && typeof message["messageId"] != "undefined") {
-        this.correlationId = message.messageId;
+        this.correlationId = message["messageId"];
     }
 }
 /***
  * This type of message contains information necessary to perform
  * point-to-point or publish-subscribe messaging.
- * @constructor
+ * @constructor AsyncMessage
  */
 function AsyncMessage() {
     AbstractMessage.call(this);
-    console.log(this.constructor.name, "AsyncMessage");
+    // console.log(this.constructor.name, "AsyncMessage");
     /**
      * The message id to be responded to.
      * @type {string}
@@ -103,10 +109,10 @@ function AsyncMessage() {
 }
 /**
  * A message that represents an infrastructure command passed between
- * @constructor
+ * @constructor CommandMessage
  */
 function CommandMessage() {
-    console.log(this.constructor.name, "CommandMessage");
+    // console.log(this.constructor.name, "CommandMessage");
     AsyncMessage.call(this);
     const SUBSCRIBE_OPERATION = 0;
     const UNSUSBSCRIBE_OPERATION = 1;
@@ -124,11 +130,11 @@ function CommandMessage() {
 }
 /**
  * Creates the error message to report to flex the issue with the call
- * @constructor
+ * @constructor ErrorMessage
  */
 function ErrorMessage() {
     AcknowledgeMessage.call(this);
-    console.log(this.constructor.name, "ErrorMessage");
+    // console.log(this.constructor.name, "ErrorMessage");
     /** Additional data with error **/
     this.extendedData = null;
     /** Error code number **/
@@ -142,13 +148,13 @@ function ErrorMessage() {
 }
 /**
  * This type of message contains information needed to perform a Remoting invocation.
- * @constructor
+ * @constructor RemotingMessage
  */
 function RemotingMessage() {
 
     AbstractMessage.call(this);
 
-    console.log(this.constructor.name, "RemotingMessage");
+    // console.log(this.constructor.name, "RemotingMessage");
 
     this.source;
     this.operation;
@@ -165,14 +171,11 @@ function RemotingMessage() {
 }
 /**
  * Type encapsulating Flex ArrayCollectio
- * @constructor
+ * @constructor ArrayCollection
  */
 function ArrayCollection() {
-    console.log(this.constructor.name, "ArrayCollection");
+    // console.log(this.constructor.name, "ArrayCollection");
 }
-
-
-
 
 function ObjectType() {
 

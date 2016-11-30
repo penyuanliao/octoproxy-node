@@ -1316,7 +1316,7 @@ RTMPClient.createRTMPNetStream = function (URL, completed) {
 	const DEFAULT_PORT = 1935;
 	var client;
 
-	var args = URL.match(/(rtmp|rtmpt):\/\/(\w+:{0,1}\w*@)?(\S+):([a-zA-Z0-9_]+)\/(\S+([a-zA-Z0-9_\.]+))/i);
+	var args = URL.match(/(rtmp|http):\/\/(\w+:{0,1}\w*@)?(\S+):([a-zA-Z0-9_]+)\/(\S+([a-zA-Z0-9_\.]+))/i);
 
 	if (typeof args == "undefined" && args) {
 		NSLog.log('error', new Error("URL input error."));
