@@ -404,6 +404,7 @@ serializer.prototype.amf3Encode = function (data, markerType) {
  */
 serializer.prototype.writeTypeMarker = function(data, markerType) {
     var dataByVal = arguments[2];
+
     if (typeof markerType === "undefined") markerType = null;
     if (typeof dataByVal === "undefined") dataByVal = false;
 
@@ -411,7 +412,6 @@ serializer.prototype.writeTypeMarker = function(data, markerType) {
         data = dataByVal;
     }
     if (markerType != null) {
-
         this.writeByte(markerType);
         switch (markerType) {
             case AMF_Constants.AMF3_NULL:
@@ -480,12 +480,11 @@ serializer.prototype.writeTypeMarker = function(data, markerType) {
         }else if (construct == Buffer){
             markerType = AMF_Constants.AMF3_BYTEARRAY;
         }
-        if (markerType === AMF_Constants.AMF3_STRING && data.search("<?xml") != -1) {
+        else if (markerType === AMF_Constants.AMF3_STRING && data.substr(0,5) == "<?xml") {
             markerType = AMF_Constants.AMF3_XMLSTRING;
         }
 
         this.writeTypeMarker(data, markerType);
-
     }
 
 
@@ -523,7 +522,7 @@ serializer.prototype.writeInteger = function (num) {
  * @param str {string}
  */
 serializer.prototype.writeString = function (str) {
-    if (typeof str == "undefined" && str && str === null) str = "";
+    // if (typeof str == "undefined" && str && str === null) str = "";
     var len = str.length;
     if (!len) {
         this.writeInteger(0x01);
@@ -683,14 +682,15 @@ serializer.prototype.writeObject = function (obj) {
 
     this.writeInteger(traitsInfo);
 
-    if (writeTraits) {
-        this.writeString(className);
-        for (i = 0; i < propertyNames.length; i++) {
-            this.writeString(propertyNames[i]);
-        }
-    }
 
     try {
+
+        if (writeTraits) {
+            this.writeString(className);
+            for (i = 0; i < propertyNames.length; i++) {
+                this.writeString(propertyNames[i]);
+            }
+        }
         if (encoding == AMF_Constants.ET_PROPLIST) {
             //Write the sealed values to the output stream.
             for (i = 0; i < propertyNames.length; i++) {
@@ -709,8 +709,8 @@ serializer.prototype.writeObject = function (obj) {
             for (i = 0; i < keys.length; i++) {
                 key = keys[i];
                 value = obj[key];
-                if (propertyNames.indexOf(key) == -1 &&
-                    (key.length >= 1 && key.substr(0,1) != "_") ) {
+                if (typeof propertyNames[key] != 'undefined' &&
+                    (key.substr(0,1) != "_") ) {
                     this.writeString(key);
                     this.writeTypeMarker(value, null);
                 }
@@ -860,7 +860,20 @@ serializer.prototype.encodeDynamic = function (str) {
     var data = new Buffer(str);
     return Buffer.concat([buf, data], buf.length + data.length);
 };
-
+serializer.prototype.MARKER_TYPE_MAP = {
+    0x01:function () {},
+    0x02:function () {},
+    0x03:function () {},
+    0x04:this.writeInteger,
+    0x05:this.writeDouble,
+    0x06:this.writeString,
+    0x08:this.writeDate,
+    0x09:this.writeArray,
+    0x0A:this.writeObject,
+    0x0C:this.writeByteArray,
+    0x0B:this.writeXml,
+    0x11:this.writeDictionArray
+};
 
 const AMF_Constants = {
     AMF3_UNDEFINED: 0x00,
@@ -888,6 +901,7 @@ const AMF_Constants = {
     FMS_OBJECT_ENCODING: 0x01
 
 };
+
 const strEmpty = "";
 
 function isInt(n) {
