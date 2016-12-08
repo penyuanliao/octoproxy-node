@@ -34,7 +34,7 @@ NSLog.configure({
     dateFormat:'[yyyy-MM-dd hh:mm:ss]',
     filePath:__dirname+"/historyLog",
     id:"octoproxy",
-    remoteEnabled: false,
+    remoteEnabled: true,
     /*console:console,*/
     trackBehaviorEnabled: false, // toDB server [not implement]
     maximumFileSize: 1024 * 1024 * 100});
@@ -60,6 +60,10 @@ function AppDelegate() {
 
     /** [roundrobin] Client go to sub-service index **/
     this.roundrobinNum = [];
+
+    /** The lockState not allows user to connect service **/
+    this._lockState = false;
+    NSLog.log('info','LockState:[%s]', this.lockState);
     /** casino load balance **/
     this.gameLBSrv = new gLBSrv(cfg.gamSLB);
 
@@ -77,6 +81,8 @@ AppDelegate.prototype.init = function () {
         this.gameLBSrv.init_daemon();
     }
 
+    this.lockState = cfg["forkOptions"]["lockState"];
+
     // 1. setup child process fork
     this.setupCluster(cfg.forkOptions);
     // 2. create listen 80 port server
@@ -85,7 +91,7 @@ AppDelegate.prototype.init = function () {
 
     this.BindingProcEvent();
     
-    // this.management();
+    this.management();
 };
 /**
  * 建立tcp伺服器不使用node net
@@ -120,6 +126,12 @@ AppDelegate.prototype.createServer = function (opt) {
             // user address, port
             var out = {};
             handle.getSockInfos = out;
+
+            if (self._lockState === true) {
+                self.rejectClientExcpetion(handle ,"CON_LOCK_CONNECT");
+                handle.close(close_callback);
+                return;
+            }
 
             if (err) {
                 NSLog.log('error', util._errnoException(err, 'accept'));
@@ -214,7 +226,7 @@ AppDelegate.prototype.createServer = function (opt) {
 
 
         if (general) {
-            mode = general[0].match('HTTP/1.1') != null ? "http" : mode;
+            mode = general[0].match('HTTP/') != null ? "http" : mode;
             mode = headers.iswebsocket  ? "ws" : mode;
             namespace = general[1];
         }else
@@ -331,12 +343,13 @@ AppDelegate.prototype.createServer = function (opt) {
                         source = chgSource;
                     }
 
-                    if (typeof worker === 'undefined') {
+                    if (typeof worker === 'undefined' || !worker) {
                         worker = self.clusters["*"]; //TODO 未來準備擋奇怪連線
-                        if (!worker) {
+                        if (typeof worker == 'undefined') {
                             self.rejectClientExcpetion(handle, "PROC_NOT_FOUND");
                             handle.close(close_callback);
                             NSLog.log('trace','!!!! close();');
+                            handle = null;
 
                         }else{
                             NSLog.log('trace','1. Socket goto %s(*)', lastnamspace);
@@ -355,6 +368,7 @@ AppDelegate.prototype.createServer = function (opt) {
                             self.rejectClientExcpetion(handle, "CON_DONT_CONNECT");
                             handle.close(close_callback);
                             handle = null;
+                            return;
                         }
 
                         NSLog.log('trace','2. Socket goto %s', lastnamspace);
@@ -367,7 +381,7 @@ AppDelegate.prototype.createServer = function (opt) {
                     }
 
                     //noinspection JSUnresolvedFunction
-                    handle.readStop();
+                    if (handle && handle != 0) handle.readStop();
                     source = null;
                     lastnamspace = null;
                 });
@@ -532,7 +546,7 @@ AppDelegate.prototype.setupCluster = function (opt) {
 };
 /**
  * 分流處理
- * url_param: config assignRule 區分
+ * url_param: config assign 區分
  * roundrobin: 輪詢規則不管伺服器使用者數量
  * leastconn: 檢查伺服器數量平均使用者
  * @param namespace
@@ -548,6 +562,7 @@ AppDelegate.prototype.assign = function (namespace, cb) {
         namespace = path[1];
         if (typeof namespace == 'undefined') namespace = path[0];
     }
+    // if (namespace == 'video') namespace = path[2];
     NSLog.log('info',"assign::namespace:", namespace);
     // url_param
     if (cfg.balance === "url_param") {
@@ -660,6 +675,15 @@ AppDelegate.prototype.BindingProcEvent = function () {
         }
     });
 };
+AppDelegate.prototype.__defineSetter__("lockState", function (state) {
+   if (typeof state == "undefined") {
+        this._lockState = false;
+   } else if (typeof state == "boolean") {
+       this._lockState = state;
+   } else {
+        this._lockState = false;
+   }
+});
 
 /**
  * clusters attribute
@@ -668,7 +692,10 @@ AppDelegate.prototype.BindingProcEvent = function () {
  */
 AppDelegate.prototype.management = function () {
     this.mgmtSrv = new mgmt(this, cfg, 8100);
-    var clusterList = ["slotFX3", "slotFX2", "slotFX"];
+
+    NSLog.log('trace', '** Setup management service port:8100 **');
+
+    // var clusterList = ["slotFX3", "slotFX2", "slotFX"];
     // NSLog.log('trace', '** Setup automatic Check Cluster Memory full.(%s) **', clusterList);
     // this.mgmtSrv.automaticCheckCluster(clusterList,10);
 

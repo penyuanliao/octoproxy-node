@@ -1,6 +1,6 @@
 {
-  "name": "FxRTMPBridge",
-  "version": "0.2.6",
+  "name": "OctoProxy-node",
+  "version": "0.3.0",
   "update":"2016.10.12 11:00",
   "private": true,
   "dependencies": {
