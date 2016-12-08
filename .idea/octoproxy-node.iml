@@ -3,13 +3,8 @@
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$/../admin-node" />
     <content url="file://$MODULE_DIR$/../configuration" />
-    <content url="file://$MODULE_DIR$/../loggerKit" />
     <content url="file://$MODULE_DIR$" />
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
-    <orderEntry type="library" name="Node.js v4.3.2 Core Modules" level="application" />
-    <orderEntry type="library" name="octoproxy-node node_modules" level="project" />
-    <orderEntry type="library" name="admin-node node_modules" level="project" />
-    <orderEntry type="library" name="loggerKit node_modules" level="project" />
   </component>
 </module>
