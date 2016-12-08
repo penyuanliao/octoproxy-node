@@ -240,9 +240,14 @@ function createNodejsSrv(port) {
         var socket = evt.client;
         const sockName = socket.name;
         var data = evt.data;
-        if (data.charCodeAt(0) == 123) {
+        if (data.length > 0 && data.charCodeAt(0) == 123) {
             //object
-            var json = JSON.parse(data);
+            try {
+                var json = JSON.parse(data);
+            }
+            catch (e) {
+                socket.write(JSON.stringify({"NetStatusEvent":"JSON.Parse.Failed","error":e}));
+            }
             var event = json["event"];
             var _fms = connections[sockName].fms;
             //檢查fms有沒有被建立成功沒有就回傳失敗
