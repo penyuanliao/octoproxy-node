@@ -3,15 +3,18 @@
  */
 
 const object = require("./ObjectType.js");
-
-function deserializer() {
+/**
+ * @constructor Deserializer
+ */
+function Deserializer() {
     this.ref = null;
     this._referenceStrings = [];
     this._objectCount=0;
     this._referenceObjects = [];
     this._referenceDefinitions = [];
 }
-deserializer.prototype.amf3Decode = function (buf) {
+
+Deserializer.prototype.amf3Decode = function (buf) {
     this.buffer = buf;
     this.offset = 0;
     this._objectCount = 0;
@@ -21,7 +24,7 @@ deserializer.prototype.amf3Decode = function (buf) {
     return this.readTypeMarker();
 };
 
-deserializer.prototype.readTypeMarker = function () {
+Deserializer.prototype.readTypeMarker = function () {
     var typeMarker = this.readByte();
     switch (typeMarker){
         case AMF_Constants.AMF3_UNDEFINED:
@@ -55,16 +58,16 @@ deserializer.prototype.readTypeMarker = function () {
     }
 
 };
-deserializer.prototype.readByte = function () {
+Deserializer.prototype.readByte = function () {
     var byte = this.buffer.readUInt8(this.offset++);
     return byte;
 };
-deserializer.prototype.readDouble = function () {
+Deserializer.prototype.readDouble = function () {
     var d = this.buffer.readDoubleBE(this.offset);
     this.offset += 8;
     return d;
 };
-deserializer.prototype.readInteger = function () {
+Deserializer.prototype.readInteger = function () {
     var count = 1;
     var intReference = this.readByte();
     var result = 0;
@@ -96,7 +99,7 @@ deserializer.prototype.readInteger = function () {
  * 0x06 string-data
  * @returns {*}
  */
-deserializer.prototype.readString = function () {
+Deserializer.prototype.readString = function () {
 
     var stringReference = this.readInteger();
 
@@ -129,7 +132,7 @@ deserializer.prototype.readString = function () {
  * Read and deserialize a date
  * date = 0x08 integer-data [ number-data ]
  */
-deserializer.prototype.readDate = function () {
+Deserializer.prototype.readDate = function () {
     var dateReference = this.readInteger();
     if ((dateReference & 0x01) == 0) {
         dateReference = dateReference >> 1;
@@ -155,7 +158,7 @@ deserializer.prototype.readDate = function () {
  * Read amf array to js array
  *  - array = 0x09 integer-data ( [ 1OCTET *amf3-data ] | [OCTET *amf3-data 1] | [ OCTET *amf-data ] )
  */
-deserializer.prototype.readArray = function () {
+Deserializer.prototype.readArray = function () {
     var arrayReference = this.readInteger();
     if ((arrayReference & 0x01) == 0) {
         arrayReference = arrayReference >> 1;
@@ -192,7 +195,7 @@ deserializer.prototype.readArray = function () {
  * Rather than using an array of traitsInfo create value
  * return {object|array}
  */
-deserializer.prototype.readObject = function () {
+Deserializer.prototype.readObject = function () {
     var traitsInfo   = this.readInteger();
     var storedObject = (traitsInfo & 0x01) == 0;
     traitsInfo = traitsInfo >> 1;
@@ -332,7 +335,7 @@ deserializer.prototype.readObject = function () {
 
     return returnObject;
 };
-deserializer.prototype.readXmlString = function () {
+Deserializer.prototype.readXmlString = function () {
     var xmlReference = this.readInteger();
     var length       = xmlReference >> 1;
     var string       = this.buffer.slice(this.offset, this.offset+length).toString();
@@ -340,7 +343,7 @@ deserializer.prototype.readXmlString = function () {
     return string;
 };
 
-deserializer.prototype.readDictionArray = function () {
+Deserializer.prototype.readDictionArray = function () {
 
     var dictArray = {};
     var key = 0;
@@ -357,7 +360,7 @@ deserializer.prototype.readDictionArray = function () {
     return dictArray;
 };
 
-function serializer() {
+function Serializer() {
     /**
      * An array of reference objects per amf body
      * @type {Array}
@@ -382,13 +385,13 @@ function serializer() {
     this.stream = new Buffer(1024);
     this.offset = 0;
 }
-serializer.prototype.amf3Encode = function (data, markerType) {
+Serializer.prototype.amf3Encode = function (data, markerType) {
     this.offset = 0;
 
     this._referenceDefinitions = [];
     this._referenceObjects = [];
     this._referenceStrings = [];
-
+    this.cb = arguments[2];
     this.writeTypeMarker(data, markerType);
     return this.stream.slice(0, this.offset);
 };
@@ -402,7 +405,7 @@ serializer.prototype.amf3Encode = function (data, markerType) {
  * @param data {string | number | object | array}
  * @param markerType {number | null}
  */
-serializer.prototype.writeTypeMarker = function(data, markerType) {
+Serializer.prototype.writeTypeMarker = function(data, markerType) {
     var dataByVal = arguments[2];
 
     if (typeof markerType === "undefined") markerType = null;
@@ -483,7 +486,6 @@ serializer.prototype.writeTypeMarker = function(data, markerType) {
         else if (markerType === AMF_Constants.AMF3_STRING && data.substr(0,5) == "<?xml") {
             markerType = AMF_Constants.AMF3_XMLSTRING;
         }
-
         this.writeTypeMarker(data, markerType);
     }
 
@@ -493,7 +495,7 @@ serializer.prototype.writeTypeMarker = function(data, markerType) {
  * Write an AMF3 integer
  * @param num {number | boolean}
  */
-serializer.prototype.writeInteger = function (num) {
+Serializer.prototype.writeInteger = function (num) {
     num &= 0x1fffffff;
     if ((num & 0xffffff80) == 0) {
         this.writeByte((num & 0x7f));
@@ -521,7 +523,7 @@ serializer.prototype.writeInteger = function (num) {
  * Send string to output stream
  * @param str {string}
  */
-serializer.prototype.writeString = function (str) {
+Serializer.prototype.writeString = function (str) {
     // if (typeof str == "undefined" && str && str === null) str = "";
     var len = str.length;
     if (!len) {
@@ -544,7 +546,7 @@ serializer.prototype.writeString = function (str) {
  * Convert DateTime to AMF date
  * @param date {Date | number}
  */
-serializer.prototype.writeDate = function (date) {
+Serializer.prototype.writeDate = function (date) {
     var timestamp;
     if (date.constructor === Date) {
         timestamp = date.getTime();
@@ -566,7 +568,7 @@ serializer.prototype.writeDate = function (date) {
  * Write a js array back to the amf output stream
  * @param arr {*}
  */
-serializer.prototype.writeArray = function (arr) {
+Serializer.prototype.writeArray = function (arr) {
     // arrays aren't reference here but still counted
     // this._referenceObjects.push(arr);
     var numeric = [];
@@ -574,8 +576,10 @@ serializer.prototype.writeArray = function (arr) {
     var key,value,i;
 
     var keys = Object.keys(arr);
-    // console.log("AllKeys:",keys.length);
-    for (i = 0; i < keys.length; i++) {
+    console.log("AllKeys:",keys.length);
+    var i = keys.length;
+
+    while (i--) {
         key = Number(keys[i]);
         value = arr[i];
 
@@ -596,19 +600,21 @@ serializer.prototype.writeArray = function (arr) {
     //Write the mixed type array to the output stream
     keys = Object.keys(string);
     // console.log("String:",keys.length);
-    for (i = 0; i < keys.length; i++) {
+    i = keys.length;
+    while (i--) {
         key   = keys[i];
         value = string[i];
         this.writeString(key);
         this.writeTypeMarker(value, null);
-
     }
+
     //Write an empty string
     this.writeString(strEmpty);
 
     // console.log("Numeric:",numeric.length);
     // Write the numeric array to ouput stream
-    for (i = 0; i < numeric.length; i++) {
+    i = numeric.length;
+    while (i--) {
         this.writeTypeMarker(numeric[i], null);
     }
 };
@@ -616,7 +622,7 @@ serializer.prototype.writeArray = function (arr) {
  * Write object to ouput stream
  * @param obj {object}
  */
-serializer.prototype.writeObject = function (obj) {
+Serializer.prototype.writeObject = function (obj) {
     if (this.writeObjectReference(obj)) {
         return;
     }
@@ -661,7 +667,8 @@ serializer.prototype.writeObject = function (obj) {
 
             var keys = Object.keys(obj);
 
-            for (i = 0; i < keys.length; i++) {
+            i = keys.length;
+            while (i--) {
                 key = keys[i];
                 // value = obj[key];
                 if (key.substr(0,1) != "_") {
@@ -687,32 +694,38 @@ serializer.prototype.writeObject = function (obj) {
 
         if (writeTraits) {
             this.writeString(className);
-            for (i = 0; i < propertyNames.length; i++) {
+            i = propertyNames.length;
+            while (i--) {
                 this.writeString(propertyNames[i]);
             }
         }
         if (encoding == AMF_Constants.ET_PROPLIST) {
             //Write the sealed values to the output stream.
-            for (i = 0; i < propertyNames.length; i++) {
+            i = propertyNames.length;
+            while (i--) {
                 key = propertyNames[i];
                 this.writeTypeMarker(obj[key], null);
             }
 
         } else if (encoding == AMF_Constants.ET_DYNAMIC) {
             //Write the sealed values to the output stream.
-            for (i = 0; i < propertyNames.length; i++) {
+            var self = this;
+            i = propertyNames.length;
+            while (i--) {
                 key = propertyNames[i];
-                this.writeTypeMarker(obj[key], null);
+                self.writeTypeMarker(obj[key], null);
             }
             //Write remaining properties
             keys = Object.keys(obj);
-            for (i = 0; i < keys.length; i++) {
+
+            i = keys.length;
+            while (i--) {
                 key = keys[i];
                 value = obj[key];
-                if (typeof propertyNames[key] != 'undefined' &&
+                if (typeof propertyNames[key] == 'undefined' &&
                     (key.substr(0,1) != "_") ) {
                     this.writeString(key);
-                    this.writeTypeMarker(value, null);
+                    self.writeTypeMarker(value, null);
                 }
             }
 
@@ -736,14 +749,14 @@ serializer.prototype.writeObject = function (obj) {
  * @param data {*}
  * @return {*}
  */
-serializer.prototype.writeByteArray = function (data) {
+Serializer.prototype.writeByteArray = function (data) {
     if (this.writeObjectReference(data)) {
         return;
     }
     if (typeof data === 'string') {
         //to buffer?
     }else if (data instanceof Buffer) {
-        
+
     }else if (data instanceof DataView) {
         data = new Buffer(new Uint8Array(data.buffer));
     }else if (data instanceof ArrayBuffer) {
@@ -759,7 +772,7 @@ serializer.prototype.writeByteArray = function (data) {
  * Send xml to output stream
  * @param xml{string}
  */
-serializer.prototype.writeXml = function (xml) {
+Serializer.prototype.writeXml = function (xml) {
     if (this.writeObjectReference(data)) {
         return;
     }
@@ -773,7 +786,7 @@ serializer.prototype.writeXml = function (xml) {
     this.writeBinaryString(str);
 
 };
-serializer.prototype.writeDictionArray = function (data) {
+Serializer.prototype.writeDictionArray = function (data) {
     // if (this.writeObjectReference(data)) {
     //     return;
     // }
@@ -798,7 +811,7 @@ serializer.prototype.writeDictionArray = function (data) {
  * @param object {object} object reference to check for reference
  * @return {boolean} true, if the reference was written, false otherwise
  */
-serializer.prototype.writeObjectReference = function (object) {
+Serializer.prototype.writeObjectReference = function (object) {
     var ref = this._referenceObjects.indexOf(JSON.stringify(object));
     ref = (ref != -1) ? ref : false;
     // quickly handle object references
@@ -815,12 +828,12 @@ serializer.prototype.writeObjectReference = function (object) {
 
 };
 
-serializer.prototype.writeBinaryString = function (str) {
+Serializer.prototype.writeBinaryString = function (str) {
     var ref = Buffer.byteLength(str) << 1 | 0x01;
     this.writeInteger(ref);
     this.writeBytes(str);
 };
-serializer.prototype.writeByte = function (data) {
+Serializer.prototype.writeByte = function (data) {
     const len = 1;
     if (this.stream.length < (this.offset + len)) {
         this.stream = Buffer.concat([this.stream, new Buffer(len)], this.stream.length + len);
@@ -828,7 +841,7 @@ serializer.prototype.writeByte = function (data) {
 
     this.stream.writeUInt8(data, this.offset++);
 };
-serializer.prototype.writeBytes = function (data) {
+Serializer.prototype.writeBytes = function (data) {
     var dataBuf = Buffer.from(data);
     var len = dataBuf.length;
     if (this.stream.length < (this.offset + len)) {
@@ -843,7 +856,7 @@ serializer.prototype.writeBytes = function (data) {
     this.offset += len;
 
 };
-serializer.prototype.writeDouble = function (num) {
+Serializer.prototype.writeDouble = function (num) {
     const len = 8;
     if (this.stream.length < (this.offset + len)) {
         this.stream = Buffer.concat([this.stream, new Buffer(len)], this.stream.length + len);
@@ -853,14 +866,14 @@ serializer.prototype.writeDouble = function (num) {
 
     this.offset += 8;
 };
-serializer.prototype.encodeDynamic = function (str) {
+Serializer.prototype.encodeDynamic = function (str) {
     var hex = Number(str.length).toString(16);
     var hexHeader = '00' + (hex.length % 2 == 1 ? "0":"") + hex;
     var buf = new Buffer(hexHeader, 'hex');
     var data = new Buffer(str);
     return Buffer.concat([buf, data], buf.length + data.length);
 };
-serializer.prototype.MARKER_TYPE_MAP = {
+Serializer.prototype.MARKER_TYPE_MAP = {
     0x01:function () {},
     0x02:function () {},
     0x03:function () {},
@@ -996,8 +1009,8 @@ TypeLoader.loadType = function (className) {
     return cls;
 
 };
-module.exports = {
-    deserializer:deserializer,
-    serializer:serializer,
+module.exports = exports = {
+    deserializer:Deserializer,
+    serializer:Serializer,
     AMF_Constants:AMF_Constants
 };
