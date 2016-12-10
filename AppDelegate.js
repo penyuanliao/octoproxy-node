@@ -46,27 +46,31 @@ const policy = '<?xml version=\"1.0\"?>\n<cross-domain-policy>\n<allow-access-fr
 const TRACE_SOCKET_IO = true;
 /** 多執行緒 **/
 function noop() {}
-
+/**
+ *
+ * @constructor AppDelegate
+ * @property server
+ * @property clusters
+ * @property clusterNum
+ * @property awaitTrashTimes
+ * @property roundrobinNum
+ * @property gameLBSrv
+ */
 function AppDelegate() {
 
     /** webSocket Server **/
-    this.server;
-    /** Sub Service **/
-    this.clusters = [];
-    this.clusterNum = 0;
-
-    this.garbageDump = []; //回收記憶體太大的
     this.awaitTrashTimes = undefined; //times
-
+    this.server          = undefined;
+    this.clusterNum      = 0;
+    this.clusters        = {};
+    this.garbageDump     = []; //回收記憶體太大的
     /** [roundrobin] Client go to sub-service index **/
-    this.roundrobinNum = [];
-
+    this.roundrobinNum   = [];
     /** The lockState not allows user to connect service **/
-    this._lockState = false;
-    NSLog.log('info','LockState:[%s]', this.lockState);
+    this._lockState      = false;
     /** casino load balance **/
-    this.gameLBSrv = new gLBSrv(cfg.gamSLB);
-
+    this.gameLBSrv       = new gLBSrv(cfg.gamSLB);
+    NSLog.log('info','LockState:[%s]', this.lockState);
     NSLog.log('debug',"** Initialize octoproxy.js **");
     this.init();
 }
@@ -74,6 +78,7 @@ function AppDelegate() {
  * 初始化
  * **/
 AppDelegate.prototype.init = function () {
+
     utilities.autoReleaseGC(); //** 手動 1 sec gc
     NSLog.log('info' , 'Game server load balance enabled: [%s]', cfg.gamSLB.enabled);
     if (cfg.gamSLB.enabled) {
@@ -86,13 +91,28 @@ AppDelegate.prototype.init = function () {
     // 1. setup child process fork
     this.setupCluster(cfg.forkOptions);
     // 2. create listen 80 port server
-    NSLog.log('info', 'Ready start create server');
-    this.createServer(cfg.srvOptions);
+
+    var self = this;
+    var count = 10;
+    if (cfg["env"] == "development") {
+        NSLog.log('info', 'Ready to start create server.');
+        self.createServer(cfg.srvOptions);
+    }else {
+        NSLog.log('info', 'Ready to start create server wait...',count);
+        setTimeout(waitingHandle,1000);
+
+        function waitingHandle() {
+            NSLog.log('info', 'Ready start create server wait...',--count);
+            if (count == 0) self.createServer(cfg.srvOptions);
+            else setTimeout(waitingHandle,1000);
+        }
+    }
 
     this.BindingProcEvent();
     
     this.management();
 };
+
 /**
  * 建立tcp伺服器不使用node net
  * @param opt
@@ -157,12 +177,13 @@ AppDelegate.prototype.createServer = function (opt) {
 
             err = handle.readStart(); //讀header封包
 
-            if(err){
+            if (err) {
                 self.rejectClientExcpetion(handle ,"UV_ERR_RS");
                 handle.close(close_callback);
             }
 
             //onread_roundrobin(handle); //平均分配資源
+
             handle.closeWaiting = setTimeout(function () {
                 handle.closeWaiting = undefined;
                 self.rejectClientExcpetion(handle ,"CON_TIMEOUT");
@@ -170,7 +191,7 @@ AppDelegate.prototype.createServer = function (opt) {
             }, closeWaitTime);
         };
 
-        this.server = tcp_handle;
+        self.server = tcp_handle;
 
     }
     catch (e) {
@@ -187,7 +208,7 @@ AppDelegate.prototype.createServer = function (opt) {
         // NSLog.log('debug',"reload request header and assign, nread:", nread);
 
         var handle = this;
-        var srv = self.server;
+        // var srv = self.server;
 
         // nread > 0 read success
         if (nread < 0) {
@@ -237,8 +258,6 @@ AppDelegate.prototype.createServer = function (opt) {
             // NSLog.log('trace','socket - namespace - ', namespace);
             source = buffer;
         }
-        // /(\w+)(\?|\&)([^=]+)\=([^&]+)/i < once
-        //  < multi
         /** TODO 2016/10/06 -- ADMIN DEMO **/
         /*if (headers["sec-websocket-protocol"] == "admin") {
             var cluster = self.clusters["administrator"][0];
@@ -537,7 +556,10 @@ AppDelegate.prototype.setupCluster = function (opt) {
 
             cluster.emitter.on('socket_handle', function (message, handle) {
                 
-            })
+            });
+            cluster.emitter.on('status', function (message) {
+                NSLog.log('warning', message);
+            });
 
         }
         NSLog.log('info',"Cluster active number:", num);
@@ -712,3 +734,33 @@ AppDelegate.prototype.ebbMoveAssign = function (handle, source, namespace) {
 
 
 module.exports = exports = AppDelegate;
+
+
+/**
+ * linux tcp_wrap tcp wrapper
+ * @namespace handle
+ **/
+/** get tcp ip address or port
+ * @function getpeername
+ * @memberof handle
+ **/
+/** tcp read strat
+ * @function readStart
+ * @memberof handle
+ **/
+/** tcp read stop
+ * @function readStop
+ * @memberof handle
+ **/
+/** tcp listen port
+ * @function listen
+ * @memberof handle
+ **/
+/**
+ * @function TCP
+ * @memberof TCP
+ **/
+/**
+ * @function WriteWrap
+ * @memberof WriteWrap
+ **/
