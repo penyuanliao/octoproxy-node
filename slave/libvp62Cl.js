@@ -15,7 +15,7 @@ const util          = require('util');
 const path          = require('path');
 const fs            = require('fs');
 const libRtmp       = require('../fxNodeRtmp').RTMP;
-const amfUtils       = require('../fxNodeRtmp').amfUtils;
+const amfUtils      = require('../fxNodeRtmp').amfUtils;
 const log           = require('../fxNodeRtmp').AMFLOG;
 const isWorker      = ('NODE_CDID' in process.env);
 const events        = require('events');
@@ -23,36 +23,34 @@ const isMaster      = (isWorker === false);
 const cdid          = process.env.NODE_CDID || 0;
 const NSLog         = fxNetSocket.logger.getInstance();
 if (isMaster)
-    NSLog.configure({logFileEnabled:false, consoleEnabled:true, level:'trace', dateFormat:'[yyyy-MM-dd hh:mm:ss]',filePath:"./",fileName:'libvp62_ID' + cdid, maximumFileSize: 1024 * 1024 * 100});
+    NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:'trace', dateFormat:'[yyyy-MM-dd hh:mm:ss]',filePath:"./",fileName:'libvp62_ID' + cdid, maximumFileSize: 1024 * 1024 * 100});
 
-const MUXER_NONE = "none";
-const MUXER_FLV = "flv";
+const MUXER_NONE    = "none";
+const MUXER_FLV     = "flv";
+const MUXER_AVC     = "avc1";
 
 util.inherits(libvp62Cl, events.EventEmitter);
 
 function libvp62Cl(options) {
 
     /* Variables */
+    //noinspection JSUnresolvedVariable
+    this.uptime        = new Date().getTime();
 
-    this.connections = [];
+    this.flvHeader     = true; // once flv Header
 
-    this._muxer = "flv";
+    this.AVC_HEADER    = new Buffer([0,0,0,1]);
+    this._muxer        = MUXER_AVC;
     this._videocodecid = "VP62";
 
-    /* rtmp config - Variables */
-    this.rtmpConnectListener = true; //send request "connect" event to be received data.
-    this.uptime = new Date().getTime();
-    // this.init();
+    options = (typeof options == "undefined") ? "video/daabb/video0" : options;//daabb/video0
 
-    options = (typeof options == "undefined") ? "video/daabb/video0" : options;//
-    
     this.config = {
         //audio rtmp /video/daaic/video0
         bFMSHost:'43.251.79.212',//43.251.79.212,183.182.64.182,103.24.83.249
         bFMSPort:1935,
         videoPaths:[options]
     };
-    // console.log(options);
     var videoPaths = this.config.videoPaths;
 
     for (var vPthNum = 0; vPthNum < videoPaths.length; vPthNum++ ) {
@@ -65,10 +63,7 @@ function libvp62Cl(options) {
     this.fxFile = fs.createWriteStream('rtmpData.JSON',{ flags:'w' });
     this.flag_write_enabled = false;
 
-
-    this.flvHeader = true;
-
-};
+}
 
 libvp62Cl.prototype.init = function () {
     this.initProcessEvent();
@@ -86,20 +81,9 @@ libvp62Cl.prototype.setupFMSClient = function (namespace) {
     _rtmp = this.connect(uri);
 
     _rtmp.name = namespace;
-    //存在array裡面方便讀取
-    if (!this.connections[namespace] || typeof this.connections[namespace] == 'undefined'
-        || this.connections[namespace] == "" || this.connections[namespace] == null) {
-        this.connections[namespace] = _rtmp;
-    }else
-    {
-        debug("ERROR video of repeated impact to ", namespace);
-    };
     this.rtmp = _rtmp;
+    var self = this;
 
-};
-libvp62Cl.prototype.onMetaDataHandler = function (obj) {
-    this.videoCodecID = obj[1]["videocodecid"];
-    this.emit(this.StreamEvent.META_DATA, obj);
 };
 /**
  * 連線到伺服器
@@ -113,10 +97,6 @@ libvp62Cl.prototype.connect = function (uri) {
     NSLog.log('trace', "** Start IP address: %s **", uri);
 
     rtmp = libRtmp.RTMPClient.createRTMPNetStream(uri);
-
-    var onMetadata = this.onMetaDataHandler;
-
-    rtmp.on(this.StreamEvent.META_DATA, onMetadata.bind(self));
 
     // #2 接收FMS訊息
     rtmp.on('message', function (message) {
@@ -208,8 +188,8 @@ libvp62Cl.prototype.connect = function (uri) {
                 NSLog.log('debug','PacketSize(%s) > total(%s) [cur(%s), nbufs(%s)] end:%s', (body_size + hdrSize[fmt] + subPackageCount) , rtmp.nbufs.length, data[0], nbufs[0], subPackageCount);
 
                 if ((body_size + hdrSize[fmt] + subPackageCount) > rtmp.nbufs.length || csid > 4) {
-                    NSLog.log("debug", "//// RTMPPacket_IsNotReady() ////");
-                    NSLog.log('debug', "ChunkCount[%s], BodySize[%s]:", chunkIdx, body_size);
+                    NSLog.log("debug", "# ----- RTMPPacket_IsNotReady() ----- #");
+                    NSLog.log('debug', "ChunkCount[%s], BodySize[%s]", chunkIdx, body_size);
                     return;
                 }
 
@@ -242,6 +222,7 @@ libvp62Cl.prototype.connect = function (uri) {
 
                         if (ctrl == rtmp.CONTROL_ID.INFO_ON2_VP6 || ctrl == rtmp.CONTROL_ID.INFO_ON2_H264) {
                             // don't something
+                            log.logHex(videoData);
                             continue;
                         }
 
@@ -253,12 +234,19 @@ libvp62Cl.prototype.connect = function (uri) {
 
                             self.fileWrite(curr);
                             lastOutput = curr.toString('base64');
-                        } else {
+                        }
+                        else if (self.muxer == MUXER_AVC){
+                            lastOutput = self.createAVCVideoHeader(videoData);
+                        }
+                        else {
                             lastOutput = videoData.toString('base64');
+                            if (videoData[0] == 0x17 && videoData[1] == 0x00) {
+                                self.emit("naluInfo", lastOutput);
+                            }
                         }
 
                         self.emit(self.StreamEvent.VIDEO_DATA, lastOutput, ctrl, timestamp);
-                        if (self.videoCodecID == "H264"){
+                        if (self.videoCodecID == "H264" || self.videoCodecID == "avc1"){
                             NSLog.log('trace', 'CTRL:K-frame(%s) I-frame(%s)', ctrl == rtmp.CONTROL_ID.KEY_FRAME_H264, ctrl == rtmp.CONTROL_ID.INTER_FRAME_H264);
                         }else {
                             NSLog.log('trace', 'CTRL:K-frame(%s) I-frame(%s) Info(%s)', ctrl == rtmp.CONTROL_ID.KEY_FRAME_ON2_VP6, ctrl == rtmp.CONTROL_ID.INTER_FRAME_ON2_VP6, ctrl == rtmp.CONTROL_ID.INFO_ON2_VP6);
@@ -276,7 +264,7 @@ libvp62Cl.prototype.connect = function (uri) {
                     if (body_size > 0) ctrl = curr_nbufs.readUInt8(hdrSize[fmt] + 1);
 
                     audioSize = body_size;
-                    NSLog.log('warning','The audio stream Not support output!!',body_size);
+                    NSLog.log('warning','The audio stream Not support output!!',body_size, subPackageCount);
 
 
                 } else if (typeID == rtmp.PacketType.PACKET_TYPE_METADATA){
@@ -292,7 +280,8 @@ libvp62Cl.prototype.connect = function (uri) {
 
                     rtmp.pingResponse(num);
 
-                }else if (typeID == rtmp.PacketType.PACKET_TYPE_FLV) {
+                }
+                else if (typeID == rtmp.PacketType.PACKET_TYPE_FLV) {
                     NSLog.log("info", "Aggregate TYPE");
                     var aggregates = curr_nbufs.slice(offset,curr_nbufs.length);
                     aggregates = self.filter0xC4Header(aggregates, subPackageCount, sChunksize);
@@ -330,7 +319,11 @@ libvp62Cl.prototype.connect = function (uri) {
                                     fileHeader = self.createVideoHeader(body_size, timestamp, streamID);
                                     videoData = Buffer.concat([fileHeader,videoData.slice(0,videoData.length)], fileHeader.length + videoData.length);
                                     lastOutput = videoData.toString('base64');
-                                }else {
+                                }
+                                else if (self.muxer == MUXER_AVC){
+                                    lastOutput = self.createAVCVideoHeader(videoData);
+                                }
+                                else {
                                     lastOutput = videoData.toString('base64');
                                 }
 
@@ -372,7 +365,8 @@ libvp62Cl.prototype.connect = function (uri) {
                 }
 
             }
-            else if ((fmt == 2 || fmt == 3) && csid < 5) {
+            else if ((fmt == 2 || fmt == 3) && csid < 5)
+            {
                 /* Extended header : 0x82 Unknown H264???*/
                 if (rtmp.nbufs[0] == 0x82 && (rtmp.nbufs[5] == rtmp.usrCtrlMsg.BUFFER_EMPTY || rtmp.nbufs[5] == rtmp.usrCtrlMsg.BUFFER_READY)) {
                     if (rtmp.nbufs.length < 10) return; // 長度不夠等資料齊
@@ -380,7 +374,7 @@ libvp62Cl.prototype.connect = function (uri) {
                     rtmp.nbufs = rtmp.nbufs.slice(10, rtmp.nbufs.length);
                     continue;
                 }else if (rtmp.nbufs[0] == 0x84 && rtmp.nbufs.length >= 5) {
-                    if (rtmp.nbufs[4] == rtmp.CONTROL_ID.HE_AAC || rtmp.nbufs[4] == rtmp.CONTROL_ID.ASAO_AUDIO) {
+                    if (rtmp.nbufs[4] == rtmp.CONTROL_ID.HE_AAC || rtmp.nbufs[4] == rtmp.CONTROL_ID.ASAO_AUDIO || rtmp.nbufs[4] === rtmp.CONTROL_ID.UNKNOWN_AUDIO) {
                         // timestamp = (rtmp.nbufs.readUInt8(1) << 16) + (rtmp.nbufs.readUInt8(2) << 8) + rtmp.nbufs.readUInt8(3);
 
                         if (rtmp.nbufs.length < (audioSize + 4)) return;
@@ -395,8 +389,18 @@ libvp62Cl.prototype.connect = function (uri) {
                         rtmp.nbufs = Buffer.concat([rtmp.previousHeader["headerBuffer"], rtmp.nbufs.slice(4, rtmp.nbufs.length)], rtmp.previousHeader["headerBuffer"].length + rtmp.nbufs.length -4);
                     }else {
                         NSLog.log('error', '{ [0x84] tag is not video & audio }');
-                        log.logHex(rtmp.nbufs);
+
+                        while (rtmp.nbufs[0] == 0x84) {
+                            if (rtmp.nbufs.toString().substr(0,24).indexOf('onGetFPS') != -1) {
+                                rtmp.nbufs = rtmp.nbufs.slice(24,rtmp.nbufs.length);
+                            }
+                        }
+                        if (rtmp.nbufs.length > 0) continue;
+
+                        NSLog.log('error', 'DROP onGetFPS() last Data:');
+                        // rtmp.socket.destroy();
                         process.exit();
+                        log.logHex(rtmp.nbufs);
                     }
 
                     NSLog.log('trace', '--------------- 0x84 ------------------');
@@ -421,17 +425,23 @@ libvp62Cl.prototype.connect = function (uri) {
                     NSLog.log('verbose',"0xC4 extended header typeID[%s] Curr Len[%s] Former Len[%s]", rtmp.previousHeader["typeID"], rtmp.nbufs.length-1, rtmp.previousHeader["bodySize"]);
 
                     if (rtmp.nbufs.length < rtmp.previousHeader["bodySize"]) return;
-
+                    // Aggregate //
                     if (rtmp.previousHeader["typeID"] == rtmp.PacketType.PACKET_TYPE_FLV) {
                         rtmp.nbufs = Buffer.concat([rtmp.previousHeader["headerBuffer"], rtmp.nbufs.slice(1, rtmp.nbufs.length)], rtmp.previousHeader["headerBuffer"].length + rtmp.nbufs.length -1);
                         NSLog.log('trace', '--------------- 0xC4 Aggregate ------------------');
+                        continue;
+                    }
+                    if (rtmp.nbufs[1] === rtmp.CONTROL_ID.UNKNOWN_AUDIO) {
+                        NSLog.log('trace', '{ 2.Audio Packet DROP }',rtmp.nbufs.length, audioSize);
+
+                        rtmp.nbufs = rtmp.nbufs.slice((audioSize+1), rtmp.nbufs.length);
                         continue;
                     }
 
                     // body size //
                     curr_nbufs = rtmp.nbufs.slice(1, rtmp.previousHeader["bodySize"]);
                     // filter 0xC4
-                    filterC4Count = self.totalRTMPPacket(curr_nbufs, sChunksize);
+                    filterC4Count = self.totalRTMPPacket(curr_nbufs.length, sChunksize);
                     curr_nbufs = self.filter0xC4Header(curr_nbufs, filterC4Count, sChunksize);
                     ctrl = curr_nbufs.readUInt8(0);
                     if (self.muxer == "flv") {
@@ -439,13 +449,17 @@ libvp62Cl.prototype.connect = function (uri) {
                         fileHeader = self.createVideoHeader(curr_nbufs.length, 100, 1);
                         curr_nbufs = Buffer.concat([fileHeader, curr_nbufs], fileHeader.length + curr_nbufs.length);
                         lastOutput = curr_nbufs.toString('base64');
-                    }else {
+                    }
+                    else if (self.muxer == MUXER_AVC){
+                        lastOutput = self.createAVCVideoHeader(curr_nbufs);
+                    }
+                    else {
                         lastOutput = curr_nbufs.toString('base64');
                     }
                     self.emit(self.StreamEvent.VIDEO_DATA, lastOutput, ctrl, 100);
-
-                    rtmp.nbufs = rtmp.nbufs.slice(rtmp.nbufs.length, rtmp.nbufs.length);
-                    NSLog.log('verbose',"# Ended 0xC4 nbufs.length[%s]", rtmp.nbufs.length);
+                    rtmp.nbufs = rtmp.nbufs.slice((rtmp.previousHeader["bodySize"] + filterC4Count + 1), rtmp.nbufs.length);
+                    // rtmp.nbufs = rtmp.nbufs.slice(rtmp.nbufs.length, rtmp.nbufs.length);
+                    NSLog.log('verbose',"# Ended 0xC4 nbufs.length[%s]", rtmp.nbufs.length, typeof rtmp.previousHeader["bodySize"], curr_nbufs.length);
                     return;
                 }
 
@@ -471,6 +485,7 @@ libvp62Cl.prototype.connect = function (uri) {
             else {
                 // unknown basic header //
                 rtmp.nbufs = undefined;
+                NSLog.log("error", "unknown basic header!!!");
                 return;
             }
         }
@@ -484,6 +499,8 @@ libvp62Cl.prototype.connect = function (uri) {
     // #4 FMS關閉的事件
     rtmp.on('close', function (args) {
         NSLog.log("error","RTMP connection closed:",args);
+        self.rtmp.removeAllListeners();
+        self.setupFMSClient(rtmp.name);
     });
     // 沒有解析的資料
     rtmp.on('data', function (chunk) {
@@ -494,17 +511,26 @@ libvp62Cl.prototype.connect = function (uri) {
             rtmp.pingResponse(num);
         }
     });
+    rtmp.on(self.StreamEvent.STATUS, function (event) {
+        self.emit(self.StreamEvent.STATUS, event);
+    });
+
+    var onMetadata = this.onMetaDataHandler;
+
+    rtmp.on(this.StreamEvent.META_DATA, onMetadata.bind(self));
 
     return rtmp;
+};
+libvp62Cl.prototype.onMetaDataHandler = function (obj) {
+    this.videoCodecID = obj[1]["videocodecid"];
+    this.emit(this.StreamEvent.META_DATA, obj);
 };
 /** send stream play name **/
 libvp62Cl.prototype.streamPlay = function (rtmp, videoName) {
     rtmp.netStreamConnect(videoName); //ex: play('ddabb');
     rtmp = null;
 };
-libvp62Cl.prototype.close = function () {
-    this.rtmp.socket.destroy();
-};
+
 /** combine data **/
 libvp62Cl.prototype.concatData = function (rtmp, data) {
     /* (1) detect packet size */
@@ -570,35 +596,11 @@ libvp62Cl.prototype.filter0xC4Header = function (videoData, filterC4Count, sChun
     }
     return videoData;
 };
-
-libvp62Cl.prototype.sliceData = function (data) {
-    //TODO 1.合併資料
-
-    //TODO 2.檢查basicHeader
-
-    //TODO 2.1 檢查 StreamID 4 ?!
-
-
-};
-
 libvp62Cl.prototype.writeUInt24BE = function(buffer,value, offset) {
     buffer[offset + 2] = value & 0xff;
     buffer[offset + 1] = value >> 8;
     buffer[offset] = value >> 16;
 };
-
-libvp62Cl.prototype.StreamEvent = {
-    "META_DATA":    "onMetaData",
-    "VIDEO_DATA":   "onVideoData",
-    "AUDIO_DATA":   "onAudioData",
-    "CHUNK_SIZE":   "onSetChunkSize",
-    "BANDWIDTH" :   "onBandwidth",
-    "SAMPLE_ACCESS":"onSampleAccess",
-    "GET_FPS":      "onGetFPS",
-    "STATUS":       "onStatus"
-};
-
-
 /** cluster parent send message event **/
 libvp62Cl.prototype.onMessage = function (data) {
     // libvp62Cl.super_.prototype.onMessage(data).apply(this,[data]);
@@ -622,20 +624,18 @@ libvp62Cl.prototype.onMessage = function (data) {
             socket.emit("connect");
             socket.emit('data',new Buffer(data.data));
             socket.resume();
-            return;
         }else if(data.evt == "processInfo") {
 
             process.send({"evt":"processInfo", "data" : {"memoryUsage":process.memoryUsage(),"connections": Object.keys(this.connections).length}})
         }else{
             debug('out of hand. dismiss message');
-        };
+        }
 
-    };
+    }
 
 };
 /**
  *
- * @param flvHeader {boolean}
  * @param body_size {number}
  * @param timestamp {number}
  * @param streamID {number}
@@ -663,6 +663,25 @@ libvp62Cl.prototype.createVideoHeader = function (body_size, timestamp, streamID
     self.flvHeader = false;
     return fileHeader;
 };
+libvp62Cl.prototype.createAVCVideoHeader = function (videoData) {
+
+    var frames = undefined;
+    if (videoData.readUInt16BE(0) == 0x1700) {
+        var offset = 13;
+        //SRS
+        var SRSLen = videoData.readUInt16BE(11);
+        var SRS = videoData.slice(offset, SRSLen);
+        offset += SRSLen;
+        offset += 3;
+        var PPS = videoData.slice(offset, videoData.length);
+
+        frames = Buffer.concat([this.AVC_HEADER,SRS,this.AVC_HEADER,PPS], this.AVC_HEADER.length*2 + SRS.length + PPS.length);
+    } else {
+        frames = Buffer.concat([this.AVC_HEADER,videoData.slice(9,videoData.length)], this.AVC_HEADER.length + videoData.length -9);
+    }
+    this.fileWrite(frames);
+    return frames.toString('base64');
+};
 libvp62Cl.prototype.setPreviousHeader = function (bodySize, typeID, headerBuffer) {
     if (typeof bodySize != "undefined") this.rtmp.previousHeader.bodySize = bodySize;
     if (typeof typeID != "undefined") this.rtmp.previousHeader.typeID = typeID;
@@ -671,6 +690,7 @@ libvp62Cl.prototype.setPreviousHeader = function (bodySize, typeID, headerBuffer
 /** close stream **/
 libvp62Cl.prototype.close = function () {
     this.rtmp.close();
+    this.rtmp.socket.destroy();
 };
 libvp62Cl.prototype.pause = function () {
     this.rtmp.pause();
@@ -704,8 +724,8 @@ libvp62Cl.prototype.__defineSetter__("videoCodecID", function (codecID) {
     if (typeof codecID != "undefined" && codecID) {
         this._videocodecid = codecID;
     }
-
-    if (codecID.toUpperCase() == "H264" || codecID.toUpperCase() == "AVC1") this.muxer = MUXER_NONE;
+    console.log(this._videocodecid);
+    if (codecID.toUpperCase() == "H264" || codecID.toUpperCase() == "AVC1") this.muxer = MUXER_NONE; // this.muxer = MUXER_AVC;
 
     if (codecID.toUpperCase() == "VP62" || codecID.toUpperCase() == "VP6A" || codecID.toUpperCase() == "VP6F") this.muxer = MUXER_FLV;
 
@@ -724,16 +744,26 @@ libvp62Cl.prototype.fileWrite = function (data) {
         this.fxFile.write(data);
     }
 };
-libvp62Cl.prototype.delegation = function () {
-    this.emit.apply(this, arguments);
+libvp62Cl.prototype.release = function () {
+
 };
 
+libvp62Cl.prototype.StreamEvent = {
+    "META_DATA":    "onMetaData",
+    "VIDEO_DATA":   "onVideoData",
+    "AUDIO_DATA":   "onAudioData",
+    "CHUNK_SIZE":   "onSetChunkSize",
+    "BANDWIDTH" :   "onBandwidth",
+    "SAMPLE_ACCESS":"onSampleAccess",
+    "GET_FPS":      "onGetFPS",
+    "STATUS":       "onStatus"
+};
 
 module.exports = exports = libvp62Cl;
 
 if (process.env.test) {
     var service = new libvp62Cl();
     service.on(service.StreamEvent.STATUS, function (obj) {
-        console.log(obj);
+        console.log("service.StreamEvent.STATUS ",obj);
     })
 }
