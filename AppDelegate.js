@@ -109,7 +109,7 @@ AppDelegate.prototype.init = function () {
     }
 
     this.BindingProcEvent();
-    
+
     this.management();
 };
 
@@ -168,7 +168,6 @@ AppDelegate.prototype.createServer = function (opt) {
             }
             NSLog.log('info', 'Client Handle onConnection(%s:%s)', out.address, out.port);
 
-            // console.log(out);
             handle.setNoDelay(true);
 
             // handle.setKeepAlive(true, 30); // handle(sec) socket(msecs)
@@ -202,7 +201,6 @@ AppDelegate.prototype.createServer = function (opt) {
     NSLog.log('debug','listen:',opt.port);
 
     /** reload request header and assign **/
-    //noinspection JSUnresolvedFunction
     function onread_url_param(nread, buffer) {
 
         // NSLog.log('debug',"reload request header and assign, nread:", nread);
@@ -212,7 +210,6 @@ AppDelegate.prototype.createServer = function (opt) {
 
         // nread > 0 read success
         if (nread < 0) {
-            //noinspection JSUnresolvedVariable
             if (nread == uv.UV_ECONNRESET) {
                 NSLog.log('debug','connection reset by peer.');
             }
@@ -255,7 +252,6 @@ AppDelegate.prototype.createServer = function (opt) {
             mode = "socket";
             namespace = buffer.toString('utf8');
             namespace = namespace.replace("\0","");
-            // NSLog.log('trace','socket - namespace - ', namespace);
             source = buffer;
         }
         /** TODO 2016/10/06 -- ADMIN DEMO **/
@@ -410,16 +406,6 @@ AppDelegate.prototype.createServer = function (opt) {
         }else if(mode === 'http' && isBrowser)
         {
             NSLog.log('trace','socket is http connection');
-            // var socket = new net.Socket({
-            //     handle:handle,
-            //     allowHalfOpen:httpServer.allowHalfOpen
-            // });
-            // socket.readable = socket.writable = true;
-            // socket.server = httpServer;
-            // httpServer.emit("connection", socket);
-            // socket.emit("connect");
-            // socket.emit('data',new Buffer(buffer));
-            // socket.resume();
             /** TODO 2016/10/06 -- ADMIN DEMO **/
             /*
             var cluster = self.clusters["administrator"][0];
@@ -717,10 +703,6 @@ AppDelegate.prototype.management = function () {
 
     NSLog.log('trace', '** Setup management service port:8100 **');
 
-    // var clusterList = ["slotFX3", "slotFX2", "slotFX"];
-    // NSLog.log('trace', '** Setup automatic Check Cluster Memory full.(%s) **', clusterList);
-    // this.mgmtSrv.automaticCheckCluster(clusterList,10);
-
 };
 /** not implement **/
 AppDelegate.prototype.ebbMoveAssign = function (handle, source, namespace) {
@@ -763,4 +745,15 @@ module.exports = exports = AppDelegate;
 /**
  * @function WriteWrap
  * @memberof WriteWrap
+ **/
+/**
+ * @namespace uv
+ **/
+/**
+ * @function UV_ECONNRESET
+ * @memberof uv
+ **/
+/**
+ * @function UV_EOF
+ * @memberof uv
  **/

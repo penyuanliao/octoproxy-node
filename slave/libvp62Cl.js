@@ -33,7 +33,11 @@ util.inherits(libvp62Cl, events.EventEmitter);
 
 function libvp62Cl(options) {
 
+    events.EventEmitter.call(this);
     /* Variables */
+
+    options = (typeof options == "undefined") ? "video/daabb/video0" : options;//daabb/video0
+
     //noinspection JSUnresolvedVariable
     this.uptime        = new Date().getTime();
 
@@ -42,8 +46,6 @@ function libvp62Cl(options) {
     this.AVC_HEADER    = new Buffer([0,0,0,1]);
     this._muxer        = MUXER_AVC;
     this._videocodecid = "VP62";
-
-    options = (typeof options == "undefined") ? "video/daabb/video0" : options;//daabb/video0
 
     this.config = {
         //audio rtmp /video/daaic/video0
@@ -62,6 +64,8 @@ function libvp62Cl(options) {
 
     this.fxFile = fs.createWriteStream('rtmpData.JSON',{ flags:'w' });
     this.flag_write_enabled = false;
+
+    this.lastUpdateTime = undefined
 
 }
 
@@ -93,11 +97,9 @@ libvp62Cl.prototype.setupFMSClient = function (namespace) {
 libvp62Cl.prototype.connect = function (uri) {
     var self = this;
     var rtmp = undefined;
-    // #1 建立連線
     NSLog.log('trace', "** Start IP address: %s **", uri);
-
+    // #1 建立連線
     rtmp = libRtmp.RTMPClient.createRTMPNetStream(uri);
-
     // #2 接收FMS訊息
     rtmp.on('message', function (message) {
         //檢查FMS訊息Type = 20(0x14 invoke message structure)
@@ -203,6 +205,7 @@ libvp62Cl.prototype.connect = function (uri) {
                     chunkIdx,_count,curr_nbufs[0].toString(16), fmt, csid, timestamp, body_size, typeID, streamID, rtmp.nbufs.length);
                 if (rtmp.nbufs.length > 0) {
                     NSLog.log('info','## Next Packet Header:0x%s ##', rtmp.nbufs[0].toString(16));
+                    if (rtmp.nbufs[0] == 0xC4 && rtmp.nbufs[1] == 0x44 && body_size == 0) curr_nbufs = rtmp.nbufs.slice(1, rtmp.nbufs.length);
                 }
                 if (typeID == rtmp.PacketType.PACKET_TYPE_VIDEO) {
                     self.setPreviousHeader(body_size, typeID, curr_nbufs.slice(0, offset)); // make previous header
@@ -222,7 +225,7 @@ libvp62Cl.prototype.connect = function (uri) {
 
                         if (ctrl == rtmp.CONTROL_ID.INFO_ON2_VP6 || ctrl == rtmp.CONTROL_ID.INFO_ON2_H264) {
                             // don't something
-                            log.logHex(videoData);
+                            // log.logHex(videoData);
                             continue;
                         }
 
@@ -424,6 +427,9 @@ libvp62Cl.prototype.connect = function (uri) {
                     NSLog.log('verbose', "C0 + %s", rtmp.nbufs[0] - 0xC0 );
                     NSLog.log('verbose',"0xC4 extended header typeID[%s] Curr Len[%s] Former Len[%s]", rtmp.previousHeader["typeID"], rtmp.nbufs.length-1, rtmp.previousHeader["bodySize"]);
 
+
+
+
                     if (rtmp.nbufs.length < rtmp.previousHeader["bodySize"]) return;
                     // Aggregate //
                     if (rtmp.previousHeader["typeID"] == rtmp.PacketType.PACKET_TYPE_FLV) {
@@ -437,6 +443,7 @@ libvp62Cl.prototype.connect = function (uri) {
                         rtmp.nbufs = rtmp.nbufs.slice((audioSize+1), rtmp.nbufs.length);
                         continue;
                     }
+
 
                     // body size //
                     curr_nbufs = rtmp.nbufs.slice(1, rtmp.previousHeader["bodySize"]);
@@ -495,12 +502,15 @@ libvp62Cl.prototype.connect = function (uri) {
     // #3 FMS錯誤訊息事件
     rtmp.on("error", function (args) {
         NSLog.log( "error","RTMP ERROR", args);
+        rtmp.socket.destroy();
     });
     // #4 FMS關閉的事件
     rtmp.on('close', function (args) {
         NSLog.log("error","RTMP connection closed:",args);
         self.rtmp.removeAllListeners();
-        self.setupFMSClient(rtmp.name);
+        setTimeout(function () {
+            self.setupFMSClient(rtmp.name);
+        },5000);
     });
     // 沒有解析的資料
     rtmp.on('data', function (chunk) {
@@ -545,32 +555,30 @@ libvp62Cl.prototype.concatData = function (rtmp, data) {
     if (!rtmp.RTMP_ReadPacket({buf:rtmp.nbufs}) ) {
 
         NSLog.log('error', 'Is not RTMP ReadPacket:%s rtmp.nbufs.length:%s ', rtmp.RTMP_ReadPacket(rtmp.nbufs), rtmp.nbufs.length );
-        log.logHex(rtmp.nbufs);
-        process.exit();
+
         var nextOffset = rtmp.nbufs.indexOf('440000', 0, 'hex');
 
         if (nextOffset != -1) {
 
-            console.error('----- DELETE UNKNOWN DATA (%s) -----', nextOffset);
+            NSLog.log('warning','----- DELETE UNKNOWN DATA (%s) -----', nextOffset);
             log.logHex(rtmp.nbufs.slice(0, nextOffset));
             rtmp.nbufs = rtmp.nbufs.slice(nextOffset, rtmp.nbufs.length);
 
-        }
-        else if (rtmp.RTMP_ReadPacket(data))  {
+        } else if (rtmp.RTMP_ReadPacket(data))  {
             log.logHex(rtmp.nbufs);
-            console.log('----- IS NEW DATA ReadPacket -----', rtmp.nbufs.length);
+            NSLog.log('error','----- IS NEW DATA ReadPacket -----', rtmp.nbufs.length);
             log.logHex(data);
-            NSLog.log('error','reset data()');
             rtmp.nbufs = new Buffer(data);
-            process.exit(-1)
+            this.__disposeSocket(rtmp);
         } else if (rtmp.nbufs.length >= rtmp.BasicHeaderSize[(rtmp.nbufs[0] >> 6)]) {
 
             rtmp.nbufs = new Buffer(0);
         }else {
-
+            log.logHex(rtmp.nbufs);
+            this.__disposeSocket(rtmp);
         }
         if (rtmp.nbufs.length < 10) {
-            console.log('rtmp.nbufs.length < 10');
+            NSLog.log('error','rtmp.nbufs.length < 10');
             log.logHex(rtmp.nbufs);
         }
 
@@ -704,7 +712,10 @@ libvp62Cl.prototype.dispose = function () {
     this.rtmp.removeAllListeners();
     this.rtmp = undefined;
 };
-
+libvp62Cl.prototype.__disposeSocket = function (rtmp) {
+    rtmp.socket.destroy();
+    // process.exit();
+};
 /**
  * @param type {string}
  */
@@ -724,7 +735,6 @@ libvp62Cl.prototype.__defineSetter__("videoCodecID", function (codecID) {
     if (typeof codecID != "undefined" && codecID) {
         this._videocodecid = codecID;
     }
-    console.log(this._videocodecid);
     if (codecID.toUpperCase() == "H264" || codecID.toUpperCase() == "AVC1") this.muxer = MUXER_NONE; // this.muxer = MUXER_AVC;
 
     if (codecID.toUpperCase() == "VP62" || codecID.toUpperCase() == "VP6A" || codecID.toUpperCase() == "VP6F") this.muxer = MUXER_FLV;
@@ -764,6 +774,6 @@ module.exports = exports = libvp62Cl;
 if (process.env.test) {
     var service = new libvp62Cl();
     service.on(service.StreamEvent.STATUS, function (obj) {
-        console.log("service.StreamEvent.STATUS ",obj);
+        NSLog.log("info","service.StreamEvent.STATUS ",obj);
     })
 }

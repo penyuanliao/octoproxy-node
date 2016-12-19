@@ -23,6 +23,9 @@ const NSLog         = fxNetSocket.logger.getInstance();
 const fileName      = path.basename(require.main.filename) + process.argv[2];
 NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:'info', dateFormat:'[yyyy-MM-dd hh:mm:ss]',fileName:fileName,filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100,
                 id:process.argv[2], remoteEnabled: true});
+
+const OPEN_BRACE     = 123;
+
 var connections = []; //記錄連線物件
 var connsCount = 0; //連線數
 var srv = createNodejsSrv(config.srvOptions.port);
@@ -159,7 +162,6 @@ function getFMSServerIP(client) {
         for (var i = 0; i < config.bExceptions.length; i++) {
             var host = config.bExceptions[i]["Host"];
             var rules = config.bExceptions[i]["rules"];
-            console.log(typeof rules.length);
             var len = (typeof rules.length != "undefined") ? rules.length : -1;
             while (len-- >= 0) {
                 var rule = rules[len];
@@ -240,7 +242,7 @@ function createNodejsSrv(port) {
         var socket = evt.client;
         const sockName = socket.name;
         var data = evt.data;
-        if (data.length > 0 && data.charCodeAt(0) == 123) {
+        if (data.length > 1 && data.charCodeAt(0) == OPEN_BRACE) {
             //object
             try {
                 var json = JSON.parse(data);
@@ -426,3 +428,4 @@ process.on('message', function (data, handle) {
     }
 });
 
+process.send({"action":"creationComplete"});

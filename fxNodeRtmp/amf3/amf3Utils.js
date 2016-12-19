@@ -50,7 +50,7 @@ Deserializer.prototype.readTypeMarker = function () {
         case AMF_Constants.AMF3_XMLSTRING:
             return this.readXmlString();
         case AMF_Constants.AMF3_BYTEARRAY:
-            return Buffer.from(this.readString());
+            return new Buffer(this.readString());
         case AMF_Constants.AMF3_DICTIONARY:
             return this.readDictionArray();
         default:
@@ -786,14 +786,12 @@ Serializer.prototype.writeXml = function (xml) {
     this.writeBinaryString(str);
 
 };
+
+//d. 0a 0b 01 05 68..
+//d2.0a 01 07 68 69
+//1. 0a 01 00 04 01 01
+//2. 0a 01 02 04 02 01
 Serializer.prototype.writeDictionArray = function (data) {
-    // if (this.writeObjectReference(data)) {
-    //     return;
-    // }
-    //d. 0a 0b 01 05 68..
-    //d2.0a 01 07 68 69
-    //1. 0a 01 00 04 01 01
-    //2. 0a 01 02 04 02 01
 
     for (var i = 0; i < data.length; i++) {
         var obj = data[i];
@@ -842,7 +840,7 @@ Serializer.prototype.writeByte = function (data) {
     this.stream.writeUInt8(data, this.offset++);
 };
 Serializer.prototype.writeBytes = function (data) {
-    var dataBuf = Buffer.from(data);
+    var dataBuf = new Buffer(data);
     var len = dataBuf.length;
     if (this.stream.length < (this.offset + len)) {
         this.stream = Buffer.concat([this.stream, dataBuf], this.stream.length + len);
