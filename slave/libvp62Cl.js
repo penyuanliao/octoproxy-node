@@ -132,7 +132,7 @@ libvp62Cl.prototype.connect = function (uri) {
     rtmp.videoStreamID = 0; // csid
     rtmp.previousHeader = {bodySize:0, typeID:undefined, headerBuffer:undefined};
     var audioSize = 0;
-
+    var invokeSize = 0;
 
     rtmp.on('videoData', function (data) {
         chunkIdx++;
@@ -274,7 +274,7 @@ libvp62Cl.prototype.connect = function (uri) {
                     NSLog.log('info', '----- Metadata -----');
                     NSLog.log('info', '----- AMF0_DATA (0x12), %s bytes, %s total -----', (hdrSize[fmt] + body_size), rtmp.nbufs.length);
                     NSLog.log('info', '----- %s -----', rtmp.nbufs.length);
-
+                    invokeSize = body_size;
                 }
                 else if (typeID == rtmp.PacketType.PACKET_TYPE_CONTROL){
                     NSLog.log('info', '----- User Control Message (0x02), %s bytes -----',(hdrSize[fmt] + body_size));
@@ -352,14 +352,15 @@ libvp62Cl.prototype.connect = function (uri) {
                         continue;
                     }
 
-
-
                     if (typeID == rtmp.PacketType.PACKET_TYPE_INVOKE) {
 
                         var obj = amfUtils.decodeAmf0Cmd(curr_nbufs.slice(offset, curr_nbufs.length));
                         self.emit(self.StreamEvent.STATUS, obj);
                         NSLog.log("trace", "---------- User Control Message (%s) -----------", obj.cmd);
                         continue;
+                    }else if (fmt == 0 && csid == 0x02 && typeID == 0x01) {
+                        var num = data.readUInt32BE(12);
+                        console.log('setRTMPChunkSize:', num);
                     }
 
                     log.logHex(curr_nbufs);
@@ -373,8 +374,8 @@ libvp62Cl.prototype.connect = function (uri) {
                 /* Extended header : 0x82 Unknown H264???*/
                 if (rtmp.nbufs[0] == 0x82 && (rtmp.nbufs[5] == rtmp.usrCtrlMsg.BUFFER_EMPTY || rtmp.nbufs[5] == rtmp.usrCtrlMsg.BUFFER_READY)) {
                     if (rtmp.nbufs.length < 10) return; // 長度不夠等資料齊
-                    // log.logHex(rtmp.nbufs.slice(0, 10));
                     rtmp.nbufs = rtmp.nbufs.slice(10, rtmp.nbufs.length);
+                    NSLog.log('error', '{ [0x84] BUFFER_READY }');
                     continue;
                 }else if (rtmp.nbufs[0] == 0x84 && rtmp.nbufs.length >= 5) {
                     if (rtmp.nbufs[4] == rtmp.CONTROL_ID.HE_AAC || rtmp.nbufs[4] == rtmp.CONTROL_ID.ASAO_AUDIO || rtmp.nbufs[4] === rtmp.CONTROL_ID.UNKNOWN_AUDIO) {
@@ -396,14 +397,21 @@ libvp62Cl.prototype.connect = function (uri) {
                         while (rtmp.nbufs[0] == 0x84) {
                             if (rtmp.nbufs.toString().substr(0,24).indexOf('onGetFPS') != -1) {
                                 rtmp.nbufs = rtmp.nbufs.slice(24,rtmp.nbufs.length);
+                                NSLog.log('error', 'DROP onGetFPS()',rtmp.nbufs.length);
+                            }else if (rtmp.nbufs.toString().substr(0,24).indexOf('onFI') != -1) {
+                                rtmp.nbufs = rtmp.nbufs.slice(55,rtmp.nbufs.length);
+                                NSLog.log('error', "Message 'onFI' unknown on stream.(%s)", invokeSize+4);
+                            } else {
+                                break;
                             }
                         }
-                        if (rtmp.nbufs.length > 0) continue;
 
-                        NSLog.log('error', 'DROP onGetFPS() last Data:');
-                        // rtmp.socket.destroy();
-                        process.exit();
-                        log.logHex(rtmp.nbufs);
+                        if (rtmp.nbufs.length > 0) {
+                            log.logHex(rtmp.nbufs);
+                            continue;
+                        }else {
+
+                        }
                     }
 
                     NSLog.log('trace', '--------------- 0x84 ------------------');
@@ -427,9 +435,6 @@ libvp62Cl.prototype.connect = function (uri) {
                     NSLog.log('verbose', "C0 + %s", rtmp.nbufs[0] - 0xC0 );
                     NSLog.log('verbose',"0xC4 extended header typeID[%s] Curr Len[%s] Former Len[%s]", rtmp.previousHeader["typeID"], rtmp.nbufs.length-1, rtmp.previousHeader["bodySize"]);
 
-
-
-
                     if (rtmp.nbufs.length < rtmp.previousHeader["bodySize"]) return;
                     // Aggregate //
                     if (rtmp.previousHeader["typeID"] == rtmp.PacketType.PACKET_TYPE_FLV) {
@@ -444,12 +449,9 @@ libvp62Cl.prototype.connect = function (uri) {
                         continue;
                     }
 
-
-                    // body size //
-                    curr_nbufs = rtmp.nbufs.slice(1, rtmp.previousHeader["bodySize"]);
-                    // filter 0xC4
-                    filterC4Count = self.totalRTMPPacket(curr_nbufs.length, sChunksize);
-                    curr_nbufs = self.filter0xC4Header(curr_nbufs, filterC4Count, sChunksize);
+                    filterC4Count = self.totalRTMPPacket(rtmp.previousHeader["bodySize"], sChunksize);
+                    curr_nbufs    = rtmp.nbufs.slice(1, rtmp.previousHeader["bodySize"] + filterC4Count + 1);
+                    curr_nbufs    = self.filter0xC4Header(curr_nbufs, filterC4Count, sChunksize);
                     ctrl = curr_nbufs.readUInt8(0);
                     if (self.muxer == "flv") {
                         // set flv header //
@@ -466,7 +468,7 @@ libvp62Cl.prototype.connect = function (uri) {
                     self.emit(self.StreamEvent.VIDEO_DATA, lastOutput, ctrl, 100);
                     rtmp.nbufs = rtmp.nbufs.slice((rtmp.previousHeader["bodySize"] + filterC4Count + 1), rtmp.nbufs.length);
                     // rtmp.nbufs = rtmp.nbufs.slice(rtmp.nbufs.length, rtmp.nbufs.length);
-                    NSLog.log('verbose',"# Ended 0xC4 nbufs.length[%s]", rtmp.nbufs.length, typeof rtmp.previousHeader["bodySize"], curr_nbufs.length);
+                    NSLog.log('verbose',"# Ended 0xC4 nbufs.length[%s]", rtmp.nbufs.length, rtmp.previousHeader["bodySize"], rtmp.nbufs[0], curr_nbufs[curr_nbufs.length-1]);
                     return;
                 }
 
@@ -551,6 +553,8 @@ libvp62Cl.prototype.concatData = function (rtmp, data) {
         rtmp.nbufs = Buffer.concat([rtmp.nbufs, data], rtmp.nbufs.length + data.length);
         NSLog.log("debug", 'chucnk Data ReadPacket:%s',rtmp.RTMP_ReadPacket({buf:rtmp.nbufs}) == 1)
     }
+
+    if (rtmp.nbufs[0] == 0x00 && rtmp.nbufs[1] == 0x44) rtmp.nbufs = rtmp.nbufs.slice(1, rtmp.nbufs.length);//不知道哪裡算錯這邊多了00
 
     if (!rtmp.RTMP_ReadPacket({buf:rtmp.nbufs}) ) {
 

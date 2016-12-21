@@ -208,7 +208,7 @@ function ebbStream(sockList) {
 
             if (isObject) {
                 sockList[keys[i]]._handle;
-                process.send("socket_handle", socket._handle);
+                process.send({'evt':"socket_handle"}, socket._handle);
             }
 
             i++;

@@ -13,7 +13,10 @@ config.env = process.env.NODE_ENV;
 config.numCPUs = require('os').cpus().length;
 /** 開發環境設定 **/
 if (config.env == 'development') {
-    config.bFMSHost = "";
+    config.bFMSHost = require('fxNetSocket').getConfiguration("OctoProxy");
+    config.bExceptions = [
+        {"Host":"43.251.76.220", "rules":["/BacPlayerVip"]}
+    ];
     config.bFMSPort = 1935;
     config.srvOptions = {
         'host': '0.0.0.0',
@@ -24,32 +27,21 @@ if (config.env == 'development') {
     //建立第二台一樣服務只需複製一樣設定即可
     //合併服務用逗號區隔ex:'Hall, Hall2'
     //會清除空白符號
-    config.forkOptions = {
-        'webCluster':'',
-        'webNum':0,
-        'cluster': [{
-            file:'./FxBridgeSrv.js',
-            assign:'BacPlayerLight',//RouPlayerBM
-            mxoss: 2048
-        },{
-            file:'./FxBridgeSrv.js',
-            assign:'Hall, HallPic',
-            mxoss: 2048
-        }/*,{
-            file:'./lib/remoteSrv.js',
-            assign:'administrator'
-        }*/]
-    };
+    config.forkOptions = require('fxNetSocket').getConfig('../configuration/Assign.json');
     config.gamSLB = {
         enabled:true,
         file: './unittest/GLBS.js',
         assign:'/fxLB'
     };
-} else {
+}
+else {
     
     /** 伺服器環境設定 **/
     config.bFMSHost = require('fxNetSocket').getConfiguration("OctoProxy");
-    config.bFMSPort = "1935";
+    config.bExceptions = [
+        {"Host":"43.251.76.220", "rules":["/BacPlayerVip"]}
+    ];
+    config.bFMSPort = 1935;
     config.srvOptions = {
         'host': '0.0.0.0',
         'port': config.appConfig.port,
@@ -63,16 +55,13 @@ if (config.env == 'development') {
         assign:'/fxLB'
     };
 }
-config.assignRule = [];
-/** FMS連線Port **/
-config.rtmpPort = 1935;
 //todo define the balance
 config.balance = 'leastconn';//roundrobin
 
 /**
  * Application parameters
- * @param -p port
- * @param -f loadfile or remote link
+ * -p port
+ * -f loadfile or remote link
  * **/
 function appParames(){
     var args = {};
@@ -122,4 +111,35 @@ configure.getInstance = function () {
     }
     return this.instance.config;
 };
+
+/**
+ *
+ * @type {config}
+ */
 module.exports = exports = configure.getInstance();
+/**
+ * @namespace config
+ * @property srvOptions
+ * @property forkOptions
+ * @property appConfig
+ * @property numCPUs
+ * @property bFMSHost
+ * @property bExceptions
+ * @property bFMSPort
+ * @property gamSLB
+ * @property env
+ * @property balance
+ **/
+/**
+ * @namespace srvOptions
+ * @property host
+ * @property port
+ * @property closeWaitTime
+ * @property backlog
+ **/
+/**
+ * @namespace gamSLB
+ * @property enabled
+ * @property file
+ * @property assign
+ **/

@@ -306,13 +306,9 @@ AppDelegate.prototype.createServer = function (opt) {
             const chk_assign = (namespace == cfg.gamSLB.assign);
 
             if (cfg.gamSLB.enabled && chk_assign) {
-                NSLog.log('trace', 'gamSLB namspace:', chk_assign);
                 var lbtimes;
 
                 var tokencode = self.gameLBSrv.getLoadBalancePath(url_args["gametype"], function (action, json) {
-                    NSLog.log('trace','--------------------------');
-                    NSLog.log('trace', 'action: %s, token code:%s', action);
-                    NSLog.log('trace','--------------------------');
                     var src;
                     if (json.action == self.gameLBSrv.LBActionEvent.ON_GET_PATH) {
                         if (typeof lbtimes != 'undefined') clearTimeout(lbtimes);
@@ -570,8 +566,7 @@ AppDelegate.prototype.assign = function (namespace, cb) {
         namespace = path[1];
         if (typeof namespace == 'undefined') namespace = path[0];
     }
-    // if (namespace == 'video') namespace = path[2];
-    NSLog.log('info',"assign::namespace:", namespace);
+    NSLog.log('log',"assign::namespace:", namespace);
     // url_param
     if (cfg.balance === "url_param") {
 
@@ -706,11 +701,12 @@ AppDelegate.prototype.management = function () {
 };
 /** not implement **/
 AppDelegate.prototype.ebbMoveAssign = function (handle, source, namespace) {
-    var worker = clusters[namespace];
+    var self = this;
+    var worker = this.clusters[namespace];
     worker[0].send({'evt':'c_init',data:source}, handle,{keepOpen:false});
     setTimeout(function () {
         self.rejectClientExcpetion(handle, "CON_VERIFIED");
-        handle.close(this.close_callback);
+        handle.close(self.close_callback);
     }, sendWaitClose);
 };
 

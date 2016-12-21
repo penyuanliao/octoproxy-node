@@ -53,20 +53,35 @@ libvp62Srv.prototype.initWebSocketSrv = function (port) {
     var server = new FxConnection(port,{runListen: isMaster});
 
     server.on('connection', function (client) {
+        var namespace = client.namespace;
+        var args = utilities.parseUrl(namespace); //url arguments
+        if (args) {
+            namespace = args[0];
+            var ns_len = args.length;
+            var url_args = {};
+            for (var i = 1; i < ns_len; i++) {
+                var str = args[i].toString().replace(/(\?|\&)+/g,"");
+                var keyValue = str.split("=");
+                url_args[keyValue[0].toLowerCase()] = keyValue[1];
+            }
+            console.log("trace","url arguments:", url_args,namespace);
+            args = null;
+        }
 
-        debug('Connection Clients name:%s (namespace %s)',client.name, client.namespace);
+
+        debug('Connection Clients name:%s (namespace %s)',client.name, namespace);
         if(client.namespace.indexOf("policy-file-request") != -1 ) {
             console.log('Clients is none rtmp... to destroy.');
             client.close();
             return;
         }
         // self.setupFMSClient(client);
-        var s = client.stream = new netStream();
-        client.stream.on('onVideoData', function (data) {
-            client.write(JSON.stringify({"len":data.length, "data":data}));
+        const sockName = client.socket.name;
+        var s = self.connections[sockName] = new netStream(namespace);
+        s.on('onVideoData', function (data, keyframe, timestamp) {
+            client.write(JSON.stringify({"keyframe":keyframe, "ts": timestamp, "data":data}));
             // s.rtmp.socket.destroy();
         });
-
     });
 
     server.on('message', function (evt) {
@@ -119,7 +134,7 @@ libvp62Srv.prototype.initWebSocketSrv = function (port) {
 
     /** server client socket destroy **/
     server.on('disconnect', function (name) {
-        debug('disconnect_fxconnect_client.');
+        console.log('disconnect_fxconnect_client.');
 
         var removeItem = self.connections[name];
 
@@ -130,7 +145,7 @@ libvp62Srv.prototype.initWebSocketSrv = function (port) {
 
             console.log('disconnect count:', Object.keys(self.connections).length,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
         };
-
+        self.connections[name].close();
     });
 
     /**
@@ -162,6 +177,39 @@ libvp62Srv.prototype.initWebSocketSrv = function (port) {
     };
 
     return server;
+};
+libvp62Srv.prototype.onMessage = function (data, handle) {
+    var json = data;
+    if (typeof json === 'string') {
+
+    }else if (typeof json === 'object') {
+        if (json.evt == "processInfo") {
+            process.send({"evt":"processInfo", "data" : {"memoryUsage":process.memoryUsage(),"connections": this.connections}})
+        }else if (data.evt == "c_init") {
+            var socket = new net.Socket({
+                handle:handle,
+                allowHalfOpen:this.srv.app.allowHalfOpen
+            });
+            socket.readable = socket.writable = true;
+            socket.resume();
+            socket.server = this.srv.app;
+            this.srv.app.emit("connection", socket);
+            socket.emit("connect");
+            socket.emit('data',new Buffer(data.data));
+        }
+    }else {
+        debug('out of hand. dismiss message');
+    }
+};
+
+libvp62Srv.prototype.createLiveMediaLists = function () {
+    var list = [];
+    var s = new netStream(namespace);
+    list.push(s);
+    s.on('onVideoData', function (data, keyframe, timestamp) {
+        client.write(JSON.stringify({"keyframe":keyframe, "ts": timestamp, "data":data}));
+        // s.rtmp.socket.destroy();
+    });
 };
 
 
