@@ -134,6 +134,7 @@ libvp62Cl.prototype.connect = function (uri) {
     var audioSize = 0;
     var invokeSize = 0;
 
+
     rtmp.on('videoData', function (data) {
         chunkIdx++;
         // ------------------------------ //
@@ -351,6 +352,8 @@ libvp62Cl.prototype.connect = function (uri) {
                         rtmp.nbufs = rtmp.nbufs.slice(10, rtmp.nbufs.length);
                         continue;
                     }
+
+
 
                     if (typeID == rtmp.PacketType.PACKET_TYPE_INVOKE) {
 
