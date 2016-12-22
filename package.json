@@ -5,6 +5,7 @@
   "dependencies": {
     "buffertools": "^2.1.3",
     "debug": "^2.2.0",
+    "fxNetSocket": "git+https://github.com/penyuanliao/fxNetSocket.git",
     "underscore": "^1.8.3"
   }
 }
