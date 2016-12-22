@@ -139,7 +139,6 @@ RTMPChunk.prototype.__defineSetter__('messageHeader', function(header) {
 				this.previousChunk.messageHeader.messageLength == this._messageHeader.messageLength &&
 				this.previousChunk.messageHeader.messageType == this._messageHeader.messageType &&
 				this.previousChunk.messageHeader.messageStream == this._messageHeader.messageStream) {
-				console.log("headers the same");
 				this.basicHeader.chunkType = 3;
 			} else {
 				console.log("headers not the same");

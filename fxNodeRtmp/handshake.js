@@ -60,18 +60,15 @@ S1Chunk.prototype.__defineGetter__('fmsVersion', function() {
 });
 S1Chunk.prototype.__defineGetter__('zeros', function() {
     var zeros = this.buffer.readUInt32BE(4);
-    console.log('S1Chunk.prototype.__defineGetter__.zeros', this.buffer);
     return zeros;
 });
 S1Chunk.prototype.__defineSetter__('zeros', function(zeros) {
-    console.log('S1Chunk.prototype.__defineSetter__.zeros', this.buffer);
     this.buffer.writeUInt32BE(zeros, 4);
 });
 S1Chunk.prototype.__defineGetter__('random', function() {
     return this.buffer.slice(8);
 });
 S1Chunk.prototype.__defineSetter__('random', function(buffer) {
-    console.log('S1Chunk.prototype.__defineSetter__random',this.buffer);
     if (buffer instanceof Buffer)
         buffer.copy(this.buffer, 8, 0, 1528);
     else if (typeof buffer == 'number')
@@ -83,7 +80,7 @@ S1Chunk.prototype.isValid = function() {
     // check for all zeros (bytes 4-7)
     // (note that typically this ends up making most packets invalid as they specify the version of FMS here)
     // TODO: perhaps loosen restriction and/or check fms version is valid?
-    return (this.zeros == 0);
+    return (this.zeros == 0 || this.fmsVersion != null) ;
 };
 S1Chunk.prototype.setDefaults = function() {
     this.time = ((new Date().getTime() - uptime) % 4294967296);
@@ -105,21 +102,18 @@ S2Chunk.prototype.__defineGetter__('time', function() {
     return this.buffer.readUInt32BE(0);
 });
 S2Chunk.prototype.__defineSetter__('time', function(time) {
-    console.log('!!! S2Chunk.prototype.__defineSetter__.time',this.buffer);
     this.buffer.writeUInt32BE(time, 0);
 });
 S2Chunk.prototype.__defineGetter__('time2', function() {
     return this.buffer.readUInt32BE(4);
 });
 S2Chunk.prototype.__defineSetter__('time2', function(time2) {
-    console.log('!!! S2Chunk.prototype.__defineSetter__.time2',this.buffer);
     this.buffer.writeUInt32BE(time2, 4);
 });
 S2Chunk.prototype.__defineGetter__('random', function() {
     return this.buffer.slice(8);
 });
 S2Chunk.prototype.__defineSetter__('random', function(buffer) {
-    console.log('!!! S2Chunk.prototype.__defineSetter__.random',this.buffer);
     if (buffer instanceof Buffer)
         buffer.copy(this.buffer, 8, 0, 1528);
     else if (typeof buffer == 'number')
@@ -185,7 +179,7 @@ RTMPHandshake.prototype.sendC0C1 = function() {
     this.c1chunk.setDefaults();
     
     /* Send C0 + C1 */
-    console.log('RTMPHandshake.prototype.sendC0C1 (w)');
+    console.log('[Handshake] > "C0 + C1" sent to server.');
     this.socket.write(handshakeBuf);
 
     /* Change to VERSION_SENT state */
@@ -214,7 +208,6 @@ RTMPHandshake.prototype.onResponse = function(chunk) {
     if (!this.s0chunk && chunk.length >= S0Chunk.byteLength) {
         this.s0chunk = new S0Chunk(chunk);
         chunk = chunk.slice(S0Chunk.byteLength);
-        console.log("C1 S1 Length(1536) is =:",chunk.length);
         if (!this.s0chunk.isValid())
             this.emit('error', 's0 invalid');
         this.emit('s0recieved', this.s0chunk);
@@ -223,14 +216,11 @@ RTMPHandshake.prototype.onResponse = function(chunk) {
         this.s1chunk = new S1Chunk(chunk);
         chunk = chunk.slice(S1Chunk.byteLength);
 
-        console.log("C2 S2 Length(1536) is =:",chunk.length);
-        console.log('info::this.s1chunk.isValid()', this.s1chunk.isValid());
         if (!this.s1chunk.isValid()) {
             this.emit('error', 's1 invalid');
         }
         this.emit('s1recieved', this.s1chunk);
     }
-    console.log('CHECK check s2chunk:%d,%d', chunk.length, S2Chunk.byteLength);
     if (!this.s2chunk && chunk.length >= S2Chunk.byteLength) {
         this.s2chunk = new S2Chunk(chunk);
         chunk = chunk.slice(S2Chunk.byteLength);
@@ -245,7 +235,6 @@ RTMPHandshake.prototype.onResponse = function(chunk) {
 
         /* Emit any left over data */
         this.emit('data', chunk);
-        console.log('CHECK socket removeListener');
         /* Clean up */
         this.socket.removeListener('data', this.onResponse.bind(this)); //TODO: test this actually removes the listener (not sure?)
         this.socket.removeListener('data',this.socket.DataFunc);

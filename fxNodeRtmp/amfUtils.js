@@ -57,7 +57,8 @@ var amf0dRules = {
 //    0x0D: amf0decUnsupported, // Has been never originally implemented by Adobe!
 //    0x0E: amf0decRecSet, // Has been never originally implemented by Adobe!
     0x0F: amf0decXmlDoc,
-    0x10: amf0decTypedObj
+    0x10: amf0decTypedObj,
+    0x11: switchToAmf3
 };
 
 var amf0eRules = {
@@ -696,8 +697,13 @@ function amf0encLongString(str) {
  */
 function amf0decArray(buf) {
 //    var count = buf.readUInt32BE(1);
-    var obj = amf0decObject(buf.slice(4));
-    return { len: 5 + obj.len, value: obj.value }
+    var buf2 = buf.slice(4);
+    // 0x08會錯？？
+    buf2[0] = 0x03;
+    buf2[1] = 0x00;
+    var obj = amf0decObject(buf2);
+    // return { len: 5 + obj.len, value: obj.value }
+    return { len: 4 + obj.len, value: obj.value }
 }
 
 /**
@@ -815,6 +821,10 @@ function amf0decTypedObj(buf) {
     var obj = amf0decObject(buf.slice(className.len - 1));
     obj.value.__className__ = className.value;
     return { len: className.len + obj.len - 1, value: obj.value }
+}
+
+function switchToAmf3(buf) {
+    throw new Error("Error: switchToAmf3 encoding is not yet implemented!"); // TODO: Error
 }
 
 /**
@@ -990,7 +1000,6 @@ function decodeAMF0Cmd(dbuf) {
     resp.cmd = cmd.value;
     resp.byteLength = cmd.len;
     buffer = buffer.slice(cmd.len);
-
     if (rtmpCmdDecode[cmd.value]) {
         rtmpCmdDecode[cmd.value].forEach(function (n) {
             if (buffer.length > 0) {

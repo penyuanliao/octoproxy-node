@@ -46,5 +46,7 @@ log.logHex = function( data ) {
 			line[BP_GRAPH + n + ((n >= 8)?1:0)] = '.'.charCodeAt();
 		}
     }
-    process.stdout.write(line.toString()+"\n");
-}
+    var str = line.toString()+"\n";
+    process.stdout.write(str);
+    return str;
+};
