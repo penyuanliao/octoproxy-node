@@ -23,11 +23,17 @@ const isMaster      = (isWorker === false);
 const cdid          = process.env.NODE_CDID || 0;
 const NSLog         = fxNetSocket.logger.getInstance();
 if (isMaster)
-    NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:'trace', dateFormat:'[yyyy-MM-dd hh:mm:ss]',filePath:"./",fileName:'libvp62_ID' + cdid, maximumFileSize: 1024 * 1024 * 100});
+    NSLog.configure({logFileEnabled:false, consoleEnabled:true, level:'trace', dateFormat:'[yyyy-MM-dd hh:mm:ss]',filePath:"./",fileName:'libvp62_ID' + cdid, maximumFileSize: 1024 * 1024 * 100});
 
 const MUXER_NONE    = "none";
 const MUXER_FLV     = "flv";
 const MUXER_AVC     = "avc1";
+
+const DEF_OPTIONS     = {
+    bFMSHost:'127.0.0.1',
+    bFMSPort:1935,
+    videoPaths:"/video/stream/live"
+};
 
 util.inherits(libvp62Cl, events.EventEmitter);
 
@@ -36,7 +42,9 @@ function libvp62Cl(options) {
     events.EventEmitter.call(this);
     /* Variables */
 
-    options = (typeof options == "undefined") ? "video/daabb/video0" : options;//daabb/video0
+    options = (typeof options == "undefined") ? DEF_OPTIONS : options;
+
+    this.config  = options;
 
     //noinspection JSUnresolvedVariable
     this.uptime        = new Date().getTime();
@@ -47,25 +55,17 @@ function libvp62Cl(options) {
     this._muxer        = MUXER_AVC;
     this._videocodecid = "VP62";
 
-    this.config = {
-        //audio rtmp /video/daaic/video0
-        bFMSHost:'43.251.79.212',//43.251.79.212,183.182.64.182,103.24.83.249
-        bFMSPort:1935,
-        videoPaths:[options]
-    };
-    var videoPaths = this.config.videoPaths;
 
-    for (var vPthNum = 0; vPthNum < videoPaths.length; vPthNum++ ) {
-        var path = videoPaths[vPthNum];
-        if (path.substr(0,1) == "/") path = path.substr(1, path.length);
-        NSLog.log("trace",'** RTMP stream client has been created. **');
-        this.setupFMSClient(path);
-    }
 
-    this.fxFile = fs.createWriteStream('rtmpData.JSON',{ flags:'w' });
+    var path = this.config.videoPaths;
+    if (path.substr(0,1) == "/") path = path.substr(1, path.length);
+    NSLog.log("trace",'** RTMP stream client has been created. **');
+    this.setupFMSClient(path);
+
     this.flag_write_enabled = false;
+    if (this.flag_write_enabled) this.fxFile = fs.createWriteStream('rtmpData.JSON',{ flags:'w' });
 
-    this.lastUpdateTime = undefined
+    this.lastUpdateTime = undefined;
 
 }
 
@@ -510,8 +510,8 @@ libvp62Cl.prototype.connect = function (uri) {
         rtmp.socket.destroy();
     });
     // #4 FMS關閉的事件
-    rtmp.on('close', function (args) {
-        NSLog.log("error","RTMP connection closed:",args);
+    rtmp.on('close', function () {
+        NSLog.log("error","RTMP connection closed. System Uptime: %s", self.formatUpTime(new Date().getTime() - self.uptime));
         self.rtmp.removeAllListeners();
         setTimeout(function () {
             self.setupFMSClient(rtmp.name);
@@ -531,9 +531,7 @@ libvp62Cl.prototype.connect = function (uri) {
     });
 
     var onMetadata = this.onMetaDataHandler;
-
     rtmp.on(this.StreamEvent.META_DATA, onMetadata.bind(self));
-
     return rtmp;
 };
 libvp62Cl.prototype.onMetaDataHandler = function (obj) {
@@ -763,6 +761,35 @@ libvp62Cl.prototype.fileWrite = function (data) {
 };
 libvp62Cl.prototype.release = function () {
 
+};
+libvp62Cl.prototype.formatUpTime = function (time) {
+    var uptime = parseInt(time/1000);
+    var day = parseInt(uptime/(60*60*24));
+    uptime = uptime - day;
+    var hours = parseInt(uptime/(60*60));
+    uptime = uptime - hours;
+    var min = parseInt(uptime/(60*60));
+    uptime = uptime - min;
+    var sec = parseInt(uptime);
+    var str = "0" + day + ":";
+    if (hours < 10)
+        str = str + "0" + hours + ":";
+    else
+        str = str + hours + ":";
+
+    if (min < 10)
+        str = str + "0" + min + ":";
+    else
+        str = str + min + ":";
+
+    if (sec < 10)
+        str = str + "0" + sec;
+    else
+        str = str + sec;
+
+    str += ("." + time%1000);
+
+    return str;
 };
 
 libvp62Cl.prototype.StreamEvent = {
