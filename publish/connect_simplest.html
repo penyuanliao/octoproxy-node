@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<br lang="en" xmlns="http://www.w3.org/1999/html">
+<head>
+    <meta charset="UTF-8">
+    <title> Live Stream (Cluster)</title>
+    <link rel="stylesheet" type="text/css" href="css/table.css"/>
+    <!--<link rel="stylesheet" type="text/css" href="css/main.css"/>-->
+    <style>
+        button {
+            width: 100px;
+            display:inline-block;
+            padding-bottom: 10px;
+            padding-top: 10px;
+            margin: 0px 0px 5px 05px;
+            border-radius:4px;
+            border: 1px solid transparent;
+            background-color: #5bc0de;
+            border-color: #46b8da;
+            color: white;
+        }
+        button[disabled] {
+            background-color: #d9534f;
+            border-color: #d43f3a;
+        }
+        input {
+            height:20px;
+            /*width:300px;*/
+            padding:5px 8px;
+            font-size: 14px;
+        }
+
+    </style>
+
+</head><br>
+<script type="text/javascript" src="lib/jquery-latest.min.js"></script>
+<script type="text/javascript">
+    window.onload = load;
+    function load() {
+        var ws; // websocket連線
+
+        var videoUri = document.getElementById('input1');
+        var callback = undefined;
+        function liveStream(url, cb) {
+            callback = cb;
+
+            if (url) { wsURL = url}
+
+            ws = new WebSocket(wsURL);
+            ws.startTime = new Date();
+            ws.bUrl = url;
+            ws.onopen = onOpenHandle;
+            ws.onclose = onCloseHandle;
+            ws.onmessage = onMessageHandle;
+
+            return ws;
+
+        }
+        function trace(str) {
+            $('#content').append('<p>' + str + '</p>');
+        }
+        function onCloseHandle(evt) {
+            console.log('>>> websocket on disconnect.');
+            $('#content').append('<p>[' + ws.startTime.getHours()+ ':' + ws.startTime.getMinutes() + '] WebSocket on Disconnect.(' + ws.bUrl + ')</p>');
+            if (callback) callback(0);
+        }
+        function onOpenHandle(evt){
+            console.log('websocket on connected.', ws.extensions);
+            $('#content').append('<p>[' + ws.startTime.getHours()+ ':' + ws.startTime.getMinutes() + '] WebSocket on Connected.(' + ws.bUrl + ')</p>');
+
+            if (callback) callback(1);
+        }
+        function onMessageHandle(evt) {
+            // return;
+
+//            if (evt.data.substr(0,2) != '"{') return;
+
+            var json = JSON.parse(evt.data);
+
+            if (json.NetStatusEvent === "NetConnect.Success") {
+            }else if(json.NetStatusEvent === "Connected.amfIsReady") {
+
+                ws.send(JSON.stringify({"lang":"tw","vType":"wss","dev":"Desktop","gameType":3001,"gameCode":1,"sid":"8ea5ffab184f81d94e0f1a0ad7d2631ccc9ee8f4","action":"login"}));
+            }
+            else if( json.cmd === "onChkIp") {
+//                ws.send(JSON.stringify({'event':'loginBySid','data':['8ea5ffab184f81d94e0f1a0ad7d2631ccc9ee8f4',1]}));
+            }
+            else if(json.NetStatusEvent === "Data"){
+
+                if(json.args[0].action == 'onLogin') {
+                    console.log('onlogin');
+
+                    ws.send(JSON.stringify({"gameType":3001,"gameCode":1,"sid":"8ea5ffab184f81d94e0f1a0ad7d2631ccc9ee8f4","action":"userInfo"}));
+
+//                    ws.send(JSON.stringify({"gameType":3001,"gameCode":3,"sid":"8ea5ffab184f81d94e0f1a0ad7d2631ccc9ee8f4","action":"userInfo"}));
+                    setTimeout(function () {
+                        ws.send(JSON.stringify({"gameType":3001,"gameCode":1,"sid":"8ea5ffab184f81d94e0f1a0ad7d2631ccc9ee8f4","action":"tableList"}));
+                    },2000);
+                    setTimeout(function () {
+                        ws.send(JSON.stringify({"gameType":3001,"gameCode":3,"sid":"8ea5ffab184f81d94e0f1a0ad7d2631ccc9ee8f4","action":"videoLink"}));
+                    },4000)
+                }
+            }
+            else{
+            }
+            console.log(json.data);
+
+
+        }
+        var liveList = [];
+
+        for (var i = 0; i < liveList.length; i++) {
+            var obj = liveList[i];
+            var button = document.getElementById(obj);
+
+            switch (i) {
+                case 0:
+                    button.onclick = onClickHandle;
+                    break;
+                case 1:
+                    button.onclick = onClickHandleStop;
+                    break;
+                case 2:
+                    button.onclick = onAutoSendHandle;
+
+            }
+        }
+        function onClickHandle(e) {
+            liveStream();
+        }
+        function onClickHandleStop(e) {
+//            ws.send(JSON.stringify({action:"userInfo"}));
+            console.log('click close');
+
+        }
+        var auto = undefined;
+        function onAutoSendHandle(e) {
+
+            if (auto){
+                console.log('click');
+                clearInterval(auto);
+                auto = undefined;
+            }else {
+                auto = setInterval(function () {
+                    ws.send(JSON.stringify({
+                        event:'Send',
+                        data:'1234'
+                    }));
+                },5000);
+            }
+
+        }
+
+        $( "#inputTest" ).click(function() {
+            $('#content').empty();
+//            ws.close();
+            liveStream('ws://'+ $('#IPAddress').val() +":"+ $('#Port').val() + $('#Path').val());
+        });
+
+
+        var td_scheduled = '<td class="t-status t-scheduled">Scheduled</td>';
+        var td_unknown = '<td class="t-status t-unknown">Starup</td>';
+        var td_inactive  = '<td class="t-status t-inactive">Inactive</td>';
+        var td_offline  = '<td class="t-status t-offline"Offline</td>';
+        var td_active    = '<td class="t-status t-active">Active</td>';
+        var td_online    = '<td class="t-status t-online">Online</td>';
+        var td_draft     = '<td class="t-status t-draft">Draft</td>';
+        var host = "127.0.0.1:8000";
+        var path = "/fxCasino/fxLB?gameType=5902";
+        var info = "locale";
+
+
+        var lists = [
+            {
+                host:'43.251.76.236',
+                path:"/fxCasino/fxLB?gameType=5054",
+                info:'開發站-slot+loadbalance'
+            },{
+                host:'43.251.76.236',
+                path:"/fxCasino/slotFX",
+                info:'開發站-slot'
+            },{
+                host:'43.251.76.236',
+                path:"/fxlive/Hall/service.h1",
+                info:'開發站-大廳'
+            },{
+                host:'43.251.76.219',
+                path:"/fxlive/RouPlayerBM/h1",
+                info:'QA站測試'
+            },{
+                host:'bm.vir999.com',
+                path:"/fxlive/BacPlayerLight/h1",
+                info:'QA站測試'
+            },{
+                host:'43.251.69.32',
+                path:"/fxlive/BacPlayerLight/h1",
+                info:'正式站測試'
+            },{
+                host:'bm.test.04vip.net',
+                path:"/fxlive/SicBoPlayerBM/h1",
+                info:'正式站測試'
+            },{
+                host:'127.0.0.1:10082',
+                path:"/hall",
+                info:'本地測試'
+            },{
+                host:'127.0.0.1:8000',
+                path:"/fxlive/DTFight.PlayerLight/h2",
+                info:'本地測試'
+            },{
+                host:'127.0.0.1:8000',
+                path:"/fxlive/Hall/service.h1",
+                info:'本地測試'
+            }
+        ];
+        for (var i = 0; i < lists.length; i++) {
+            additems(lists[i]);
+        }
+
+        function additems(opt) {
+
+            $("#srv-list > tbody:last").append('' +
+                    '<tr id="tr3"><td><input type="button" class="testSrvBtn"></td>' +
+                    '<td contenteditable="true" style="user-modify:read-write-plaintext-only;">' + opt.host + '</td>' +
+                    '<td contenteditable="true" style="user-modify:read-write-plaintext-only;">' + opt.path + '</td>' +
+                    '<td>' + opt.info + '</td>' +
+                    td_unknown +
+                    '</tr>');
+        }
+
+        console.log($("#tr3").find('td:eq(1)').html());
+        console.log($("#tr3").find('td:eq(2)').html());
+//        $('td').remove(":eq(4)");
+//        $("#srv-list tr:eq(1)").append("<td>New Column</td>");
+
+
+        $( ".testSrvBtn" ).click(function() {
+            var td = $(this).parent();
+            var tr = td.parent();
+            console.log(tr.find('td:eq(1)').html());
+            var url = 'ws://' + tr.find('td:eq(1)').html() + tr.find('td:eq(2)').html();
+
+            liveStream(url, function (state) {
+                tr.find('td:eq(4)').remove();
+                if (state) {
+                    tr.append(td_active);
+                }else
+                {
+                    tr.append(td_inactive);
+                }
+            });
+//            setInterval(function () {
+//                var ws = liveStream(url, function (state) {
+//                });
+//            },1)
+
+        });
+
+
+        var lines = $('#script').val().split('\n');
+        console.log(lines);
+        for(var i = 0;i < lines.length;i++){
+//            console.log(lines[i]);
+            var str = $.trim(lines[i]);
+            var arr = str.split(";");
+            if (typeof arr[0] != "undefined" && arr[0] != "") {
+                console.log(JSON.parse(arr[0]));
+
+            }
+        }
+    }
+</script>
+
+<label class="textareaContainer"></label>
+
+    <div id ='content' style="height:200px;width:auto;border:1px solid #ccc;font:10px Georgia, Garamond, Serif;overflow:auto;"></div>
+
+    <table class="table table-action" id="srv-list">
+
+        <thead>
+        <tr>
+            <th class="t-small"></th>
+            <th class="t-small">IP</th>
+            <th class="t-high">Path</th>
+            <th >Info</th>
+            <th class="t-medium">State</th>
+        </tr>
+        </thead>
+
+        <tbody>
+
+        </tbody>
+    </table>
+
+            <textarea id ='script' rows="20"  style="height:200px;width:100%;font:16px/26px Georgia, Garamond, Serif;">
+            {"action":"loginBySid","sid":"4cb494cce1cdae5470d369eeaf83c9f71b42512a","gtype":"5902"}; 100ms
+            {"action":"onLoadInfo2"}; 200ms
+            {"action":"beginGame2","line":"5","lineBet":10}; 300ms
+            </textarea>
+</body>
+</html>
