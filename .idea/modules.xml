@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/octoproxy.iml" filepath="$PROJECT_DIR$/.idea/octoproxy.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/octoproxy-node.iml" filepath="$PROJECT_DIR$/.idea/octoproxy-node.iml" />
     </modules>
   </component>
 </project>
