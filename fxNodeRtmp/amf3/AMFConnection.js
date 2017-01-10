@@ -12,14 +12,20 @@ const amfUtils       = require('../amfUtils.js');
 const responder      = require('./responder.js');
 const objectType     = require('./ObjectType.js');
 /** html flag **/
-const CRLF           = "\r\n";
+const CRLF            = "\r\n";
 /** AMF flag **/
 const AMF3_DICTIONARY = 0x11;
 /** connect Flash version **/
-const FLASH_VERSION  = "17,0,0,160";
-const SWF = "Adobe Flash Player 17";
+const FLASH_VERSION   = "17,0,0,160";
+const SWF             = "Adobe Flash Player 17";
+const retries_maximum = 1;
+
+// const SWF = "Shockwave Flash";
 /** keep alive count **/
 const ApacheMaxKeepAliveRequests = 100;
+
+var NSLog  = ifdef('../../FxLogger.js','fxNetSocket');
+var debugEnabled = false;
 
 util.inherits(NetAMF, events.EventEmitter); // 繼承事件
 util.inherits(NetServices, events.EventEmitter); // 繼承事件
@@ -28,7 +34,6 @@ util.inherits(NetServices, events.EventEmitter); // 繼承事件
  * @constructor NetAMF
  */
 function NetAMF() {
-
     events.EventEmitter.call(this);
 
     this.uptime = new Date().getTime().toString();
@@ -40,11 +45,13 @@ function NetAMF() {
     this.amf3Serializer = new amf3Utils.serializer();
     this.amf3Deserializer = new amf3Utils.deserializer();
 
+    this.END_FIN     = false;
+
     this.content_header = new Buffer(6);
 
     this._client = undefined;
 
-    this.socket = undefined; // connect socket
+    this.socket     = undefined; // connect socket
     /**
      * socket connect options
      * @type {{port: number, host: string}}
@@ -53,8 +60,9 @@ function NetAMF() {
     this._keepAlive = true;
     this.__running = false; // queue running
     this.callQueue = [];
-
-    console.log('NetAMF');
+    this.tokenList    = []; // send all reqKey
+    this.keepAliveCount = 0;
+    this.keepAliveMax = 100;
     /**
      * request header key & value
      * @type {Array}
@@ -63,7 +71,8 @@ function NetAMF() {
 
 
     this.waitToSend = false;
-    this.messages = undefined; // one tick message
+    this.messages   = undefined; // one tick message
+
 
     this.setup();
 }
@@ -103,15 +112,26 @@ NetAMF.prototype.__initialize = function () {
     // this.socket.setTimeout(3*1000);
     this.socket.nbufs;
     socket.on("connect", function () {
-        console.log('connect');
-        socket.setKeepAlive(self._keepAlive);
+        debug("[Event:'connect']Socket connection is successfully.");
+        self.emit('connect');
+        socket.setKeepAlive(self._keepAlive,0);
+        socket.setTimeout(10 * 1000);
     });
     socket.on("data", function (chunk) {
         // pending data
         if (typeof socket.nbufs == "undefined") {
             socket.nbufs = chunk;
         }else {
-            socket.nbufs = Buffer.concat([socket.nbufs, chunk], socket.nbufs.length + chunk.length);
+
+            if (self.readResHeaders(chunk)['general'] != null && socket.nbufs.length > 0) {
+                console.log(self.readResHeaders(chunk)['general']);
+
+                self.deserialize(chunk);
+
+                return;
+            } else {
+                socket.nbufs = Buffer.concat([socket.nbufs, chunk], socket.nbufs.length + chunk.length);
+            }
         }
         if (self._keepAlive) {
             runMax = 30;
@@ -121,23 +141,33 @@ NetAMF.prototype.__initialize = function () {
         }
     });
     socket.on("end", function () {
-        console.log('socket[END]');
+        debug("[Event:'End']Socket sends a FIN packet.");
         if (!self._keepAlive) {
             self.deserialize();
         }
+        self.END_FIN = true;
+        self.cleanTokenList();
     });
     socket.on("error", function (error) {
-        console.log('socket error:', error);
+        debug(util.format("[Event:'Error']Socket error:%s", error));
         socket.destroy();
+        self.END_FIN = true;
         self.emit("error", error);
     });
     socket.on("timeout", function () {
-        console.log('socket is timeout');
+        debug("[Event:'Timeout']Socket is timeout.");
         socket.destroy();
+        self.END_FIN = true;
         self.emit("timeout");
     });
     socket.on("close", function () {
-        console.log('socket is close');
+        debug("[Event:'Close']Socket is close");
+        setTimeout(function () {
+            if ( (typeof socket.nbufs == "undefined" || socket.nbufs.length >= 0) && self.END_FIN == false) {
+                self.END_FIN = true;
+                socket.nbufs = undefined;
+            }
+        }, 5000);
         self.emit("close");
         self.__restartQueue();
     });
@@ -181,11 +211,11 @@ NetAMF.prototype.call = function (command, responder /* args */) {
     command = args.shift(); // remove command name
     if ((typeof responder != "undefined" && responder != null && typeof responder.onResult == "function" && typeof responder.onStatus== "function") || arguments[1] == null) {
         args.shift(); // remove responder
-    }else {
+    } else if (typeof responder == "number") {
+        args.shift();
+    } else {
         responder = undefined;
-        console.log('responder:%s , arguments:%s', responder, args);
     }
-
     /* set AMF Message Header */
     this.content_header.writeUInt16BE(this.Header_Count, 2);// header count
 
@@ -198,13 +228,18 @@ NetAMF.prototype.call = function (command, responder /* args */) {
     var messageLength = new Buffer(4);
     messageLength.writeUInt32BE(message.length, 0);
     // console.log("Responder type:",typeof responder != "undefined" , responder != null);
-    if (typeof responder != "undefined" && responder != null) {
+    if (typeof responder == "number") {
+
+        reqKey = "/"+responder;
+
+    } else if (typeof responder != "undefined" && responder != null) {
+
         reqKey += (++this.response_count);
         this.responders[reqKey] = {selector:responder, command:command};
     }
     responseURI = this.amf3Serializer.encodeDynamic(reqKey); // amf3 string
-
-    // console.log('arguments[responseURI]:',responseURI);
+    this.addTokenList(reqKey);
+    debug(util.format('arguments {responseURI:%s\n\t command:%s \n\t arguments:%s}', responseURI, command, JSON.stringify(args)));
     var len = targetURI.length + responseURI.length + messageLength.length + message.length;
 
     if (typeof this.messages == "undefined")
@@ -223,18 +258,83 @@ NetAMF.prototype.call = function (command, responder /* args */) {
         if (self.socket && self.connected) {
             self.__outgoingMessage();
 
-        }else {
+        } else if (self.END_FIN == true) {
+            self.END_FIN = false;
             self.socket.destroy();
+            //if (self.END_FIN == true) { }
+
+            // if (self.doConnect == true) return;
+
             self.socket.connect(self.socket_options, function () {
                 self.__outgoingMessage();
             });
+        } else {
+            setTimeout(function () {
+                self.waitEedFIN();
+            },10);
         }
 
     },0);
 
-
-    // Done //
     return reqKey;
+};
+
+NetAMF.prototype.addTokenList = function (reqKey) {
+    this.tokenList[reqKey] = this.keepAliveCount;
+    if (typeof this.tokenGroup == "undefined") this.tokenGroup = {};
+    if (typeof this.tokenGroup[this.keepAliveCount] == "undefined") this.tokenGroup[this.keepAliveCount] = [];
+    this.tokenGroup[this.keepAliveCount].push(reqKey);
+};
+NetAMF.prototype.removeTokenList = function (resKey) {
+    delete this.tokenList[resKey];
+};
+NetAMF.prototype.getTokenList = function (resKey) {
+
+    var group = this.tokenList[resKey];
+    var tokens = this.tokenGroup[group];
+    return tokens;
+};
+NetAMF.prototype.getFirstTokenList = function () {
+
+    var keys = Object.keys(this.tokenList);
+    var first = -1;
+    for (var i = 0; i < keys.length; i++) {
+        var index = this.tokenList[keys[i]];
+        if (first == -1) {
+            first = index;
+        } else {
+            first = Math.min(parseInt(index), parseInt(first));
+        }
+
+    }
+    var list = this.tokenGroup[first.toString()];
+    if (typeof list == "undefined") {
+        return [];
+    }else {
+        return list;
+    }
+
+};
+NetAMF.prototype.cleanTokenList = function () {
+    this.tokenList  = [];
+    this.tokenGroup = {};
+    this.keepAliveCount = 0;
+
+};
+
+NetAMF.prototype.waitEedFIN = function () {
+    var self = this;
+    if (this.END_FIN == false) {
+        setTimeout(function () {
+            self.waitEedFIN();
+        },10);
+    } else {
+        this.END_FIN = false;
+        this.socket.destroy();
+        this.socket.connect(self.socket_options, function () {
+            self.__outgoingMessage();
+        });
+    }
 };
 /**
  * @private __outgoingMessage
@@ -259,7 +359,13 @@ NetAMF.prototype.__outgoingMessage = function () {
             this.__startQueue();
         }
     } else {
-        self.socket.write(request);
+        ++self.keepAliveCount;
+        if (this.keepAliveMax-2 > 0) {
+            self.socket.write(request);
+        }else {
+            self.socket.end(request);
+        }
+
     }
 
 
@@ -395,44 +501,54 @@ NetAMF.prototype.__setsockopt = function (uri) {
  * @private
  * @return boolean
  */
-NetAMF.prototype.deserialize = function () {
+NetAMF.prototype.deserialize = function (buf) {
     var socket = this.socket;
-    var offset = socket.nbufs.indexOf((CRLF+CRLF));
+    var nbufs = socket.nbufs;
+    var isOnce = (typeof buf != "undefined" && buf != null);
+    var self = this;
+    if (isOnce) {
+        nbufs = buf;
+    }
+    var offset = nbufs.indexOf((CRLF+CRLF));
     var second;
     var contentLength;
     var content;
     // console.log('deserialize Header offset:',offset);
     if (offset == -1) return false;
 
-    var cResHeaders = this.readResHeaders(socket.nbufs.slice(0, offset)); // read the binary header
+    var cResHeaders = this.readResHeaders(nbufs.slice(0, offset)); // read the binary header
     offset += 4;
 
     // console.log('resHeaders:', cResHeaders);
     var status = cResHeaders["general"][2];
     contentLength = parseInt(cResHeaders["content-length"]);
     var keepAliveMax = cResHeaders["keep-alive"];
-
+    if (typeof keepAliveMax != "undefined") {
+        this.keepAliveMax = Math.max(parseInt(keepAliveMax.substr(keepAliveMax.search("max=")+4, keepAliveMax.length)), this.keepAliveMax);
+    }else{
+        //this.keepAliveMax = 100;
+    }
     if (cResHeaders["connection"] == 'close') socket.writable = false;
 
     if (isNaN(contentLength) == true) {
         second = offset;
         if (second != -1 )
-            contentLength = socket.nbufs.length - offset;
+            contentLength = nbufs.length - offset;
         else
-            contentLength = socket.nbufs.length;
+            contentLength = nbufs.length;
     }
 
-    if ((contentLength + offset) > socket.nbufs.length) return false;
+    if ((contentLength + offset) > nbufs.length) return false;
 
-    content = socket.nbufs.slice(offset, offset+contentLength);
+    content = nbufs.slice(offset, offset+contentLength);
 
     if (status == 200) {
-
         // console.log('1.deserialize Content-Length:', contentLength);
-        socket.nbufs = socket.nbufs.slice(offset+contentLength, socket.nbufs.length);
+        if (!isOnce) socket.nbufs = nbufs.slice(offset+contentLength, nbufs.length);
         // console.log("2.deserialize buffer.length ", socket.nbufs.length);
         // read the binary body
         if (content[0] == 0x00) {
+
             var AMFObject = this.readBody(content);
             this.__executionAction(AMFObject);
 
@@ -442,7 +558,14 @@ NetAMF.prototype.deserialize = function () {
         }
 
     } else {
-        console.error('status:', status);
+        // NSLog.log("error",'Status:%s, faultDetail:%s', status, content.toString());
+
+        if (!isOnce) socket.nbufs = nbufs.slice(offset+contentLength, nbufs.length);
+
+        self.emit("StatusError", status);
+        NSLog.log("error", "===== STATUS: =====", status);
+
+        return false;
     }
     content = undefined;
 
@@ -620,10 +743,9 @@ NetAMF.prototype.readBody = function (buf) {
  */
 NetAMF.prototype.readFaultData = function (buf) {
     var errorMessage = buf.toString();
-    //noinspection JSUnresolvedFunction
-    console.log('INVALID_AMF_MESSAGE ', errorMessage);
+    NSLog.log("error",'INVALID_AMF_MESSAGE ', errorMessage);
     this.emit('fault', { "event":"INVALID_AMF_MESSAGE", "description":"Invalid AMF message", "error": errorMessage});
-
+    this.socket.destroy();
 };
 /**
  * @param {AMFObject} AMFObject
@@ -642,11 +764,23 @@ NetAMF.prototype.__executionAction = function (AMFObject) {
         // console.log(message);
         offset = target.indexOf("/",1);
         key = target.slice(0, offset);
+
+        this.removeTokenList(key);
+
         remoteMessage = target.slice(offset+1,target.length);
-        console.log("responder key:%s, remoteMessage:%s", key, remoteMessage);
+        if (debugEnabled) {
+            debug(util.format("responder key:%s, remoteMessage:%s, value:%s", key, remoteMessage, JSON.stringify(message["value"],null,'\t')));
+        }else {
+            debug(util.format("responder key:%s, remoteMessage:%s", key, remoteMessage));
+        }
+
         if (key != '/' && (typeof self.client != "undefined")) {
             responder = this.responders[key]["selector"];
-            responder[remoteMessage](message["value"], key, this.responders[key]["command"]);
+            if (typeof responder[remoteMessage] != "undefined") {
+                responder[remoteMessage](message["value"], key, this.responders[key]["command"]);
+            }else {
+                NSLog.log("error","__executionAction:", remoteMessage,message["value"], key);
+            }
 
             // release object //
             this.responders[key]["selector"] = undefined;
@@ -733,6 +867,24 @@ NetAMF.prototype.__restartQueue = function () {
         self.__startQueue();
     }
 };
+NetAMF.prototype.createFailMessage = function (status, command) {
+    var errMsg = new objectType.ErrorMessage();
+    errMsg.faultCode = "Client.Error.MessageSend";
+    errMsg.errorID = 0;
+    errMsg.faultDetail = "Channel.Connect.Failed error NetConnection.Call.Failed: HTTP: Status " + status + " url: '" + command + "'";
+    errMsg.faultString = "Send failed";
+    errMsg.message = "faultCode:Client.Error.MessageSend faultString:'Send failed'";
+    errMsg.description = "HTTP: Status "+ status;
+
+    errMsg.rootCause = {
+        "code":"Client.Error.MessageSend",
+        "description":"HTTP: Failed",
+        "details":"/amfphp/Gateway.php",
+        "level":"error",
+        "type":"channelFault"
+    };
+    return errMsg;
+};
 /**
  * leaving the one you need release
  */
@@ -761,7 +913,7 @@ NetAMF.prototype.__defineGetter__("connected", function () {
     if (typeof this.socket == "undefined" ) {
         return false;
     } else {
-        console.log('writable:', this.socket.writable,  this.socket.destroyed);
+        // console.log('writable:', this.socket.writable,  this.socket.destroyed);
         // return !(this.socket._connecting === true);
         return (this.socket && this.socket.writable && !this.socket.destroyed);
     }
@@ -779,6 +931,13 @@ NetAMF.prototype.__defineGetter__("client", function () {
         return this._client;
     }else {
         return undefined;
+    }
+});
+NetAMF.prototype.__defineSetter__("debugEnabled", function (bool) {
+    if (typeof bool === "boolean") {
+        debugEnabled = bool;
+    }else {
+        debugEnabled = false;
     }
 });
 /**
@@ -802,7 +961,7 @@ function NetServices(uri) {
      */
     this.AMFSocket = undefined;
 
-    this.selectors = new responder(this.onResult, this.onFault, this);
+    this.selectors = new responder(this.onResult, this.onStatus, this);
 
     this.__initialize(uri);
 
@@ -811,11 +970,41 @@ function NetServices(uri) {
 
     this._tmpHand  = undefined;
     this._tmpHands = [];
+    this.retry_operation = [];
 }
 NetServices.prototype.__initialize = function (uri) {
+    var self = this;
+    var retriesConn;
     this.AMFSocket = new NetAMF();
     this.AMFSocket.client = this;
     this.AMFSocket.connect(uri);
+    this.AMFSocket.on("StatusError", function (status) {
+        var resKeys = this.getFirstTokenList();
+
+        NSLog.log("StatusError last keys - ",resKeys);
+
+        var index = resKeys.length;
+        while (index-- > 0) {
+            var resKey = resKeys[index];
+            var info = self._tmpHands[resKey];
+            if (info["retries"] <= 0) {
+                var command = info["args"][0];
+                // NSLog.log("error", '(%s)Retries 1 has status 500:%s', resKey, command);
+                self.onStatus(self.AMFSocket.createFailMessage(status, command),resKey, command);
+                this.removeTokenList(resKey);
+                continue;
+            }
+            this.removeTokenList(resKey);
+
+        }
+        //self.AMFSocket.emit("end");
+    });
+
+};
+NetServices.prototype.faultRetries = function (retriesConn,args) {
+    var self = this;
+    // self.retry_operation.push(args);
+    retriesConn.call.apply(retriesConn, args);
 };
 /***
  * call api
@@ -831,18 +1020,44 @@ NetServices.prototype.getService = function (command, self) {
     // var selector = cmd_args[(cmd_args.length-1)] + "_onResult";
 };
 NetServices.prototype.setAMFService = function (/** ...args **/) {
+
     var args = Array.prototype.slice.call(arguments);
     args.unshift(this.selectors);
     args.unshift(this._command);
     var resKey = this.AMFSocket.call.apply(this.AMFSocket,args);
-    this._tmpHands[resKey] = {func:this._tmpHand, delegate: this.delegate};
+    this._tmpHands[resKey] = {"func":this._tmpHand, "delegate": this.delegate, "args":args, "retries": retries_maximum, "timeout":setWaitTimeout(resKey,this)};
+
+    function setWaitTimeout(resKey,self) {
+        return setTimeout(function () {
+            NSLog.log("error", "Waiting 5sec has Timeout.");
+            var info;
+            if (typeof self._tmpHands[resKey] == "undefined") return;
+            info = self._tmpHands[resKey];
+            info["retries"]--;
+            var args = Array.prototype.slice.call(info["args"]);
+            args[1] = parseInt(resKey.substr(1,resKey.length));
+            self.AMFSocket.call.apply(self.AMFSocket, args);
+        }, 5000)
+    }
+
+
 };
 NetServices.prototype.__defineSetter__("tmpHand", function (name) {
     this._tmpHand = name;
 });
+NetServices.prototype.__defineSetter__("debugEnabled", function (bool) {
+    if (typeof bool === "boolean") {
+        debugEnabled = bool;
+    }else {
+        debugEnabled = false;
+    }
+});
+
+
 NetServices.prototype.onResult = function (result, resKey, command) {
-    // console.log(result, command);
+    // console.log("onResult",result, command);
     var context = this;
+
 
     var funName = this._tmpHands[resKey]["func"];
     var iDelegate = this._tmpHands[resKey]["delegate"];
@@ -861,10 +1076,28 @@ NetServices.prototype.onResult = function (result, resKey, command) {
 
     this._tmpHands[resKey]["func"] = null;
     this._tmpHands[resKey]["delegate"] = null;
+    clearTimeout(this._tmpHands[resKey]["timeout"]);
     delete this._tmpHands[resKey];
 };
-NetServices.prototype.onFault = function (fault, resKey, command) {
+NetServices.prototype.onStatus = function (fault, resKey, command) {
     // console.log("onFault ",fault, command);
+    var context = this;
+    var funName = this._tmpHands[resKey]["func"];
+    var iDelegate = this._tmpHands[resKey]["delegate"];
+    var hasTmpHand = (funName != "" && typeof funName != "undefined" && funName != null && funName != 0);
+    if (!hasTmpHand) {
+        funName = command.slice(command.lastIndexOf(".")+1, command.length);
+    }
+    if (typeof iDelegate[funName + "_Status"] != "undefined") {
+        iDelegate[funName + "_Status"](fault, command);
+    }else {
+        if (typeof iDelegate[funName] != "undefined" ) iDelegate[funName + "_Status"](fault, command);
+        context.emit(funName + "_Status", fault, command);
+    }
+    this._tmpHands[resKey]["func"] = null;
+    this._tmpHands[resKey]["delegate"] = null;
+    clearTimeout(this._tmpHands[resKey]["timeout"]);
+    delete this._tmpHands[resKey];
 };
 NetServices.prototype.release = function () {
     this.delegate = null;
@@ -883,6 +1116,28 @@ function createGatewayConnection(uri) {
     return new NetServices(uri);
 }
 
+function ifdef(a,b) {
+    var req;
+    try {
+        req = require(a).getInstance();
+    } catch (e) {
+        if (e.code !== 'MODULE_NOT_FOUND') {
+            throw e;
+        }
+        req = require(b).logger;
+        req = req.getInstance();
+    }
+    return req;
+}
+function debug(arg) {
+    if (debugEnabled) {
+        NSLog.log("debug", arg);
+    } else {
+        // console.log(arg);
+    }
+
+}
+
 /**
  * A object containing a AMFMessage
  * @typedef {object} AMFObject
@@ -890,7 +1145,7 @@ function createGatewayConnection(uri) {
  * @property {number} headerCount -
  * @property {object} headers
  * @property {string} headers.name
- * @property {boolean} headers.mustUnderstand
+ * @property {boolean} headers.mustUnderstandff
  * @property {number} headers.len
  * @property {object|string|number} headers.value
  * @property {number} messageCount
