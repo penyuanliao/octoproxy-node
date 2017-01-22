@@ -33,18 +33,18 @@ var srv = createNodejsSrv(config.srvOptions.port);
 /**
  * 連線到伺服器
  * @param uri obj{host,port}
- * @param socket 連線client socket
+ * @param client 連線client socket
  * @returns {RTMPClient}
  */
-function connect(uri, socket) {
+function connect(uri, client) {
     var rtmp = undefined;
     // #1 建立連線
     rtmp = libRtmp.RTMPClient.connect(uri.host,uri.port, function (){
         NSLog.log('debug', "RTMPClient %s:%s Connected!", rtmp.socket.remoteAddress, rtmp.socket.remotePort);
         //#1-1 送給Client連線成功
         rtmp.on('status', function (cmd) {
-            if (socket.isConnect)
-                socket.write(JSON.stringify({"NetStatusEvent":"Connected.amfIsReady"}));
+            if (client.isConnect)
+                client.write(JSON.stringify({"NetStatusEvent":"Connected.amfIsReady"}));
         });
         rtmp.connectResponse();
         
@@ -80,8 +80,8 @@ function connect(uri, socket) {
             // debug('INFO :: cmd:%s, argument:%s', cmd, Object.keys(argument));
             //這邊暫時忽略_result訊息
             if(cmd != '_result') {
-                if (socket.isConnect)
-                    socket.write(JSON.stringify({"NetStatusEvent":"Data","cmd":cmd, args:argument}));
+                if (client.isConnect && client.socket.writable && !client.socket.destroyed)
+                    client.write(JSON.stringify({"NetStatusEvent":"Data","cmd":cmd, args:argument}));
             }else
             {
                 // NSLog.log('info','FMS _result:', cmd, argument);
@@ -92,20 +92,20 @@ function connect(uri, socket) {
     // #3 FMS錯誤訊息事件
     rtmp.on("error", function (args) {
         NSLog.log('error',"RTMP ERROR", args);
-        if (socket.isConnect) {
-            socket.write(JSON.stringify({"NetStatusEvent":'NetConnection.Connect.Timeout'}))
+        if (client.isConnect && client.socket.writable && !client.socket.destroyed) {
+            client.write(JSON.stringify({"NetStatusEvent":'NetConnection.Connect.Timeout'}))
         }
         setTimeout(function () {
-            onSocketClose(socket.name);
+            onSocketClose(client.name);
         },1000)
     });
     // #4 FMS關閉的事件
     rtmp.on('close', function (args) {
         NSLog.log('info',"RTMP connection closed");
-        if(socket.isConnect){
+        if(client.isConnect){
             // socket.write(JSON.stringify({"NetStatusEvent":"NetConnection.Connect.Closed"}));
             setTimeout(function () {
-                onSocketClose(socket.name);
+                onSocketClose(client.name);
             },1000)
         }
 
@@ -242,7 +242,7 @@ function createNodejsSrv(port) {
         var socket = evt.client;
         const sockName = socket.name;
         var data = evt.data;
-        if (data.length > 1 && data.charCodeAt(0) == OPEN_BRACE) {
+        if (typeof data != "undefined" && data.length > 1 && data.charCodeAt(0) == OPEN_BRACE) {
             //object
             try {
                 var json = JSON.parse(data);
