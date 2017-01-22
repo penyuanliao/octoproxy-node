@@ -13,10 +13,10 @@
     "debug": "TRUE"
   },
   "scripts": {
-    "compress": "tar -zcvf ../FxRTMPBridge.tgz ../FxRTMPBridge/",
+    "compress": "",
     "start": "sudo sh startup.sh",
     "test": "echo $npm_package_config_debug",
     "clean": ""
   },
-  "description": "# FxNetSocket [lib all] # FxLiveMaster.js"
+  "description": ""
 }
