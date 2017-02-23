@@ -50,8 +50,11 @@ Deserializer.prototype.readTypeMarker = function () {
         case AMF_Constants.AMF3_XMLSTRING:
             return this.readXmlString();
         case AMF_Constants.AMF3_BYTEARRAY:
-            return new Buffer(this.readString());
+            var buf = new Buffer(this.readString());
+            this.objectReferences.push(buf);
+            return buf;
         case AMF_Constants.AMF3_DICTIONARY:
+
             return this.readDictionArray();
         default:
             throw new Error("Unsupported type marker:"+ typeMarker, 4000);
@@ -160,10 +163,12 @@ Deserializer.prototype.readDate = function () {
  */
 Deserializer.prototype.readArray = function () {
     var arrayReference = this.readInteger();
+
     if ((arrayReference & 0x01) == 0) {
         arrayReference = arrayReference >> 1;
+
         if (arrayReference >= this._referenceObjects.length) {
-            throw new Error('Unknown array reference: ' + arrayReference);
+            throw new Error('Unknown array reference: ' + arrayReference + " " + this.offset);
         }else {
             return this._referenceObjects[arrayReference];
         }
@@ -171,6 +176,8 @@ Deserializer.prototype.readArray = function () {
     // Create a holder for the array in the reference list
     var data = [];
     var key = this.readString();
+
+    this._referenceObjects.push(data);
 
     // Iterating for string based keys.
     while (key != "" && typeof key != "undefined") {
@@ -185,8 +192,6 @@ Deserializer.prototype.readArray = function () {
     for (var i = 0; i < arrayReference; i++) {
         data.push(this.readTypeMarker());
     }
-
-    this._referenceObjects.push(data);
 
     return data;
 };
@@ -248,6 +253,8 @@ Deserializer.prototype.readObject = function () {
             }
 
         }
+        // Add the Object to the reference table
+        this._referenceObjects.push(returnObject);
 
         var properties = [];
         var property;
@@ -321,8 +328,7 @@ Deserializer.prototype.readObject = function () {
         }
 
 
-        // Add the Object to the reference table
-        this._referenceObjects.push(returnObject);
+
     }
 
     if (returnObject instanceof object.ArrayCollection) {
@@ -576,7 +582,7 @@ Serializer.prototype.writeArray = function (arr) {
     var key,value,i;
 
     var keys = Object.keys(arr);
-    console.log("AllKeys:",keys.length);
+    // console.log("AllKeys:",keys.length);
     var i = keys.length;
 
     while (i--) {
@@ -740,7 +746,7 @@ Serializer.prototype.writeObject = function (obj) {
 
     }
     catch (e) {
-        console.log("Unable to writeObject output: " + e);
+        console.error("Unable to writeObject output: " + e);
     }
 
 };
@@ -764,7 +770,7 @@ Serializer.prototype.writeByteArray = function (data) {
     }else {
         var err = new TypeError('Invalid ByteArray specified; must be a string or Zend_Amf_Value_ByteArray');
         err.name = "amf3Utils";
-        console.log(err);
+        console.error(err);
     }
     this.writeBinaryString(data);
 };
