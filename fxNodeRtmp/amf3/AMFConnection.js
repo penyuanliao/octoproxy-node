@@ -31,58 +31,74 @@ util.inherits(NetServices, events.EventEmitter); // 繼承事件
  * AMFPHP NetConnection
  * @constructor NetAMF
  */
-function NetAMF() {
+function NetAMF(options) {
     events.EventEmitter.call(this);
 
-    this.uptime = new Date().getTime().toString();
-    this.AMFVersion = 3; //0:AMF0, 3:AMF3
-    this.Header_Count = 0;
-    this.Message_Count = 0;
-    this.responders = {}; // dispatch Event
-    this.response_count = 0;
-    this.amf3Serializer = new amf3Utils.serializer();
+    this.uptime           = new Date().getTime().toString();
+    this.AMFVersion       = 3; //0:AMF0, 3:AMF3
+    this.Header_Count     = 0;
+    this.Message_Count    = 0;
+    this.responders       = {}; // dispatch Event
+    this.response_count   = 0;
+    this.amf3Serializer   = new amf3Utils.serializer();
     this.amf3Deserializer = new amf3Utils.deserializer();
 
-    this.END_FIN     = false;
+    this.END_FIN          = false;
 
-    this.content_header = new Buffer(6);
+    this.content_header   = new Buffer(6);
 
-    this._client = undefined;
+    this._client          = undefined;
 
-    this.socket     = undefined; // connect socket
+    this.socket           = undefined; // connect socket
     /**
      * socket connect options
      * @type {{port: number, host: string}}
      */
-    this.socket_options = {port:1935, host:'localhost', allowHalfOpen:true};
-    this._keepAlive = true;
-    http.agent      = new http.Agent({ keepAlive: true, maxSockets:5});
-    this.tokenList    = []; // send all reqKey
-    this.requestCount = 0;
+    this.socket_options   = {port:1935, host:'localhost', allowHalfOpen:true};
+    this._keepAlive       = true;
+    http.agent            = new http.Agent({ keepAlive: true, maxSockets:20});
+    this.tokenList        = []; // send all reqKey
+    this.requestCount     = 0;
     /**
      * request header key & value
      * @type {Array}
      */
-    this.headers = [];
+    this.headers          = [];
 
-    this.waitToSend = false;
-    this.messages   = undefined; // one tick message
-    this.setup();
+    this.waitToSend       = false;
+    this.messages         = undefined; // one tick message
+
+    this.setup(options);
 }
 /**
  * initial setup variable
  */
-NetAMF.prototype.setup = function () {
-    this.objectEncoding = 3;
+NetAMF.prototype.setup = function (options) {
 
-    this.headers["POST"] = "/amfphp/gateway.php";
+    if (typeof options != "undefined") {
+        if (typeof options.port == "number") this.socket_options["port"] = options.port;
+        if (typeof options.host == "string") this.socket_options["host"] = options.host;
+        if (typeof options.maxSockets == "number") http.agent = new http.Agent({ keepAlive: true, maxSockets:options["maxSockets"]});
+
+    }
+    this.objectEncoding             = this.ObjectEncoding.AMF3;
+    this.headers["POST"]            = "/amfphp/gateway.php";
     this.headers["x-flash-version"] = FLASH_VERSION;
-    this.headers["Content-Type"] = "application/x-amf";
-    this.headers["Content-Length"] = 0;
-    this.headers["User-Agent"] = SWF; //"Shockwave Flash";
-    this.headers["Host"] = "127.0.0.1"; //socket.remoteAddress
-    this.headers["Cache-Control"] = "no-cache"; //socket.remoteAddress
-    this.headers["Cookie"] = "PHPSESSID=" + mCrypto.createHash("md5").update(this.uptime).digest("hex");
+    this.headers["Content-Type"]    = "application/x-amf";
+    this.headers["Content-Length"]  = 0;
+    this.headers["User-Agent"]      = SWF; //"Shockwave Flash";
+    this.headers["Host"]            = "127.0.0.1"; //socket.remoteAddress
+    this.headers["Cache-Control"]   = "no-cache"; //socket.remoteAddress
+    this.headers["Cookie"]          = "PHPSESSID=" + mCrypto.createHash("md5").update(this.uptime).digest("hex");
+
+    this.recordcount = 0;
+    this.cookies     = [];
+    for (var i = 0; i < http.agent.maxSockets;i++) {
+        var key4 = Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
+        var cookie = "PHPSESSID=" + mCrypto.createHash("md5").update(new Date().getTime() + '-' + key4).digest("hex");
+        this.cookies.push(cookie);
+    }
+
 
 };
 /**
@@ -107,7 +123,7 @@ NetAMF.prototype.error = function (error) {
 NetAMF.prototype.connect = function (uri) {
     //URL argument
     this.__setsockopt(uri);
-    console.log('** start connect AMFPHP **');
+    console.log('** start connect AMFPHP http.agent.maxSockets(%s) **',http.agent.maxSockets);
     this.options = {
         hostname: this.socket_options["host"],
         port: this.socket_options["port"],
@@ -170,7 +186,7 @@ NetAMF.prototype.call = function (command, responder /* args */) {
     } else if (typeof responder != "undefined" && responder != null) {
 
         reqKey += (++this.response_count);
-        this.responders[reqKey] = {selector:responder, command:command};
+        this.responders[reqKey] = {selector:responder, command:command,ts:new Date().getTime()};
     }
     responseURI = this.amf3Serializer.encodeDynamic(reqKey); // amf3 string
     this.addTokenList(reqKey);
@@ -196,7 +212,6 @@ NetAMF.prototype.call = function (command, responder /* args */) {
     return reqKey;
 };
 NetAMF.prototype.sendMessage2 = function () {
-    console.log('sendMessage2');
     var self = this;
     // console.log('do Buffer.concat', self.messages.length);
     var msg_len = self.messages.length;
@@ -210,7 +225,9 @@ NetAMF.prototype.sendMessage2 = function () {
     var request = Buffer.concat([self.content_header, data], self.content_header.length + msg_len);
 
     this.options["headers"]['Content-Length'] = msg_len + self.content_header.length;
-    this.options["headers"]['Cookie'] = this.headers["Cookie"];
+    this.options["headers"]['Cookie'] = this.cookies[this.recordcount++];
+    if (this.recordcount >= http.agent.maxSockets) this.recordcount = 0;
+
     var req  = http.request(this.options, function (response) {
         // console.log('STATUS: ',response.statusCode);
         console.log('HEADERS: ',response.headers["keep-alive"]);//, response.headers
@@ -225,9 +242,8 @@ NetAMF.prototype.sendMessage2 = function () {
         });
         response.on("end", function () {
             req.end();
-            NSLog.log("error","end nbufs:%s STATUS: %s", typeof nbufs, response.statusCode);
+            NSLog.log("info","POST Response STATUS: %s", response.statusCode);
             var resKey = self.removeTokenListtoCount(req.index);
-            // self.emit("complete", req.index);
 
             if (typeof nbufs != "undefined" && nbufs.length > 0) {
                 self.deserialize(nbufs,response.statusCode, resKey);
@@ -235,7 +251,10 @@ NetAMF.prototype.sendMessage2 = function () {
             }else {
                 self.deserialize("",response.statusCode, resKey);
             }
-            response.removeAllListeners();
+            response.removeAllListeners()
+
+
+
         });
 
     });
@@ -249,7 +268,9 @@ NetAMF.prototype.sendMessage2 = function () {
 
     self.Message_Count = 0;
     self.waitToSend = false;
+
 };
+
 
 NetAMF.prototype.addTokenList = function (reqKey) {
     this.tokenList[reqKey] = this.requestCount;
@@ -452,7 +473,6 @@ NetAMF.prototype.deserialize = function (nbufs, status, resKey) {
 
 
         if (content[0] == 0x00) {
-
             var AMFObject = this.readBody(content);
             this.__executionAction(AMFObject);
 
@@ -691,6 +711,7 @@ NetAMF.prototype.__executionAction = function (AMFObject) {
 
             responder = this.responders[key]["selector"];
             if (typeof responder[remoteMessage] != "undefined") {
+                NSLog.log('error', "[%s]Response time:%s ms.",key, (new Date().getTime() - this.responders[key]["ts"]));
                 responder[remoteMessage](message["value"], key, this.responders[key]["command"]);
             }else {
                 NSLog.log("error","__executionAction:", remoteMessage,message["value"], key);
