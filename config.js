@@ -13,9 +13,12 @@ config.env = process.env.NODE_ENV;
 config.numCPUs = require('os').cpus().length;
 /** 開發環境設定 **/
 if (config.env == 'development') {
-    config.bFMSHost = require('fxNetSocket').getConfiguration("OctoProxy");
+    config.bFMSHost = require('fxNetSocket').getConfiguration("OctoProxy-Dev");
     config.bExceptions = [
-        {"Host":"43.251.76.220", "rules":["/BacPlayerVip"]}
+        {
+            "Host":require('fxNetSocket').getConfiguration("OctoProxy-Dev"),
+            "rules":["/BacPlayerVip"]
+        }
     ];
     config.bFMSPort = 1935;
     config.srvOptions = {
@@ -39,7 +42,10 @@ else {
     /** 伺服器環境設定 **/
     config.bFMSHost = require('fxNetSocket').getConfiguration("OctoProxy");
     config.bExceptions = [
-        {"Host":"43.251.76.220", "rules":["/BacPlayerVip"]}
+        {
+            "Host":require('fxNetSocket').getConfiguration("OctoProxy-Dev"),
+            "rules":["/BacPlayerVip"]
+        }
     ];
     config.bFMSPort = 1935;
     config.srvOptions = {

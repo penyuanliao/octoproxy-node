@@ -36,9 +36,12 @@ NSLog.configure({
     id:"octoproxy",
     remoteEnabled: true,
     /*console:console,*/
-    trackBehaviorEnabled: false, // toDB server [not implement]
+    trackBehaviorEnabled: true, // toDB server [not implement]
+    trackOptions:{db:"couchbase://127.0.0.1", bucket:"nodeHistory"},
     maximumFileSize: 1024 * 1024 * 100});
+/** remove a socket was pending timeout. **/
 const closeWaitTime = 5000;
+/** done accept socket was pending timeout **/
 const sendWaitClose = 5000;
 /** clients request flashPolicy source response data **/
 const policy = '<?xml version=\"1.0\"?>\n<cross-domain-policy>\n<allow-access-from domain=\"*\" to-ports=\"80\"/>\n</cross-domain-policy>\n';
@@ -309,6 +312,9 @@ AppDelegate.prototype.createServer = function (opt) {
                 var lbtimes;
 
                 var tokencode = self.gameLBSrv.getLoadBalancePath(url_args["gametype"], function (action, json) {
+                    NSLog.log('trace','--------------------------');
+                    NSLog.log('trace', 'action: %s, token code:%s', action);
+                    NSLog.log('trace','--------------------------');
                     var src;
                     if (json.action == self.gameLBSrv.LBActionEvent.ON_GET_PATH) {
                         if (typeof lbtimes != 'undefined') clearTimeout(lbtimes);
@@ -316,7 +322,7 @@ AppDelegate.prototype.createServer = function (opt) {
                         namespace = json.path.toString('utf8');
                         var src_string = source.toString('utf8').replace(originPath, namespace);
                         // var indx = source.indexOf(originPath);
-
+                        handle.getSockInfos.path  = namespace;
                         src = new Buffer(src_string);
                         clusterEndpoint(namespace ,src);
 
@@ -356,7 +362,7 @@ AppDelegate.prototype.createServer = function (opt) {
 
                     if (typeof worker === 'undefined' || !worker) {
                         worker = self.clusters["*"]; //TODO 未來準備擋奇怪連線
-                        if (typeof worker == 'undefined') {
+                        if (typeof worker == 'undefined'  || !worker) {
                             self.rejectClientExcpetion(handle, "PROC_NOT_FOUND");
                             handle.close(close_callback);
                             NSLog.log('trace','!!!! close();');
@@ -457,14 +463,15 @@ AppDelegate.prototype.createServer = function (opt) {
 
             if (TRACE_SOCKET_IO) {
                 var now = new Date();
-
+                var nowFomat = now.getFullYear() + '/' + (now.getMonth() + 1) + '/' + now.getDate() + " " + now.getHours() + ':' + now.getMinutes() + ':' + now.getSeconds();
                 NSLog.log( status, '{"msg":"%s", "ts": "%s", "src":"%s", "mode":"%s", "path":"%s"}',
                     message,
-                    now.getFullYear() + '/' + (now.getMonth() + 1) + '/' + now.getDate() + " " + now.getHours() + ':' + now.getMinutes() + ':' + now.getSeconds(),
+                    nowFomat,
                     this.getSockInfos.address,
                     this.getSockInfos.mode,
                     this.getSockInfos.path
                 );
+                NSLog.tracking("getSockProxyInfo", {"status":status,"msg":message, "ts":nowFomat, "src":this.getSockInfos.address, "mode": this.getSockInfos.mode, "path": this.getSockInfos.path});
                 this.getSockInfos.exception = null;
                 this.getSockInfos.address = null;
                 this.getSockInfos.mode = null;
@@ -537,7 +544,7 @@ AppDelegate.prototype.setupCluster = function (opt) {
             this.clusters[cluster.name].push(cluster);
 
             cluster.emitter.on('socket_handle', function (message, handle) {
-                
+
             });
             cluster.emitter.on('status', function (message) {
                 NSLog.log('warning', message);
@@ -566,7 +573,7 @@ AppDelegate.prototype.assign = function (namespace, cb) {
         namespace = path[1];
         if (typeof namespace == 'undefined') namespace = path[0];
     }
-    NSLog.log('log',"assign::namespace:", namespace);
+    // NSLog.log('log',"assign::namespace:", namespace);
     // url_param
     if (cfg.balance === "url_param") {
 
@@ -753,3 +760,5 @@ module.exports = exports = AppDelegate;
  * @function UV_EOF
  * @memberof uv
  **/
+
+

@@ -126,7 +126,7 @@ function connect(uri, client) {
     });
 
     return rtmp;
-};
+}
 /**
  * 建立fms連線
  * @param client NetConnection自己封裝的Client
@@ -151,13 +151,13 @@ function setupFMSClient(client) {
     connsCount++;
 }
 /**
- * config.bExceptions = [ {"Host":"43.251.76.220", "rules":["/BacPlayerLight/V"]}];
+ * config.bExceptions = [ {"Host":"127.0.0.1", "rules":["/BacPlayerLight/V"]}];
  * expection server
  * @param client
  * @returns {string}
  */
 function getFMSServerIP(client) {
-    if (typeof config.bExceptions != "undefined" && config.bExceptions.constructor === Array)
+    if (typeof config.bExceptions != "undefined" && Array.isArray(config.bExceptions))
     {
         for (var i = 0; i < config.bExceptions.length; i++) {
             var host = config.bExceptions[i]["Host"];
@@ -224,7 +224,7 @@ function ebbStream(sockList) {
  * @returns {port}
  */
 function createNodejsSrv(port) {
-    var server = new FxConnection(port,{runListen: isMaster});
+    var server = new FxConnection(port, {runListen: isMaster});
     var self = this;
     server.on('connection', function (client) {
 
@@ -275,6 +275,9 @@ function createNodejsSrv(port) {
                 _fms.fmsCall("setObj",json["data"]);
 
             }else if (typeof event != 'undefined' && event != null && event != "" && typeof json["data"] != "undefined"){
+
+                if (Array.isArray(json["data"]) == false) return;
+
                 json["data"].unshift(event);
                 NSLog.log('debug','!!!!! event :', event);
                 setTimeout(function () {
@@ -428,4 +431,9 @@ process.on('message', function (data, handle) {
     }
 });
 
-process.send({"action":"creationComplete"});
+function makeSureComplete() {
+    if (process.send instanceof Function) {
+        process.send({"action":"creationComplete"});
+    }
+}
+makeSureComplete();

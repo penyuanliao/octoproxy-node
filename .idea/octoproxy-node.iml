@@ -4,6 +4,7 @@
     <content url="file://$MODULE_DIR$/../admin-node" />
     <content url="file://$MODULE_DIR$/../configuration" />
     <content url="file://$MODULE_DIR$" />
+    <content url="file://$MODULE_DIR$/../../SVN/NodeJS/FxCouchbase" />
     <content url="file://$MODULE_DIR$/../../SVN/NodeJS/LoadBalancer" />
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
