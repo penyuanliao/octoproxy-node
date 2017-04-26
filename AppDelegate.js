@@ -47,6 +47,8 @@ const sendWaitClose = 5000;
 const policy = '<?xml version=\"1.0\"?>\n<cross-domain-policy>\n<allow-access-from domain=\"*\" to-ports=\"80\"/>\n</cross-domain-policy>\n';
 /** tracking socket close **/
 const TRACE_SOCKET_IO = true;
+/** tcp connection the maximum segment size **/
+const TCP_MTU = 2048;
 /** 多執行緒 **/
 function noop() {}
 /**
@@ -73,10 +75,13 @@ function AppDelegate() {
     this._lockState      = false;
     /** casino load balance **/
     this.gameLBSrv       = new gLBSrv(cfg.gamSLB);
+
     NSLog.log('info','LockState:[%s]', this.lockState);
     NSLog.log('debug',"** Initialize octoproxy.js **");
     this.init();
+
 }
+
 /**
  * 初始化
  * **/
@@ -389,12 +394,14 @@ AppDelegate.prototype.createServer = function (opt) {
                         }
 
                         NSLog.log('trace','2. Socket goto %s', lastnamspace);
-                        worker.send({'evt':'c_init',data:source}, handle,{keepOpen:false});
+
                         setTimeout(function () {
                             self.rejectClientExcpetion(handle, "CON_VERIFIED");
                             handle.close(close_callback);
                             handle = null;
                         }, sendWaitClose);
+
+                        worker.send({'evt':'c_init',data:source}, handle,{keepOpen:false});
                     }
 
                     //noinspection JSUnresolvedFunction
@@ -621,8 +628,9 @@ AppDelegate.prototype.assign = function (namespace, cb) {
 
         for (var n = 0; n < stremNum; n++) {
             //檢查最小連線數
+
             var _nextCluster = this.clusters[clusterName][n].nodeInfo.connections;
-            var priority     = cluster.nodeInfo.connections < _nextCluster;
+            var priority     = cluster.nodeInfo.connections > _nextCluster;
             // var isRefusing   = _nextCluster._dontDisconnect;
             if (priority){
                 cluster = this.clusters[clusterName][n];
