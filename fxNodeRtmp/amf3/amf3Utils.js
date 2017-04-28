@@ -51,13 +51,12 @@ Deserializer.prototype.readTypeMarker = function () {
             return this.readXmlString();
         case AMF_Constants.AMF3_BYTEARRAY:
             var buf = new Buffer(this.readString());
-            this.objectReferences.push(buf);
             return buf;
         case AMF_Constants.AMF3_DICTIONARY:
 
             return this.readDictionArray();
         default:
-            throw new Error("Unsupported type marker:"+ typeMarker, 4000);
+            throw new Error("Unsupported type marker:"+ typeMarker);
     }
 
 };
@@ -114,7 +113,7 @@ Deserializer.prototype.readString = function () {
         // reference string
         stringReference = length;
         if (stringReference >= this._referenceStrings.length) {
-            throw new Error("Undefined string reference: " + stringReference, 4001);
+            throw new Error("Undefined string reference: " + stringReference);
         }
         // reference string found
         return this._referenceStrings[stringReference];
@@ -263,7 +262,7 @@ Deserializer.prototype.readObject = function () {
         if (encoding === AMF_Constants.ET_EXTERNAL) {
             // Externalizable object such as {ArrayCollection} and {ObjectProxy}
             if (!storedClass) {
-                var extObj = [];
+                var extObj = {};
                 extObj["className"]     = className;
                 extObj["encoding"]      = encoding;
                 extObj["propertyNames"] = propertyNames;
@@ -274,7 +273,7 @@ Deserializer.prototype.readObject = function () {
         else if (encoding === AMF_Constants.ET_DYNAMIC) {
             // used for Name-value encoding
             if (!storedClass) {
-                var extObj = [];
+                var extObj = {};
                 extObj["className"]     = className;
                 extObj["encoding"]      = encoding;
                 extObj["propertyNames"] = propertyNames;
@@ -285,6 +284,10 @@ Deserializer.prototype.readObject = function () {
                 property = this.readString();
                 if (property != "") {
                     propertyNames.push(property);
+                    if (property == "WagersID" && (this.buffer[this.offset] == 0x05 ||this.buffer[this.offset] == 0x04)) {
+                        this.buffer[this.offset] = 0x03;
+                        // this.buffer[this.offset+1] = 0x03;
+                    }
                     properties[property] = this.readTypeMarker();
                     // console.log('properties[%s]:', property, properties[property]);
                 }

@@ -63,7 +63,7 @@ describe('amf3Utils.js', function() {
         it('@type {object} can stringify composite types in object', function() {
             var composite_obj = { enabled: true, list:[1,2,3,4], he:"her", "group" : {"val":true,he:"he"}};
 
-            var buf = "0a0b010f656e61626c656403096c697374090901040104020403040405686506076865720b67726f75700a010776616c030406040101";
+            var buf = "0a0b010b67726f75700a0105686506020776616c0301020607686572096c69737409090104010402040304040f656e61626c65640301";
 
             assert.equal(serializer.amf3Encode(composite_obj, 0x0A).toString('hex'), buf);
 

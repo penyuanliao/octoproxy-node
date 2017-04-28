@@ -57,6 +57,7 @@ function NetAMF(options) {
     this.socket_options   = {port:1935, host:'localhost', allowHalfOpen:true};
     this._keepAlive       = true;
     http.agent            = new http.Agent({ keepAlive: true, maxSockets:20});
+    this.maxSockets       = http.agent.maxSockets;
     this.tokenList        = []; // send all reqKey
     this.requestCount     = 0;
     /**
@@ -78,7 +79,10 @@ NetAMF.prototype.setup = function (options) {
     if (typeof options != "undefined") {
         if (typeof options.port == "number") this.socket_options["port"] = options.port;
         if (typeof options.host == "string") this.socket_options["host"] = options.host;
-        if (typeof options.maxSockets == "number") http.agent = new http.Agent({ keepAlive: true, maxSockets:options["maxSockets"]});
+        if (typeof options.maxSockets == "number") {
+            http.agent = new http.Agent({ keepAlive: true, maxSockets:options["maxSockets"]});
+            this.maxSockets = http.agent.maxSockets;
+        }
 
     }
     this.objectEncoding             = this.ObjectEncoding.AMF3;
@@ -226,8 +230,19 @@ NetAMF.prototype.sendMessage2 = function () {
     var request = Buffer.concat([self.content_header, data], self.content_header.length + msg_len);
 
     this.options["headers"]['Content-Length'] = msg_len + self.content_header.length;
-    this.options["headers"]['Cookie'] = this.cookies[this.recordcount++];
-    if (this.recordcount >= http.agent.maxSockets) this.recordcount = 0;
+    var cookie = this.cookies[this.recordcount];
+    if (typeof cookie == "undefined") {
+        this.recordcount = 0;
+        this.options["headers"]['Cookie'] = this.cookies[this.recordcount];
+    } else {
+        this.options["headers"]['Cookie'] = cookie;
+    }
+    if (this.recordcount >= http.agent.maxSockets) {
+        this.recordcount = 0;
+    } else if (http.agent.maxSockets == Number.NEGATIVE_INFINITY && this.recordcount >= this.maxSockets) {
+        NSLog.log("error", "http.agent.maxSockets:", http.agent.maxSockets);
+        this.recordcount = 0;
+    }
 
     var req  = http.request(this.options, function (response) {
         // console.log('STATUS: ',response.statusCode);
@@ -803,6 +818,15 @@ NetAMF.prototype.__defineSetter__("setKeepAlive", function (bool) {
 NetAMF.prototype.__defineSetter__("setMaxSockets",function (num) {
     if (typeof num === "number") {
         http.agent["maxSockets"] = num;
+        this.maxSockets = num;
+        var len = num - this.cookies.length;
+        if (len > 0) {
+            for (var i = 0; i < len; i++) {
+                var key4 = Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
+                var cookie = "PHPSESSID=" + mCrypto.createHash("md5").update(new Date().getTime() + '-' + key4).digest("hex");
+                this.cookies.push(cookie);
+            }
+        }
     }
 });
 NetAMF.prototype.__defineGetter__("connected", function () {
@@ -821,7 +845,6 @@ NetAMF.prototype.__defineGetter__("connected", function () {
  */
 NetAMF.prototype.__defineSetter__("client", function (value) {
     this._client = value;
-    console.log('set Client');
 });
 NetAMF.prototype.__defineGetter__("client", function () {
     if (this._client != null && this._client != 0 && typeof this._client != "undefined") {
@@ -987,7 +1010,7 @@ NetServices.prototype.onStatus = function (fault, resKey, command) {
     if (typeof iDelegate[funName + "_Status"] != "undefined") {
         iDelegate[funName + "_Status"](fault, command);
     }else {
-        if (typeof iDelegate[funName] != "undefined" ) iDelegate[funName + "_Status"](fault, command);
+        if (typeof iDelegate["Status"] != "undefined" ) iDelegate["Status"](fault, command);
         context.emit(funName + "_Status", fault, command);
     }
     this._tmpHands[resKey]["func"] = null;
@@ -1006,7 +1029,7 @@ NetServices.prototype.release = function () {
  * A connect created by amfphp socket
  * @module createGatewayConnection
  * @param uri {String}
- * @param options {Object} options.maxSockets
+ * @param options {Object=} options.maxSockets
  * @returns {NetServices}
  */
 function createGatewayConnection(uri, options) {
@@ -1030,7 +1053,7 @@ function debug(arg) {
     if (debugEnabled) {
         NSLog.log("debug", arg);
     } else {
-        //console.log(arg);
+        // console.log(arg);
     }
 
 }
