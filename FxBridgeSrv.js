@@ -141,7 +141,7 @@ function setupFMSClient(client) {
         app:client.namespace.substr(1,client.namespace.length)
     };
 
-    NSLog.log('info','Bridge of fms:', uri.path);
+    NSLog.log('info','Bridge of fms:', uri);
     //建立FMS連線
     _rtmp = connect(uri, client);
     //設定一下名稱跟client一樣
@@ -229,7 +229,7 @@ function createNodejsSrv(port) {
     server.on('connection', function (client) {
 
         NSLog.log('info','Connection Clients name:%s (namespace %s)',client.name, client.namespace);
-        if(client.namespace.indexOf("policy-file-request") != -1 ) {
+        if(typeof client.namespace == "undefined" || client.namespace.indexOf("policy-file-request") != -1 ) {
             console.log('Clients is none rtmp... to destroy.');
             client.close();
             return;
@@ -238,7 +238,7 @@ function createNodejsSrv(port) {
     });
 
     server.on('message', function (evt) {
-        NSLog.log('debug','message :', evt.data);
+        NSLog.log('error','message :', evt.data);
         var socket = evt.client;
         const sockName = socket.name;
         var data = evt.data;
