@@ -207,7 +207,7 @@ function ebbStream(sockList) {
         while (i < ended) {
 
             if (isObject) {
-                sockList[keys[i]]._handle;
+                // sockList[keys[i]]._handle;
                 process.send({'evt':"socket_handle"}, socket._handle);
             }
 
@@ -241,6 +241,7 @@ function createNodejsSrv(port) {
         NSLog.log('error','message :', evt.data);
         var socket = evt.client;
         const sockName = socket.name;
+        if (typeof socket == "undefined" || typeof socket.name == "undefined") return;
         var data = evt.data;
         if (typeof data != "undefined" && data.length > 1 && data.charCodeAt(0) == OPEN_BRACE) {
             //object
