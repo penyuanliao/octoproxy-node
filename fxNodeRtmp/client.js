@@ -11,7 +11,7 @@ var RTMPHandshake = require('./handshake');
 var RTMPMessage   = require('./message');
 var amfUtils      = require('./amfUtils');
 var log           = require('./log');
-var logger        = require('fxNetSocket').logger;
+var logger        = ifdef("fxNetSocket","../fxNetSocket").logger;
 var NSLog         = logger.getInstance();
 var level         = {'sendRTMPPacket':false};
 
@@ -257,8 +257,17 @@ RTMPClient.prototype.onData = function(data) {
 	// invoke command //
 	sock.chunkPacket = Buffer.concat([sock.chunkPacket, data],sock.chunkPacket.length + data.length);
 	data = sock.chunkPacket;
+    //檢查Header長度
+	var headerSize = this.BasicHeaderSize[data.readUInt8(0) >> 6];
+    if (data.length < headerSize) return;
+	//檢查資料長度
+    var bodySize   = (data.readUInt8(4) << 16) + (data.readUInt8(5) << 8) + (data.readUInt8(6));
+    if (headerSize + bodySize > sock.chunkPacket.length) return;
+
 	var chunkSize = this.socket.rtmpChunkSize;
-	var filter = this.filterPacket(data,true);
+	var filter = this.filterPacket(data, true);
+	if (filter == false) return;
+
 	// The data received in the "echo ping request" and ping response time. //
 	if (filter.header.fmt == 0 && filter.header.CSID == 2 && filter.header.typeID == 0x04 && filter.header.offset == 18) {
 		NSLog.log('trace','PingResponse in front Packet data.');
@@ -268,14 +277,16 @@ RTMPClient.prototype.onData = function(data) {
 		return;
 	}
 	// more data...
-	if (filter.header.bodySize > data.length) {
+	if (filter.header.offset > data.length) {
 		// var cmd = amfUtils.amf0DecodeOne(filter.header.bodyBuf);
 		// NSLog.log('trace','[OUTPUT] waiting next chunk',cmd);
 	}else {
 
-		while (sock.chunkPacket.length > 0 && filter.header.bodySize <= sock.chunkPacket.length) {
-
-			// console.log('#%d sock.chunkPacket.length %d filter.header.offset %d',j++, sock.chunkPacket.length,filter.header.offset);
+		while (sock.chunkPacket.length > 0) {
+            //拆解封包擋頭
+            filter = this.filterPacket(sock.chunkPacket, true);
+            //拆解失敗 or 長度不夠
+            if (filter == false || filter.header.offset > sock.chunkPacket.length) return;
 
 			var bodyFilter = filter.header.bodyBuf;
 
@@ -314,7 +325,6 @@ RTMPClient.prototype.onData = function(data) {
 				// console.log('pingResponse3 Ended：',sock.chunkPacket.length);
 				// if (sock.chunkPacket.length != 0) console.log("pingResponse3 end not 0 - ",sock.chunkPacket, sock.chunkPacket.length);
 				if (sock.chunkPacket.length > 0) {
-					filter = this.filterPacket(sock.chunkPacket,true);
 				}
 				continue;
 			}else if (filter.header.fmt == 0 && filter.header.CSID == 2 && filter.header.typeID == 0x01 && filter.header.offset == 16) {
@@ -405,8 +415,15 @@ RTMPClient.prototype.onData = function(data) {
 			sock.chunkPacket = sock.chunkPacket.slice(filter.header.offset,sock.chunkPacket.length);
 			var tSIze = sock.chunkPacket.length;
 			if (tSIze > 0){
+                filter = this.filterPacket(sock.chunkPacket,true);
+                if (filter.header.CSID == 0x02 && filter.header.typeID == 0x04)  {
+                    var num = filter.header.bodyBuf.readInt32BE(0);
+                    this.pingResponse(num);
+                    console.log(num);
+                    sock.chunkPacket = sock.chunkPacket.slice(filter.header.offset,sock.chunkPacket.length);
+                    continue;
+                }
 				NSLog.log('trace','+ --------------------------------------- +');
-				filter = this.filterPacket(sock.chunkPacket,true);
 				if (filter.offset <= tSIze) {
 
 				}
@@ -926,7 +943,7 @@ RTMPClient.prototype.filterPacket = function (data, doFindC3) {
 	var headerBytesLength = 0;
 	var offset = 1;
 	var find = 0;
-
+    if (this.BasicHeaderSize[fmt] > data.length) return false;
 	if (fmt === 0) {
 		headerBytesLength = 12; //header (full header).
 		var header = data.slice(0,headerBytesLength);
@@ -1135,22 +1152,30 @@ RTMPClient.prototype.connectResponse = function () {
 };
 
 RTMPClient.connect = function(host, port, connectListener) {
-	const DEFAULT_PORT = 1935;
-	var client;
-	if (!connectListener && typeof port == "function") {
-		connectListener = port;
-		port = DEFAULT_PORT;
-	}
-	var socket = new net.Socket();
-	socket.connect(port || DEFAULT_PORT, host);
+    const DEFAULT_PORT = 1935;
+    var client;
+    if (!connectListener && typeof port == "function") {
+        connectListener = port;
+        port = DEFAULT_PORT;
+    }
+    var socket = new net.Socket();
+    socket.connect(port || DEFAULT_PORT, host);
 
-	client = new RTMPClient(socket);
-	socket.on('error', function (err) {
-		client.emit('error',err);
-	});
-	if (connectListener && typeof connectListener == "function") 
-		client.on('connect', connectListener);
-	return client;
+    client = new RTMPClient(socket);
+    socket.on('error', function (err) {
+        client.emit('error',err);
+    });
+    function onCloseHandle() {
+        socket.removeListener("close", onCloseHandle);
+        client.emit("close");
+    }
+    socket.on("close", onCloseHandle);
+    if (connectListener && typeof connectListener == "function")
+        client.on('connect', function onConnect() {
+            connectListener();
+            socket.removeListener("close", onCloseHandle);
+        });
+    return client;
 };
 
 /** ============================= **/
@@ -1575,7 +1600,18 @@ RTMPClient.prototype.CONTROL_ID_Marker = {
 	0x2a:"UNKNOWN_AUDIO"
 };
 
-
+function ifdef(a,b) {
+    var req;
+    try {
+        req = require(a);
+    } catch (e) {
+        if (e.code !== 'MODULE_NOT_FOUND') {
+            throw e;
+        }
+        req = require(b);
+    }
+    return req;
+}
 
 
 module.exports = RTMPClient;
