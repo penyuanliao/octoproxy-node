@@ -39,12 +39,13 @@ NSLog.configure({
     trackBehaviorEnabled: true, // toDB server [not implement]
     trackOptions:{db:"couchbase://127.0.0.1", bucket:"nodeHistory"},
     maximumFileSize: 1024 * 1024 * 100});
+
 /** remove a socket was pending timeout. **/
 const closeWaitTime = 5000;
 /** done accept socket was pending timeout **/
 const sendWaitClose = 5000;
 /** clients request flashPolicy source response data **/
-const policy = '<?xml version=\"1.0\"?>\n<cross-domain-policy>\n<allow-access-from domain=\"*\" to-ports=\"80\"/>\n</cross-domain-policy>\n';
+const policy = '<?xml version=\"1.0\"?>\n<cross-domain-policy>\n<allow-access-from domain=\"*\" to-ports=\"80,443\" secure=\"false\"/>\n</cross-domain-policy>\n';
 /** tracking socket close **/
 const TRACE_SOCKET_IO = true;
 /** tcp connection the maximum segment size **/
@@ -68,6 +69,7 @@ function AppDelegate() {
     this.server          = undefined;
     this.clusterNum      = 0;
     this.clusters        = {};
+    this.clustersDialog  = {};
     this.garbageDump     = []; //回收記憶體太大的
     /** [roundrobin] Client go to sub-service index **/
     this.roundrobinNum   = [];
@@ -592,7 +594,7 @@ AppDelegate.prototype.assign = function (namespace, cb) {
             return;
         }
 
-        cluster = this.clusters[namespace][roundrobinNum[namespace]++];
+        cluster = this.clusters[namespace][this.roundrobinNum[namespace]++];
 
         if (this.roundrobinNum[namespace] >= this.clusters[namespace].length) this.roundrobinNum[namespace] = 0;
 
@@ -637,7 +639,7 @@ AppDelegate.prototype.assign = function (namespace, cb) {
             }
         }
         if (cb) cb(cluster);
-    }else
+    } else
     {
         // console.error('Error not found Cluster server');
         NSLog.log('error','Not found Cluster server');
@@ -724,7 +726,9 @@ AppDelegate.prototype.ebbMoveAssign = function (handle, source, namespace) {
         handle.close(self.close_callback);
     }, sendWaitClose);
 };
-
+AppDelegate.prototype.addClusterDialog = function (cluster) {
+    console.log(cluster.name, cluster._modulePath, cluster.uptime);
+}
 
 module.exports = exports = AppDelegate;
 
