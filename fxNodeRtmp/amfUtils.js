@@ -663,9 +663,10 @@ function amf0encUString(s) {
  */
 function amf0encString(str) {
     var buf = new Buffer(3);
+    var strBuf = new Buffer(str, 'utf8');
     buf.writeUInt8(0x02, 0);
-    buf.writeUInt16BE(str.length, 1);
-    return Buffer.concat([buf, new Buffer(str, 'utf8')]);
+    buf.writeUInt16BE(strBuf.length, 1);
+    return Buffer.concat([buf, strBuf]);
 }
 
 /**

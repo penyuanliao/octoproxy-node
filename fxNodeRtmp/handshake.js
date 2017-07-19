@@ -179,7 +179,7 @@ RTMPHandshake.prototype.sendC0C1 = function() {
     this.c1chunk.setDefaults();
     
     /* Send C0 + C1 */
-    console.log('[Handshake] > "C0 + C1" sent to server.');
+    //console.log('[Handshake] > "C0 + C1" sent to server.');
     this.socket.write(handshakeBuf);
 
     /* Change to VERSION_SENT state */
