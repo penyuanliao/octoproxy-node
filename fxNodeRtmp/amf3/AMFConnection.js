@@ -694,7 +694,7 @@ NetAMF.prototype.readFaultData = function (buf) {
     }
     NSLog.log("error",'INVALID_AMF_MESSAGE ', errorMessage);
     this.emit('fault', { "event":"INVALID_AMF_MESSAGE", "description":"Invalid AMF message", "error": errorMessage});
-    this.socket.destroy();
+    if (this.connected) { this.socket.destroy(); }
 };
 /**
  * @param {AMFObject} AMFObject
