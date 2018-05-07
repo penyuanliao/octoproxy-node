@@ -5,7 +5,7 @@
  * --expose-gc: manual gc().
  * 2016.10.18 memory leak 1day 20MB
  */
-
+const version       = Number(process.versions.node.split(".")[0]);
 const util          = require('util');
 const debug         = require('debug')('rtmp:LiveMaster');
 debug.log           = console.log.bind(console); //file log 需要下這行
@@ -17,7 +17,8 @@ const daemon        = fxNetSocket.daemon;
 const client        = fxNetSocket.wsClient;
 const path          = require('path');
 const NSLog         = fxNetSocket.logger.getInstance();
-const TCP           = process.binding("tcp_wrap").TCP; // TCP連線
+const tcp_wrap      = process.binding("tcp_wrap");
+const TCP           = tcp_wrap.TCP; // TCP連線
 const WriteWrap     = process.binding('stream_wrap').WriteWrap;
 const uv            = process.binding('uv');
 const fs            = require('fs');
@@ -36,16 +37,16 @@ NSLog.configure({
     id:"octoproxy",
     remoteEnabled: true,
     /*console:console,*/
-    trackBehaviorEnabled: true, // toDB server [not implement]
+    trackBehaviorEnabled: false, // toDB server [not implement]
     trackOptions:{db:"couchbase://127.0.0.1", bucket:"nodeHistory"},
-    maximumFileSize: 1024 * 1024 * 100});
+    maximumFileSize: 1024 * 1024 * 500});
 
 /** remove a socket was pending timeout. **/
 const closeWaitTime = 5000;
 /** done accept socket was pending timeout **/
 const sendWaitClose = 5000;
 /** clients request flashPolicy source response data **/
-const policy = '<?xml version=\"1.0\"?>\n<cross-domain-policy>\n<allow-access-from domain=\"*\" to-ports=\"80,443\" secure=\"false\"/>\n</cross-domain-policy>\n';
+const policy = '<?xml version=\"1.0\"?>\n<cross-domain-policy>\n<allow-access-from domain=\"*\" to-ports=\"80,443\"/>\n</cross-domain-policy>\n';
 /** tracking socket close **/
 const TRACE_SOCKET_IO = true;
 /** tcp connection the maximum segment size **/
@@ -81,9 +82,7 @@ function AppDelegate() {
     NSLog.log('info','LockState:[%s]', this.lockState);
     NSLog.log('debug',"** Initialize octoproxy.js **");
     this.init();
-
 }
-
 /**
  * 初始化
  * **/
@@ -135,7 +134,12 @@ AppDelegate.prototype.createServer = function (opt) {
     }
     var err, tcp_handle;
     try {
-        tcp_handle = new TCP();
+
+        if (version <= 4) {
+            tcp_handle = new TCP();
+        } else {
+            tcp_handle = new TCP(tcp_wrap.constants.SERVER);
+        }
         err = tcp_handle.bind(opt.host, opt.port);
         if (err) {
             NSLog.log('error','tcp_handle Bind:',err , opt.host, opt.port);
@@ -176,7 +180,7 @@ AppDelegate.prototype.createServer = function (opt) {
                 handle.close(close_callback);
                 return;
             }
-            NSLog.log('info', 'Client Handle onConnection(%s:%s)', out.address, out.port);
+            NSLog.log('debug', 'Client Handle onConnection(%s:%s)', out.address, out.port);
 
             handle.setNoDelay(true);
 
@@ -318,9 +322,9 @@ AppDelegate.prototype.createServer = function (opt) {
             if (cfg.gamSLB.enabled && chk_assign) {
                 var lbtimes;
 
-                var tokencode = self.gameLBSrv.getLoadBalancePath(url_args["gametype"], function (action, json) {
+                var tokencode = self.gameLBSrv.getLoadBalancePath(url_args, handle.getSockInfos.address, function (action, json) {
                     NSLog.log('trace','--------------------------');
-                    NSLog.log('trace', 'action: %s, token code:%s', action);
+                    NSLog.log('trace', 'action: %s, token code:%s', action, JSON.stringify(json));
                     NSLog.log('trace','--------------------------');
                     var src;
                     if (json.action == self.gameLBSrv.LBActionEvent.ON_GET_PATH) {
@@ -329,7 +333,7 @@ AppDelegate.prototype.createServer = function (opt) {
                         namespace = json.path.toString('utf8');
                         var src_string = source.toString('utf8').replace(originPath, namespace);
                         // var indx = source.indexOf(originPath);
-                        handle.getSockInfos.path  = namespace;
+                        handle.getSockInfos.path = namespace;
                         src = new Buffer(src_string);
                         clusterEndpoint(namespace ,src);
 
@@ -396,13 +400,11 @@ AppDelegate.prototype.createServer = function (opt) {
                         }
 
                         NSLog.log('trace','2. Socket goto %s', lastnamspace);
-
                         setTimeout(function () {
                             self.rejectClientExcpetion(handle, "CON_VERIFIED");
                             handle.close(close_callback);
                             handle = null;
                         }, sendWaitClose);
-
                         worker.send({'evt':'c_init',data:source}, handle,{keepOpen:false});
                     }
 
@@ -630,7 +632,6 @@ AppDelegate.prototype.assign = function (namespace, cb) {
 
         for (var n = 0; n < stremNum; n++) {
             //檢查最小連線數
-
             var _nextCluster = this.clusters[clusterName][n].nodeInfo.connections;
             var priority     = cluster.nodeInfo.connections > _nextCluster;
             // var isRefusing   = _nextCluster._dontDisconnect;
@@ -757,6 +758,7 @@ module.exports = exports = AppDelegate;
  * @function TCP
  * @memberof TCP
  **/
+
 /**
  * @function WriteWrap
  * @memberof WriteWrap
@@ -772,5 +774,22 @@ module.exports = exports = AppDelegate;
  * @function UV_EOF
  * @memberof uv
  **/
-
-
+/**
+ * @namespace tcp_wrap
+ **/
+/**
+ * @constant tcp_wrap.constants
+ * @type {Object}
+ * @memberof tcp_wrap
+ * @description latest nodeJS version 6.0 of support
+ **/
+/**
+ * @constant tcp_wrap.constants.SERVER
+ * @type {Number}
+ * @memberof tcp_wrap.constants
+ **/
+/**
+ * @constant tcp_wrap.constants.SOCKET
+ * @type {Number}
+ * @memberof tcp_wrap.constants
+ **/
