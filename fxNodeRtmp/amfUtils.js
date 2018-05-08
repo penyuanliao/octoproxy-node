@@ -966,26 +966,30 @@ function amf0Encode(a) {
 
 
 var rtmpCmdDecode = {
-    "_result": [ "transId","cmdObj","info" ],
-    "_error": [ "transId","cmdObj","info","streamId" ], // Info / Streamid are optional
-    "onStatus": [ "transId","cmdObj","info" ],
-    "releaseStream": [ "transId", "cmdObj", "streamId" ],
-    "getStreamLength": [ "transId", "cmdObj", "streamId" ],
-    "getMovLen": [ "transId", "cmdObj", "streamId" ],
-    "FCPublish": [ "transId", "cmdObj", "streamId" ],
-    "onFCPublish": [ "transId", "cmdObj", "info" ],
-    "connect": [ "transId","cmdObj","args" ],
-    "call": [ "transId","cmdObj","args" ],
-    "createStream": [ "transId","cmdObj"],
-    "close": ["transId","cmdObj"],
-    "play": [ "transId","cmdObj","streamName","start","duration","reset" ],
-    "play2": [ "transId","cmdObj","params" ],
-    "deleteStream": [ "transId","cmdObj","streamId" ],
-    "receiveAudio": [ "transId","cmdObj","bool" ],
-    "receiveVideo": [ "transId","cmdObj","bool" ],
-    "publish": [ "transId","cmdObj","name","type" ],
-    "seek": [ "transId","cmdObj","ms" ],
-    "pause": [ "transId","cmdObj","pause","ms" ]
+    "_result": ["transId", "cmdObj", "info"],
+    "_error": ["transId", "cmdObj", "info", "streamId"], // Info / Streamid are optional
+    "@setDataFrame": ["method", "cmdObj"],
+    "onStatus": ["transId", "cmdObj", "info"],
+    "releaseStream": ["transId", "cmdObj", "streamId"],
+    "getStreamLength": ["transId", "cmdObj", "streamId"],
+    "getMovLen": ["transId", "cmdObj", "streamId"],
+    "FCPublish": ["transId", "cmdObj", "streamId"],
+    "FCUnpublish": ["transId", "cmdObj", "streamId"],
+    "onFCPublish": ["transId", "cmdObj", "info"],
+    "connect": ["transId", "cmdObj", "args"],
+    "call": ["transId", "cmdObj", "args"],
+    "createStream": ["transId", "cmdObj"],
+    "close": ["transId", "cmdObj"],
+    "play": ["transId", "cmdObj", "streamName", "start", "duration", "reset"],
+    "play2": ["transId", "cmdObj", "params"],
+    "deleteStream": ["transId", "cmdObj", "streamId"],
+    "receiveAudio": ["transId", "cmdObj", "bool"],
+    "receiveVideo": ["transId", "cmdObj", "bool"],
+    "publish": ["transId", "cmdObj", "streamName", "type"],
+    "seek": ["transId", "cmdObj", "ms"],
+    "pause": ["transId", "cmdObj", "pause", "ms"],
+    "|RtmpSampleAccess": ["bool1", "bool2"],
+    "onMetaData": ["cmdObj"]
 };
 
 /**

@@ -37,8 +37,9 @@ var RTMPClient = function(socket) {
     this.socket.videoInfos          = {};
 
     this._objectEncoding            = defaultObjectEncoding; //預設物件編碼
+	this.pauseTime                  = 0;
 
-    this.invokeHeader               = new Buffer(8);
+    this.invokeHeader               = Buffer.alloc(8);
     this.pauseTime                  = 0;
 
     this.resultCallBack             = [];
@@ -63,7 +64,7 @@ RTMPClient.prototype.onSocketConnect = function() {
         self.fmsVersion = s2chunk.fmsVersion;
     });
     this.handshake.on('complete', (function() {
-        this.socket.chunkPacket = new Buffer(0);
+        this.socket.chunkPacket = Buffer.alloc(0);
         this.socket.on('data', this.onData.bind(this));
         this.socket.on('end',function () {
             self.socket.end();
@@ -88,7 +89,6 @@ RTMPClient.prototype.onSocketConnect = function() {
  */
 RTMPClient.prototype.onData = function(data) {
     // log("LOG::recieved RTMP data...", "(" + data.length + " bytes)");
-
     var sock = this.socket;
     // var chunkPacket = sock.chunkPacket;
 
@@ -128,8 +128,9 @@ RTMPClient.prototype.onData = function(data) {
             const fmt = data.readUInt8(0) >> 6;
             const csid = data.readUInt8(0) & (0x3f);
             const onRead = (data.length > this.BasicHeaderSize[fmt]);
+
             // csid = 2 is message type
-            if (csid == 2 && fmt < 4 && data.length == 18) {
+			if (csid == 2 && fmt < 4 && data.length == 18 && data.readUInt24BE(1) == 0) {
                 var typeID = undefined;
                 var timestamp = undefined;
                 // var bodysize = undefined;
@@ -164,6 +165,8 @@ RTMPClient.prototype.onData = function(data) {
                 body_size += data.readUInt8(5) << 8; // (5)
                 body_size += data.readUInt8(6);      // (6)
                 if ((body_size + offset) >= data.length) {
+                    console.log('-----------------------------1---------------------------------------');
+                    data = this.filterPing(data);
                     this.emit('videoData',data);
                     return;
                 }
@@ -173,6 +176,8 @@ RTMPClient.prototype.onData = function(data) {
                 this.emit('status', cmd);
 
                 if(data.length != (offset + body_size)) {
+                    console.log('-----------------------------2---------------------------------------');
+                    data = this.filterPing(data);
                     this.emit('videoData', data.slice(offset + body_size, data.length));
                 }
 
@@ -188,11 +193,11 @@ RTMPClient.prototype.onData = function(data) {
                     obj["timestamp"] = 0; // C4
                 }
                 if (data.toString().substr(0,20+header_size).indexOf('onGetFPS') == -1) {
+                    // console.log('-----------------------------3---------------------------------------');
+                    // data = this.filterPing(data);
                     this.emit('videoData',data);
                     return;
                 }
-
-                log.logHex(data);
                 data = data.slice(header_size, data.length);
                 while (data.length > 0) {
 
@@ -219,11 +224,15 @@ RTMPClient.prototype.onData = function(data) {
                         obj["bodysize"] = data.readUInt24BE(4);
                         data = data.slice(12, data.length);
                         NSLog.log( "trace" , "2 onGetFPS() timestamp:%s, bodysize:%s",obj["timestamp"], obj["bodysize"]);
-                    } else if (data[0] == 0xC4 && data[1] == 0x02) {
+                    }/* else if (data[0] == 0xC4 && data[1] == 0x02) {
                         data = data.slice(1, data.length);
-                    } else
+
+
+                    }*/ else
                     {
-                        this.emit('videoData',data);
+                        console.log('-----------------------------4---------------------------------------');
+                        data = this.filterPing(data);
+                        this.emit('videoData', data);
                         return;
                     }
                 }
@@ -247,7 +256,7 @@ RTMPClient.prototype.onData = function(data) {
                 // 		vd_len -= data.length
                 // 	}
                 // }
-
+                data = this.filterPing(data);
                 this.emit('videoData',data);
             }
         }
@@ -436,6 +445,35 @@ RTMPClient.prototype.onData = function(data) {
     }
 
 };
+RTMPClient.prototype.filterPing = function (data) {
+
+    if (this.chkBroken == true) {
+        //斷包問題
+        data = Buffer.concat([this.frontBroken, data], this.frontBroken.length, data.length);
+    }
+
+    var index = data.indexOf("02000000000006040000000000", 0, "hex");
+    if (index != -1) {
+        var buf1 = data.slice(0, index);
+        var buf2 = data.slice(index + 18, data.length);
+        var ping = data.slice(index, index + 18);
+
+        if (index + 18 > data.length) {
+            this.chkBroken = true;
+            this.frontBroken = data;
+            return new Buffer();
+        } else {
+            this.chkBroken = false;
+            var num = ping.readUInt32BE(14); // get timestamp value
+            this.pingResponse(num);
+        }
+
+
+        data = Buffer.concat([buf1, buf2], buf1.length + buf2.length);
+        NSLog.log("error",'data inside (User Control Message Ping Request)', index, (buf2.length > 0) ? buf2[0].toString('16'): "");
+    }
+    return data;
+}
 
 RTMPClient.prototype.onMessage = function() {
     this.emit("message", this.message);
@@ -464,7 +502,7 @@ RTMPClient.prototype.sendInvoke = function(commandName, transactionId, commandOb
 
     var amfLength = commandNameSerialiser.byteLength + transactionIdSerialiser.byteLength + commandObjSerialiser.byteLength + ((invokeArguments !== undefined) ? invokeArgumentsSerialiser.byteLength : 0);
     var amfOffset = 0;
-    var amfData = new Buffer(amfLength);
+    var amfData = Buffer.alloc(amfLength);
     commandNameSerialiser.write(amfData.slice(amfOffset, commandNameSerialiser.byteLength));
     amfOffset += commandNameSerialiser.byteLength;
     transactionIdSerialiser.write(amfData.slice(amfOffset, amfOffset + transactionIdSerialiser.byteLength));
@@ -488,7 +526,7 @@ RTMPClient.prototype.sendInvokeMessage = function(commandName, transactionId, co
 
     var amfLength = commandNameSerialiser.byteLength + transactionIdSerialiser.byteLength + commandObjSerialiser.byteLength + ((invokeArguments !== undefined) ? invokeArgumentsSerialiser.byteLength : 0);
     var amfOffset = 0;
-    var amfData = new Buffer(amfLength);
+    var amfData = Buffer.alloc(amfLength);
     commandNameSerialiser.write(amfData.slice(amfOffset, commandNameSerialiser.byteLength));
     amfOffset += commandNameSerialiser.byteLength;
     transactionIdSerialiser.write(amfData.slice(amfOffset, amfOffset + transactionIdSerialiser.byteLength));
@@ -511,33 +549,51 @@ RTMPClient.prototype.fmsCall = function (commandName, arg) {
     while (count < arguments.length) {
         args.push(arguments[count++]);
     }
-    NSLog.log("trace","fmsCall:",args);
+    NSLog.log("info","fmsCall:",args);
     var body = amfUtils.amf0Encode(args);
-    var buf = new Buffer(s1.byteLength + s2.byteLength).fill(0x0);
+    var buf = Buffer.alloc(s1.byteLength + s2.byteLength).fill(0x0);
     s1.write(buf.slice(0,s1.byteLength));
     s2.write(buf.slice(s1.byteLength,s1.byteLength + s2.byteLength));
     buf = Buffer.concat([buf, body]);
     if (this)
         this.sendPacket(0x14, RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE, buf);
 };
+RTMPClient.prototype.genMetaData = function (commandName, arg) {
+    //command name名稱
+    var s1 = new AMF.AMFSerialiser(commandName);
+    //streamid 1 - fms通道
+    var s2 = new AMF.AMFSerialiser(1);
+    var args = [{}];
+    var count = 1;
+    while (count < arguments.length) {
+        args.push(arguments[count++]);
+    }
+    NSLog.log("trace","fmsCall:",args);
+    var body = amfUtils.amf0Encode(args);
+    var buf = new Buffer(s1.byteLength + s2.byteLength).fill(0x0);
+    s1.write(buf.slice(0,s1.byteLength));
+    s2.write(buf.slice(s1.byteLength,s1.byteLength + s2.byteLength));
+    buf = Buffer.concat([buf, body]);
+    return buf;
+};
 /**
  * 0x18 - Ping Message
  * @param num timestamp
  */
 RTMPClient.prototype.pingResponse = function (num) {
-    var rtmpBuffer = new Buffer('4200000000000604000700000000', 'hex');
+    var rtmpBuffer = Buffer.from('4200000000000604000700000000', 'hex');
     rtmpBuffer.writeUInt32BE(num, 10);
     //log.logHex(rtmpBuffer);
     this.socket.write(rtmpBuffer);
 };
 RTMPClient.prototype.pingResponse2 = function (num) {
-    var rtmpBuffer = new Buffer('c2000700000000', 'hex');
+    var rtmpBuffer = Buffer.from('c2000700000000', 'hex');
     rtmpBuffer.writeUInt32BE(num, 3);
     log.logHex(rtmpBuffer);
     this.socket.write(rtmpBuffer);
 };
 RTMPClient.prototype.pingResponse3 = function (num) {
-    var rtmpBuffer = new Buffer('4200000000000604000700000000', 'hex');
+    var rtmpBuffer = Buffer.from('4200000000000604000700000000', 'hex');
     var d = new Date();
     var n = parseInt(num/1000);
     // d.setTime((d.getTime() + num));
@@ -560,8 +616,8 @@ RTMPClient.prototype.pingResponse3 = function (num) {
  * @param size
  */
 RTMPClient.prototype.setWindowACK = function (size) {
-    // var rtmpBuffer = new Buffer('023b659c000004050000000000000000', 'hex');
-    var rtmpBuffer = new Buffer('02ffffef000004050000000000000000', 'hex');
+    // var rtmpBuffer = Buffer.from('023b659c000004050000000000000000', 'hex');
+    var rtmpBuffer = Buffer.from('02ffffef000004050000000000000000', 'hex');
     rtmpBuffer.writeUInt24BE(new Date().getTime(),1);
     rtmpBuffer.writeUInt32BE(size, 12);
     // NSLog.log('trace','setWindowACK: ', rtmpBuffer.toString('hex'));
@@ -570,13 +626,13 @@ RTMPClient.prototype.setWindowACK = function (size) {
 
 };
 RTMPClient.prototype.setAcknowledgement = function (size) {
-    var rtmpBuffer = new Buffer('420000000000040300000000', 'hex');
+    var rtmpBuffer = Buffer.from('420000000000040300000000', 'hex');
     if (size >= 0xFFFFFFF) {
         rtmpBuffer.writeUInt32BE(size, 8);
         // NSLog.log('trace','setAcknowledgement:', size);
         this.socket.write(rtmpBuffer);
     } else {
-        rtmpBuffer = new Buffer('42000000000008030000000000000000', 'hex');
+        rtmpBuffer = Buffer.from('42000000000008030000000000000000', 'hex');
         var firstBit32 = parseInt(size/0x100000000);
         var secondBit32 = size - (firstBit32 * 0x100000000);
         rtmpBuffer.writeUInt32BE(firstBit32, 8);
@@ -586,14 +642,14 @@ RTMPClient.prototype.setAcknowledgement = function (size) {
 
 };
 RTMPClient.prototype.acknowledgement = function (size) {
-    var rtmpBuffer = new Buffer('c20000000000', 'hex');
+    var rtmpBuffer = Buffer.from('c20000000000', 'hex');
     rtmpBuffer.writeUInt32BE(size, 2);
     console.log(rtmpBuffer);
     this.socket.write(rtmpBuffer);
 };
 
 RTMPClient.prototype.setBufferLength = function (size) {
-    var rtmpBuffer = new Buffer('4200000000000a040003000000000000012c', 'hex');
+    var rtmpBuffer = Buffer.from('4200000000000a040003000000000000012c', 'hex');
     // rtmpBuffer.writeUInt32BE(size, 12);
     this.socket.write(rtmpBuffer);
 };
@@ -604,7 +660,7 @@ RTMPClient.prototype.setBufferLength = function (size) {
  * @param type
  */
 RTMPClient.prototype.setPeerBandwidth = function (size, type) {
-    var rtmpBuffer = new Buffer('0200000000000506000000000000000000', 'hex');
+    var rtmpBuffer = Buffer.from('0200000000000506000000000000000000', 'hex');
     rtmpBuffer.writeUInt32BE(size, 12);
     rtmpBuffer[16] = type;
     // //console.log('setPeerBandwidth: '+rtmpBuffer.hex());
@@ -615,7 +671,7 @@ RTMPClient.prototype.setPeerBandwidth = function (size, type) {
  * @param size
  */
 RTMPClient.prototype.setChunkSize = function (size) {
-    var rtmpBuffer = new Buffer('02000000000004010000000000000000', 'hex');
+    var rtmpBuffer = Buffer.from('02000000000004010000000000000000', 'hex');
     rtmpBuffer.writeUInt32BE(size, 12);
     // //console.log('setChunkSize: '+rtmpBuffer.hex());
     this.socket.write(rtmpBuffer);
@@ -685,7 +741,7 @@ RTMPClient.prototype.streamPlay = function(name) {
     var self = this;
     var csid = (this.videoIndex*6)+2;
     var streamID = this.videoIndex;
-    var header = new Buffer('080000b800001c110100000000','hex');
+    var header = Buffer.from('080000b800001c110100000000','hex');
     header.writeUInt8(csid,0);
     header.writeUInt32LE(streamID,8);
     NSLog.log('info','Send stream event to play(%s) streamID:%s', name , streamID);
@@ -709,17 +765,17 @@ RTMPClient.prototype.streamPlay = function(name) {
     }
     self.callbackfunc = function (data) {
         NSLog.log("trace", "start stream Play data:", data.length);
-        /*
-         while (data.length > 0){
-         var iPacket = self.filterPacket(data);
-         var obj = self.RTMP_ReadPacketType(iPacket);
-         if (iPacket.header.typeID == 0x09) {
-         self.emit('videoData', data);
-         self.callbackfunc = undefined;
-         return;
-         }
-         data = data.slice(iPacket.header.offset, data.length);
-         }*/
+		/*
+		 while (data.length > 0){
+		 var iPacket = self.filterPacket(data);
+		 var obj = self.RTMP_ReadPacketType(iPacket);
+		 if (iPacket.header.typeID == 0x09) {
+		 self.emit('videoData', data);
+		 self.callbackfunc = undefined;
+		 return;
+		 }
+		 data = data.slice(iPacket.header.offset, data.length);
+		 }*/
 
         // self.callbackfunc = null;
         // #1 server SetChunkSize
@@ -800,6 +856,7 @@ RTMPClient.prototype.streamPlay = function(name) {
                 var amfObj = amfUtils.amf0Decode(iPacket.header.bodyBuf);
                 NSLog.log('info','amfObj onMetaData:', amfObj);
                 if (typeof amfObj != "undefined" && amfObj[0] == 'onMetaData') {
+                    self.metaDataSource = iPacket.header.bodyBuf;
                     self.emit('onMetaData', amfObj);
                     self.v_metadata = amfObj;
                 }
@@ -839,13 +896,13 @@ RTMPClient.prototype.streamPlay = function(name) {
             data = data.slice(iPacket.header.offset, data.length);
         }
 
-        /*if (data.length > 0) {
-         NSLog.log('trace', '==☆== PLAYER RESULT (%d) ==☆==', data.length);
+		/*if (data.length > 0) {
+		 NSLog.log('trace', '==☆== PLAYER RESULT (%d) ==☆==', data.length);
 
-         data = data.slice(iPacket.header.offset, data.length);
-         iPacket = self.filterPacket(data);
-         NSLog.log('trace',JSON.stringify(iPacket.header));
-         }*/
+		 data = data.slice(iPacket.header.offset, data.length);
+		 iPacket = self.filterPacket(data);
+		 NSLog.log('trace',JSON.stringify(iPacket.header));
+		 }*/
 
 
         console.log('Stream Packet parser OK(%s)', data.length);
@@ -857,7 +914,7 @@ RTMPClient.prototype.streamPlay = function(name) {
 /** Close FMS Stream **/
 RTMPClient.prototype.deleteStream = function () {
 
-    var header = new Buffer(8);
+    var header = Buffer.alloc(8);
     var offset = 0;
     header.writeInt8(0x43, offset++); // 01 00 00 11
     var timestamp = os.uptime() - this.uptime;
@@ -1058,13 +1115,13 @@ RTMPClient.prototype.filterPacket = function (data, doFindC3) {
         }
 
     }
-    /*
-     console.log(' fmt:%d \n csid:%d \n timestamp:%s \n bodySize:%d \n typeID(message):%d(%s) \n streamID:%d \n ' +
-     'offset:%d \n data-len: %d \n find: %d \n',
-     fmt, CSID,timestamp, bodySize,typeID, "0x" + typeID.toString(16), streamID,
-     offset,data.length,find
-     );
-     */
+	/*
+	 console.log(' fmt:%d \n csid:%d \n timestamp:%s \n bodySize:%d \n typeID(message):%d(%s) \n streamID:%d \n ' +
+	 'offset:%d \n data-len: %d \n find: %d \n',
+	 fmt, CSID,timestamp, bodySize,typeID, "0x" + typeID.toString(16), streamID,
+	 offset,data.length,find
+	 );
+	 */
     return iRTMPPacket;
 };
 
@@ -1541,7 +1598,6 @@ RTMPClient.prototype.__defineGetter__("maxCSID", function () {
 });
 
 RTMPClient.prototype.BasicHeaderSize = [12, 8, 4 , 1];
-
 RTMPClient.prototype.PacketType = {
     PACKET_TYPE_NONE : 				0x00,
     PACKET_TYPE_CHUNK_SIZE: 		0x01,
@@ -1551,11 +1607,11 @@ RTMPClient.prototype.PacketType = {
     PACKET_TYPE_CLIENTBW:			0x06,
     PACKET_TYPE_AUDIO:				0x08,
     PACKET_TYPE_VIDEO:				0x09,
-    /*
-     PACKET_TYPE_FLEX_STREAM_SEND:	0x0f,
-     PACKET_TYPE_FLEX_SHARED_OBJECT:	0x10,
-     PACKET_TYPE_FLEX_MESSAGE:		0x11,
-     */
+	/*
+	 PACKET_TYPE_FLEX_STREAM_SEND:	0x0f,
+	 PACKET_TYPE_FLEX_SHARED_OBJECT:	0x10,
+	 PACKET_TYPE_FLEX_MESSAGE:		0x11,
+	 */
     PACKET_TYPE_METADATA:			0x12,
     PACKET_TYPE_SHARED_OBJECT:		0x13,
     PACKET_TYPE_INVOKE:				0x14,
