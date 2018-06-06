@@ -45,7 +45,7 @@ function NetAMF(options) {
 
     this.END_FIN          = false;
 
-    this.content_header   = new Buffer(6);
+    this.content_header   = Buffer.alloc(6);
 
     this._client          = undefined;
 
@@ -180,7 +180,7 @@ NetAMF.prototype.call = function (command, responder /* args */) {
     var targetURI = this.encodeTargetURI(command);
     var reqKey = "/";
     var responseURI;
-    var messageLength = new Buffer(4);
+    var messageLength = Buffer.alloc(4);
     messageLength.writeUInt32BE(message.length, 0);
     // console.log("Responder type:",typeof responder != "undefined" , responder != null);
     if (typeof responder == "number") {
@@ -225,15 +225,15 @@ NetAMF.prototype.sendMessage2 = function () {
     /* Sets a single header value */
     self.setHeader("Content-Length", msg_len + self.content_header.length);
 
-    // var rawHeaders = new Buffer(self.getHeaders());
+    // var rawHeaders = Buffer.from(self.getHeaders());
 
     var request = Buffer.concat([self.content_header, data], self.content_header.length + msg_len);
 
     this.options["headers"]['Content-Length'] = msg_len + self.content_header.length;
-    var cookie = this.cookies[this.recordcount];
+    var cookie = this.cookies[this.recordcount++];
     if (typeof cookie == "undefined") {
         this.recordcount = 0;
-        this.options["headers"]['Cookie'] = this.cookies[this.recordcount];
+        this.options["headers"]['Cookie'] = this.cookies[this.recordcount++];
     } else {
         this.options["headers"]['Cookie'] = cookie;
     }
@@ -258,7 +258,7 @@ NetAMF.prototype.sendMessage2 = function () {
         });
         response.on("end", function () {
             req.end();
-            NSLog.log("info","POST Response STATUS: %s", response.statusCode);
+            if (response.statusCode != 200) NSLog.log("info","POST Response STATUS: %s", response.statusCode);
             var resKey = self.removeTokenListtoCount(req.index);
 
             if (typeof nbufs != "undefined" && nbufs.length > 0) {
@@ -268,15 +268,24 @@ NetAMF.prototype.sendMessage2 = function () {
                 self.deserialize("",response.statusCode, resKey);
             }
             response.removeAllListeners()
-
-
-
         });
 
     });
     req.on("error", function (error) {
-        NSLog.log("error", error);
+        var resKey = self.removeTokenListtoCount(req.index);
+        setTimeout(function () {
+            self.deserialize("",404, resKey);
+        }, 10);
+        NSLog.log("error","AMFConnection error:", resKey, error);
     });
+    req.setTimeout(60000, function () {
+        NSLog.log("error","AMFConnection timeout. localPort:", req.socket.localPort);
+        req.socket.destroy();
+    });
+    // req.on("timeout", function () {
+    //     NSLog.log("error","AMFConnection timeout.");
+    //     req.abort()
+    // })
     req.index = self.requestCount;
     ++self.requestCount;
     // req.write(request);
@@ -352,7 +361,7 @@ NetAMF.prototype.removeTokenListtoCount = function (index) {
  * @returns {Buffer}
  */
 NetAMF.prototype.encodeTargetURI = function(str) {
-    var buf = new Buffer(2 + str.length);
+    var buf = Buffer.alloc(2 + str.length);
 
     buf.writeUInt16BE(str.length, 0);
 
@@ -727,7 +736,7 @@ NetAMF.prototype.__executionAction = function (AMFObject) {
 
             responder = this.responders[key]["selector"];
             if (typeof responder[remoteMessage] != "undefined") {
-                NSLog.log('error', "[%s]Response time:%s ms.",key, (new Date().getTime() - this.responders[key]["ts"]));
+                NSLog.log('error', "[%s]Response time:%s ms , API:%s.",key, (new Date().getTime() - this.responders[key]["ts"]), this.responders[key]["command"]);
                 responder[remoteMessage](message["value"], key, this.responders[key]["command"]);
             }else {
                 NSLog.log("error","__executionAction:", remoteMessage,message["value"], key);
