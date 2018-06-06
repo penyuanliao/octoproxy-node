@@ -31,7 +31,7 @@ const mgmt          = require('./lib/mgmt.js');
 NSLog.configure({
     logFileEnabled:true,
     consoleEnabled:true,
-    level:'trace',
+    level:'debug',
     dateFormat:'[yyyy-MM-dd hh:mm:ss]',
     filePath:__dirname+"/historyLog",
     id:"octoproxy",
@@ -250,6 +250,9 @@ AppDelegate.prototype.createServer = function (opt) {
         handle.closeWaiting = undefined;
 
         var headers = pheaders.onReadTCPParser(buffer);
+        /**
+         * @type {Buffer}
+         */
         var source = headers.source;
         var general = headers.general;
         var isBrowser = (typeof general != 'undefined');
@@ -381,7 +384,7 @@ AppDelegate.prototype.createServer = function (opt) {
 
                         }else{
                             NSLog.log('trace','1. Socket goto %s(*)', lastnamspace);
-                            worker[0].send({'evt':'c_init',data:source}, handle,{keepOpen:false});
+                            worker[0].send({'evt':'c_init',data:source, namespace:lastnamspace}, handle,{keepOpen:false});
                             setTimeout(function () {
                                 self.rejectClientExcpetion(handle, "CON_VERIFIED");
                                 handle.close(close_callback);
@@ -405,7 +408,7 @@ AppDelegate.prototype.createServer = function (opt) {
                             handle.close(close_callback);
                             handle = null;
                         }, sendWaitClose);
-                        worker.send({'evt':'c_init',data:source}, handle,{keepOpen:false});
+                        worker.send({'evt':'c_init',data:source, namespace:lastnamspace}, handle,{keepOpen:false});
                     }
 
                     //noinspection JSUnresolvedFunction
