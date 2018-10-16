@@ -26,7 +26,8 @@ const net           = require('net');
 const evt           = require('events');
 const cfg           = require('./config.js');
 const gLBSrv        = require('./lib/gameLBSrv.js');
-const mgmt          = require('./lib/mgmt.js');
+var   mgmt          = require('./lib/mgmt.js');
+const Dashboard     = require("./lib/Dashboard.js");
 
 NSLog.configure({
     logFileEnabled:true,
@@ -79,7 +80,11 @@ function AppDelegate() {
     /** casino load balance **/
     this.gameLBSrv       = new gLBSrv(cfg.gamSLB);
 
-    NSLog.log('info','LockState:[%s]', this.lockState);
+    /** record visitor remote address **/
+    this.recordDashboard = new Dashboard(Dashboard.loadFile("./historyLog/Dashboard.json"));
+    this.recordEnabled   = true;
+
+    NSLog.log('info','LockState:[%s]', this._lockState);
     NSLog.log('debug',"** Initialize octoproxy.js **");
     this.init();
 }
@@ -135,7 +140,7 @@ AppDelegate.prototype.createServer = function (opt) {
     var err, tcp_handle;
     try {
 
-        if (version <= 4) {
+        if (version <= 6) {
             tcp_handle = new TCP();
         } else {
             tcp_handle = new TCP(tcp_wrap.constants.SERVER);
@@ -180,7 +185,7 @@ AppDelegate.prototype.createServer = function (opt) {
                 handle.close(close_callback);
                 return;
             }
-            NSLog.log('debug', 'Client Handle onConnection(%s:%s)', out.address, out.port);
+            NSLog.log('trace', 'Client Handle onConnection(%s:%s)', out.address, out.port);
 
             handle.setNoDelay(true);
 
@@ -258,8 +263,7 @@ AppDelegate.prototype.createServer = function (opt) {
         var isBrowser = (typeof general != 'undefined');
         var mode = "";
         var namespace = undefined;
-
-
+        if (typeof headers["x-forwarded-for"] != "undefined") handle.getSockInfos.address = headers["x-forwarded-for"];
         if (general) {
             mode = general[0].match('HTTP/') != null ? "http" : mode;
             mode = headers.iswebsocket  ? "ws" : mode;
@@ -270,6 +274,18 @@ AppDelegate.prototype.createServer = function (opt) {
             namespace = buffer.toString('utf8');
             namespace = namespace.replace("\0","");
             source = buffer;
+            var temp = namespace.toString().match(new RegExp("({.+?})(?={|)", "g"));
+            if (Array.isArray(temp) && temp.length >= 1) {
+                var json = JSON.parse(temp[0]);
+                var rule1 = (json.action == "setup" && typeof json.cluID != "undefined");
+                if (rule1 && typeof json.balance == "string") {
+                    namespace = json.balance;
+                    general = ["", json.balance];
+                } else if (rule1)  {
+                    namespace = json.namespace;
+                    general = ["", namespace];
+                }
+            }
         }
         /** TODO 2016/10/06 -- ADMIN DEMO **/
         /*if (headers["sec-websocket-protocol"] == "admin") {
@@ -324,8 +340,8 @@ AppDelegate.prototype.createServer = function (opt) {
 
             if (cfg.gamSLB.enabled && chk_assign) {
                 var lbtimes;
-
-                var tokencode = self.gameLBSrv.getLoadBalancePath(url_args, handle.getSockInfos.address, function (action, json) {
+                var params = {f5: general[1], host:handle.getSockInfos.address};
+                var tokencode = self.gameLBSrv.getLoadBalancePath(url_args, params, function (action, json) {
                     NSLog.log('trace','--------------------------');
                     NSLog.log('trace', 'action: %s, token code:%s', action, JSON.stringify(json));
                     NSLog.log('trace','--------------------------');
@@ -333,6 +349,7 @@ AppDelegate.prototype.createServer = function (opt) {
                     if (json.action == self.gameLBSrv.LBActionEvent.ON_GET_PATH) {
                         if (typeof lbtimes != 'undefined') clearTimeout(lbtimes);
                         lbtimes = undefined;
+                        if (typeof json.path == "undefined") json.path = "";
                         namespace = json.path.toString('utf8');
                         var src_string = source.toString('utf8').replace(originPath, namespace);
                         // var indx = source.indexOf(originPath);
@@ -346,11 +363,16 @@ AppDelegate.prototype.createServer = function (opt) {
                         if (typeof lbtimes != 'undefined') clearTimeout(lbtimes);
                         lbtimes = undefined;
                         namespace = '/godead';
+                        handle.getSockInfos.path = namespace;
+                        self.rejectClientExcpetion(handle, "CON_DONT_CONNECT");
                         var chgSrc = source.toString('utf8').replace(originPath, namespace);
                         src = new Buffer(chgSrc);
                         self.gameLBSrv.getGoDead(handle, src);
-                        handleRelease(handle);
-                        handle = null;
+                        setTimeout(function () {
+                            handleRelease(handle);
+                            handle.close(close_callback);
+                            handle = null;
+                        }, sendWaitClose);
                     }
 
                     src = null;
@@ -408,7 +430,7 @@ AppDelegate.prototype.createServer = function (opt) {
                             handle.close(close_callback);
                             handle = null;
                         }, sendWaitClose);
-                        worker.send({'evt':'c_init',data:source, namespace:lastnamspace}, handle,{keepOpen:false});
+                        worker.send({'evt':'c_init',data:source, namespace:lastnamspace}, handle,{keepOpen:false}); //KeepOpen = KeepAlive
                     }
 
                     //noinspection JSUnresolvedFunction
@@ -474,6 +496,8 @@ AppDelegate.prototype.createServer = function (opt) {
             else {
                 message = "Reject the currently connecting client.";
             }
+
+            if (self.recordEnabled) self.recordDashboard.record(this.getSockInfos);
 
             if (TRACE_SOCKET_IO) {
                 var now = new Date();
@@ -716,9 +740,14 @@ AppDelegate.prototype.__defineSetter__("lockState", function (state) {
  */
 AppDelegate.prototype.management = function () {
     this.mgmtSrv = new mgmt(this, cfg, 8100);
-
     NSLog.log('trace', '** Setup management service port:8100 **');
 
+};
+AppDelegate.prototype.reLoadManagement = function () {
+    this.mgmtSrv.close();
+    delete require.cache[require.resolve('./lib/mgmt.js')];
+    mgmt = require('./lib/mgmt.js');
+    this.management();
 };
 /** not implement **/
 AppDelegate.prototype.ebbMoveAssign = function (handle, source, namespace) {
@@ -732,8 +761,7 @@ AppDelegate.prototype.ebbMoveAssign = function (handle, source, namespace) {
 };
 AppDelegate.prototype.addClusterDialog = function (cluster) {
     console.log(cluster.name, cluster._modulePath, cluster.uptime);
-}
-
+};
 module.exports = exports = AppDelegate;
 
 

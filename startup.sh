@@ -9,7 +9,7 @@ if [ "$1" == "admin" ]
 then
     echo $1".js";
     pushd lib/
-    sudo sh -c "node --nouse-idle-notification --always-compact remoteSrv.js >'/dev/null' 2>&1 &"
+    sudo sh -c "node --max-old-space-size=8192 --nouse-idle-notification --always-compact --expose-gc remoteSrv.js >'/dev/null' 2>&1 &"
     popd
     exit;
 fi
@@ -22,4 +22,5 @@ fi
 # 建立資料夾
 [ -d historyLog ] || mkdir historyLog
 sleep 1
-node --max-old-space-size=8192 --nouse-idle-notification --always-compact --expose-gc octoproxy.js -p 80 > "/dev/null" 2>&1 &
+node --max-old-space-size=8192 --nouse-idle-notification --always-compact --expose-gc octoproxy.js -p 80
+# > "/dev/null" 2>&1 &
