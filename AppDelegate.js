@@ -79,7 +79,7 @@ function AppDelegate() {
     this._lockState      = false;
     /** casino load balance **/
     this.gameLBSrv       = new gLBSrv(cfg.gamSLB);
-
+    this.mgmtSrv         = {};
     /** record visitor remote address **/
     this.recordDashboard = new Dashboard(Dashboard.loadFile("./historyLog/Dashboard.json"));
     this.recordEnabled   = true;
@@ -264,6 +264,13 @@ AppDelegate.prototype.createServer = function (opt) {
         var mode = "";
         var namespace = undefined;
         if (typeof headers["x-forwarded-for"] != "undefined") handle.getSockInfos.address = headers["x-forwarded-for"];
+        if (self.mgmtSrv.blockIPsEnabled && self.mgmtSrv.checkedIPDeny(handle.getSockInfos.address)) {
+            self.rejectClientExcpetion(handle, "CON_DENY_CONNECT");
+            handle.close(close_callback);
+            handleRelease(handle);
+            handle = null;
+            return; // deny access
+        }
         if (general) {
             mode = general[0].match('HTTP/') != null ? "http" : mode;
             mode = headers.iswebsocket  ? "ws" : mode;
@@ -289,7 +296,8 @@ AppDelegate.prototype.createServer = function (opt) {
         }
         /** TODO 2016/10/06 -- ADMIN DEMO **/
         /*if (headers["sec-websocket-protocol"] == "admin") {
-            var cluster = self.clusters["administrator"][0];
+            var cluster = self.clusters["inind"];
+            cluster = cluster[0];
             cluster.send({'evt':'c_init2',data:source}, handle,{keepOpen:false});
             setTimeout(function () {
                 self.rejectClientExcpetion(handle, "CON_VERIFIED");
@@ -337,13 +345,12 @@ AppDelegate.prototype.createServer = function (opt) {
             }
             //const chk_assign = cfg.gamSLB.assign.split(",").indexOf(namespace);
             const chk_assign = (namespace == cfg.gamSLB.assign);
-
-            if (cfg.gamSLB.enabled && chk_assign) {
+            if (cfg.gamSLB.enabled && chk_assign || (cfg.gamSLB.videoEnabled && typeof url_args != "undefined" && typeof url_args.stream != "undefined")) {
                 var lbtimes;
                 var params = {f5: general[1], host:handle.getSockInfos.address};
                 var tokencode = self.gameLBSrv.getLoadBalancePath(url_args, params, function (action, json) {
                     NSLog.log('trace','--------------------------');
-                    NSLog.log('trace', 'action: %s, token code:%s', action, JSON.stringify(json));
+                    NSLog.log('info', 'action: %s:%s, token code:%s', action, url_args, JSON.stringify(json));
                     NSLog.log('trace','--------------------------');
                     var src;
                     if (json.action == self.gameLBSrv.LBActionEvent.ON_GET_PATH) {
@@ -353,17 +360,20 @@ AppDelegate.prototype.createServer = function (opt) {
                         namespace = json.path.toString('utf8');
                         var src_string = source.toString('utf8').replace(originPath, namespace);
                         // var indx = source.indexOf(originPath);
-                        handle.getSockInfos.path = namespace;
+                        handle.getSockInfos.lbPath = namespace;
                         src = new Buffer(src_string);
-                        clusterEndpoint(namespace ,src);
-
+                        if (cfg.gamSLB.videoEnabled) {
+                            clusterEndpoint(namespace , source, originPath);
+                        } else {
+                            clusterEndpoint(namespace , src, originPath);
+                        }
 
                     }else if (json.action == self.gameLBSrv.LBActionEvent.ON_BUSY) {
 
                         if (typeof lbtimes != 'undefined') clearTimeout(lbtimes);
                         lbtimes = undefined;
                         namespace = '/godead';
-                        handle.getSockInfos.path = namespace;
+                        handle.getSockInfos.lbPath = namespace;
                         self.rejectClientExcpetion(handle, "CON_DONT_CONNECT");
                         var chgSrc = source.toString('utf8').replace(originPath, namespace);
                         src = new Buffer(chgSrc);
@@ -385,10 +395,19 @@ AppDelegate.prototype.createServer = function (opt) {
                 }, sendWaitClose);
 
             }else {
+                if (cfg.gamSLB.videoEnabled) {
+                    var spPath = namespace.split("/");
+                    var offset = 2;
+                    if (spPath.length >= 3) {
+                        if (spPath[1] != "video") offset = 1;
+                        namespace = (cfg.gamSLB.vPrefix + spPath[offset]);
+                        // NSLog.log('debug','----->', namespace, spPath);
+                    }
+                }
                 clusterEndpoint(namespace, source);
             }
 
-            function clusterEndpoint(lastnamspace, chgSource){
+            function clusterEndpoint(lastnamspace, chgSource, originPath) {
 
                 self.assign(lastnamspace.toString(), function (worker) {
 
@@ -406,7 +425,7 @@ AppDelegate.prototype.createServer = function (opt) {
 
                         }else{
                             NSLog.log('trace','1. Socket goto %s(*)', lastnamspace);
-                            worker[0].send({'evt':'c_init',data:source, namespace:lastnamspace}, handle,{keepOpen:false});
+                            worker[0].send({'evt':'c_init',data:source, namespace:lastnamspace, originPath:originPath}, handle,{keepOpen:false});
                             setTimeout(function () {
                                 self.rejectClientExcpetion(handle, "CON_VERIFIED");
                                 handle.close(close_callback);
@@ -430,7 +449,7 @@ AppDelegate.prototype.createServer = function (opt) {
                             handle.close(close_callback);
                             handle = null;
                         }, sendWaitClose);
-                        worker.send({'evt':'c_init',data:source, namespace:lastnamspace}, handle,{keepOpen:false}); //KeepOpen = KeepAlive
+                        worker.send({'evt':'c_init',data:source, namespace:lastnamspace, originPath:originPath}, handle,{keepOpen:false}); //KeepOpen = KeepAlive
                     }
 
                     //noinspection JSUnresolvedFunction
@@ -497,23 +516,27 @@ AppDelegate.prototype.createServer = function (opt) {
                 message = "Reject the currently connecting client.";
             }
 
-            if (self.recordEnabled) self.recordDashboard.record(this.getSockInfos);
+            if (self.recordEnabled && self._lockState === false) self.recordDashboard.record(this.getSockInfos);
 
             if (TRACE_SOCKET_IO) {
                 var now = new Date();
                 var nowFomat = now.getFullYear() + '/' + (now.getMonth() + 1) + '/' + now.getDate() + " " + now.getHours() + ':' + now.getMinutes() + ':' + now.getSeconds();
-                NSLog.log( status, '{"msg":"%s", "ts": "%s", "src":"%s", "mode":"%s", "path":"%s"}',
+                var lb = (this.getSockInfos.lbPath ? this.getSockInfos.lbPath : "null");
+                NSLog.log( status, '{"msg":"%s", "ts": "%s", "src":"%s", "mode":"%s", "path":"%s", "lb":%s}',
                     message,
                     nowFomat,
                     this.getSockInfos.address,
                     this.getSockInfos.mode,
-                    this.getSockInfos.path
+                    this.getSockInfos.path,
+                    lb
                 );
-                NSLog.tracking("getSockProxyInfo", {"status":status,"msg":message, "ts":nowFomat, "src":this.getSockInfos.address, "mode": this.getSockInfos.mode, "path": this.getSockInfos.path});
+                NSLog.tracking("getSockProxyInfo", {"status":status,"msg":message, "ts":nowFomat, "src":this.getSockInfos.address, "mode": this.getSockInfos.mode, "path": this.getSockInfos.path,
+                    "lb": lb});
                 this.getSockInfos.exception = null;
                 this.getSockInfos.address = null;
                 this.getSockInfos.mode = null;
                 this.getSockInfos.path = null;
+                this.getSockInfos.lbPath = null;
                 this.getSockInfos = null;
                 message = null;
                 status = null;
@@ -562,7 +585,8 @@ AppDelegate.prototype.setupCluster = function (opt) {
     }
     var num = Number(opt.cluster.length);
     var env = process.env;
-    var assign, mxoss;
+    var assign, mxoss, execArgv;
+    var lookout = true;
     if (num != 0) { //
         for (var i = 0; i < num; i++) {
 
@@ -570,8 +594,12 @@ AppDelegate.prototype.setupCluster = function (opt) {
             mxoss = opt.cluster[i].mxoss || 2048;
             assign = utilities.trimAny(opt.cluster[i].assign);
             env.NODE_CDID = i;
+            execArgv = ["--nouse-idle-notification", "--max-old-space-size=" + mxoss];
+            if (opt.cluster[i].gc == true) execArgv.push("--expose-gc");
+            if (opt.cluster[i].compact == true) execArgv.push("--always-compact");
+            if (opt.cluster[i].lookout == false) lookout = false;
             //var cluster = proc.fork(opt.cluster,{silent:false}, {env:env});
-            var cluster = new daemon(opt.cluster[i].file,[assign], {env:env,silent:false,execArgv:["--nouse-idle-notification", "--max-old-space-size=" + mxoss]}); //心跳系統
+            var cluster = new daemon(opt.cluster[i].file,[assign], {env:env, silent:false, execArgv:execArgv, lookoutEnabled:lookout}); //心跳系統
             cluster.init();
             cluster.name = assign;
             cluster.mxoss = mxoss;
