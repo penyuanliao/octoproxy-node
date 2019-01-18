@@ -281,17 +281,23 @@ AppDelegate.prototype.createServer = function (opt) {
             namespace = buffer.toString('utf8');
             namespace = namespace.replace("\0","");
             source = buffer;
-            var temp = namespace.toString().match(new RegExp("({.+?})(?={|)", "g"));
-            if (Array.isArray(temp) && temp.length >= 1) {
-                var json = JSON.parse(temp[0]);
-                var rule1 = (json.action == "setup" && typeof json.cluID != "undefined");
-                if (rule1 && typeof json.balance == "string") {
-                    namespace = json.balance;
-                    general = ["", json.balance];
-                } else if (rule1)  {
-                    namespace = json.namespace;
-                    general = ["", namespace];
+            try {
+                var temp = namespace.toString().match(new RegExp("({.+?})(?={|)", "g"));
+                if (Array.isArray(temp) && temp.length >= 1 && temp[0].indexOf("setup") != -1) {
+                    var json = JSON.parse(temp[0]);
+                    var rule1 = (json.action == "setup" && typeof json.cluID != "undefined");
+                    if (rule1 && typeof json.balance == "string") {
+                        namespace = json.balance;
+                        general = ["", json.balance];
+                    } else if (rule1)  {
+                        namespace = json.namespace;
+                        general = ["", namespace];
+                    }
                 }
+            } catch (e) {
+                NSLog.log("error", "[Socket] JSON.parse ERROR:", namespace.toString() , e);
+                namespace = buffer.toString();
+                namespace = namespace.replace("\0","");
             }
         }
         /** TODO 2016/10/06 -- ADMIN DEMO **/
@@ -347,12 +353,16 @@ AppDelegate.prototype.createServer = function (opt) {
             const chk_assign = (namespace == cfg.gamSLB.assign);
             if (cfg.gamSLB.enabled && chk_assign || (cfg.gamSLB.videoEnabled && typeof url_args != "undefined" && typeof url_args.stream != "undefined")) {
                 var lbtimes;
+                var kickOut = false;
                 var params = {f5: general[1], host:handle.getSockInfos.address};
                 var tokencode = self.gameLBSrv.getLoadBalancePath(url_args, params, function (action, json) {
                     NSLog.log('trace','--------------------------');
-                    NSLog.log('info', 'action: %s:%s, token code:%s', action, url_args, JSON.stringify(json));
+                    NSLog.log('info', 'action: %s:%s, token code:%s', action, (typeof url_args == "object") ? JSON.stringify(url_args) : url_args, JSON.stringify(json));
                     NSLog.log('trace','--------------------------');
                     var src;
+
+                    if (kickOut) {return;}
+
                     if (json.action == self.gameLBSrv.LBActionEvent.ON_GET_PATH) {
                         if (typeof lbtimes != 'undefined') clearTimeout(lbtimes);
                         lbtimes = undefined;
@@ -360,7 +370,9 @@ AppDelegate.prototype.createServer = function (opt) {
                         namespace = json.path.toString('utf8');
                         var src_string = source.toString('utf8').replace(originPath, namespace);
                         // var indx = source.indexOf(originPath);
-                        handle.getSockInfos.lbPath = namespace;
+                        if (typeof handle.getSockInfos != "undefined" && handle.getSockInfos != null && namespace != null && typeof namespace != "undefined") {
+                            handle.getSockInfos.lbPath = namespace;
+                        }
                         src = new Buffer(src_string);
                         if (cfg.gamSLB.videoEnabled) {
                             clusterEndpoint(namespace , source, originPath);
@@ -392,6 +404,7 @@ AppDelegate.prototype.createServer = function (opt) {
                     self.gameLBSrv.removeCallbackFunc(tokencode);
                     self.rejectClientExcpetion(handle, "CON_LB_TIMEOUT");
                     handle.close(close_callback);
+                    kickOut = true;
                 }, sendWaitClose);
 
             }else {
@@ -401,7 +414,6 @@ AppDelegate.prototype.createServer = function (opt) {
                     if (spPath.length >= 3) {
                         if (spPath[1] != "video") offset = 1;
                         namespace = (cfg.gamSLB.vPrefix + spPath[offset]);
-                        // NSLog.log('debug','----->', namespace, spPath);
                     }
                 }
                 clusterEndpoint(namespace, source);
