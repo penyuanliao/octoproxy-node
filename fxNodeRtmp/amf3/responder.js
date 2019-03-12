@@ -7,10 +7,10 @@ function responder(result, status, self) {
 
     if (typeof self != "undefined" && self != null) {
         this.onResult = function () {
-            result.apply(self,arguments);
+            result.apply(self, arguments);
         };
         this.onStatus = function () {
-            status.apply(self,arguments);
+            status.apply(self, arguments);
         };
     }else {
         this.onResult = result;

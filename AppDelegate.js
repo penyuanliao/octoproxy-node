@@ -28,13 +28,12 @@ const cfg           = require('./config.js');
 const gLBSrv        = require('./lib/gameLBSrv.js');
 var   mgmt          = require('./lib/mgmt.js');
 const Dashboard     = require("./lib/Dashboard.js");
-
 NSLog.configure({
     logFileEnabled:true,
     consoleEnabled:true,
     level:'debug',
     dateFormat:'[yyyy-MM-dd hh:mm:ss]',
-    filePath:__dirname+"/historyLog",
+    filePath: path.join(process.cwd(), "./historyLog"),
     id:"octoproxy",
     remoteEnabled: true,
     /*console:console,*/
@@ -78,7 +77,7 @@ function AppDelegate() {
     /** The lockState not allows user to connect service **/
     this._lockState      = false;
     /** casino load balance **/
-    this.gameLBSrv       = new gLBSrv(cfg.gamSLB);
+    this.gameLBSrv       = new gLBSrv(cfg.gamSLB, this);
     this.mgmtSrv         = {};
     /** record visitor remote address **/
     this.recordDashboard = new Dashboard(Dashboard.loadFile("./historyLog/Dashboard.json"));
@@ -597,11 +596,13 @@ AppDelegate.prototype.setupCluster = function (opt) {
     }
     var num = Number(opt.cluster.length);
     var env = process.env;
-    var assign, mxoss, execArgv;
+    var assign, mxoss, execArgv, args;
     var lookout = true;
+    var pkg = false;
     if (num != 0) { //
         for (var i = 0; i < num; i++) {
-
+            lookout = true;
+            pkg = false;
             // file , fork.settings, args
             mxoss = opt.cluster[i].mxoss || 2048;
             assign = utilities.trimAny(opt.cluster[i].assign);
@@ -609,9 +610,19 @@ AppDelegate.prototype.setupCluster = function (opt) {
             execArgv = ["--nouse-idle-notification", "--max-old-space-size=" + mxoss];
             if (opt.cluster[i].gc == true) execArgv.push("--expose-gc");
             if (opt.cluster[i].compact == true) execArgv.push("--always-compact");
+            if (process.env.pkg_compiler) execArgv = []; // octoProxy pkg versions
             if (opt.cluster[i].lookout == false) lookout = false;
+            if (opt.cluster[i].file.indexOf(".js") == -1) pkg = true;
             //var cluster = proc.fork(opt.cluster,{silent:false}, {env:env});
-            var cluster = new daemon(opt.cluster[i].file,[assign], {env:env, silent:false, execArgv:execArgv, lookoutEnabled:lookout}); //心跳系統
+            var cmdLine = [assign];
+            if (typeof opt.cluster[i].args == "string") {
+                args = utilities.trimAny(opt.cluster[i].args);
+                cmdLine = cmdLine.concat(args.split(","));
+            } else if (Array.isArray(opt.cluster[i].args) && opt.cluster[i].args.length > 0) {
+                args = utilities.trimAny(opt.cluster[i].args.join(","));
+                cmdLine = cmdLine.concat(args.split(","));
+            }
+            var cluster = new daemon(opt.cluster[i].file, cmdLine, {env:env, silent:false, execArgv:execArgv, lookoutEnabled:lookout, pkgFile: pkg}); //心跳系統
             cluster.init();
             cluster.name = assign;
             cluster.mxoss = mxoss;
@@ -642,6 +653,7 @@ AppDelegate.prototype.setupCluster = function (opt) {
  * @param cb callback
  * @returns {undefined}
  */
+
 AppDelegate.prototype.assign = function (namespace, cb) {
     var cluster = undefined;
     var path = namespace.split("/");
@@ -747,6 +759,10 @@ AppDelegate.prototype.BindingProcEvent = function () {
     });
     process.on("SIGQUIT", function () {
         NSLog.log('info',"user quit node process");
+    });
+    process.on("SIGINT", function () {
+        NSLog.log('error',"SIGINT quit node process (Ctrl+D).");
+        process.exit(0);
     });
     process.on('message', function (data, handle) {
         var json = data;

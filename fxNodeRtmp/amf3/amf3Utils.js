@@ -285,11 +285,6 @@ Deserializer.prototype.readObject = function () {
                 property = this.readString();
                 if (property != "") {
                     propertyNames.push(property);
-                    /*
-                    if (property == "WagersID" && (this.buffer[this.offset] == 0x05 ||this.buffer[this.offset] == 0x04)) {
-                        this.buffer[this.offset] = 0x03;
-                        // this.buffer[this.offset+1] = 0x03;
-                    }*/
                     properties[property] = this.readTypeMarker();
                     // console.log('properties[%s]:', property, properties[property]);
                 }

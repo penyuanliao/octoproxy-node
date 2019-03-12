@@ -21,8 +21,9 @@ const isWorker      = ('NODE_CDID' in process.env); //檢查是否啟動worker
 const isMaster      = (isWorker === false);
 const NSLog         = fxNetSocket.logger.getInstance();
 const fileName      = path.basename(require.main.filename) + process.argv[2];
-NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:'info', dateFormat:'[yyyy-MM-dd hh:mm:ss]',fileName:fileName,filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100,
-                id:process.argv[2], remoteEnabled: true});
+var LOG_LEVEL = "info";
+NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:LOG_LEVEL, dateFormat:'[yyyy-MM-dd hh:mm:ss]',fileName:fileName,filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100,
+                id:process.argv[2], remoteEnabled: false});
 
 const OPEN_BRACE     = 123;
 
@@ -40,14 +41,20 @@ function connect(uri, client) {
     var rtmp = undefined;
     // #1 建立連線
     rtmp = libRtmp.RTMPClient.connect(uri.host,uri.port, function (){
-        NSLog.log('debug', "RTMPClient %s:%s Connected!", rtmp.socket.remoteAddress, rtmp.socket.remotePort);
+        var remoteAddress = rtmp.socket.remoteAddress.replace("::ffff:", "");
+        if (typeof client.originAddress != "undefined") {
+            remoteAddress = client.originAddress;
+        }
+        NSLog.log('debug', "RTMPClient %s:%s Connected! (%s)", rtmp.socket.remoteAddress, rtmp.socket.remotePort, remoteAddress, client.headers);
         //#1-1 送給Client連線成功
         rtmp.on('status', function (cmd) {
-            if (client.isConnect)
+            if (client.isConnect) {
+                rtmp.fmsCall("setClientIP", [remoteAddress]);
                 client.write(JSON.stringify({"NetStatusEvent":"Connected.amfIsReady"}));
+            }
         });
         rtmp.connectResponse();
-        
+
         //LNX 11,7,700,203
         //MAC 10,0,32,18
         //MAC 11,8,800,94
@@ -228,7 +235,7 @@ function createNodejsSrv(port) {
     var self = this;
     server.on('connection', function (client) {
 
-        NSLog.log('info','Connection Clients name:%s (namespace %s)',client.name, client.namespace);
+        NSLog.log('info','Connection Clients name:%s(%s) (namespace %s)', client.name, client.originAddress, client.namespace);
         if(typeof client.namespace == "undefined" || client.namespace.indexOf("policy-file-request") != -1 ) {
             console.log('Clients is none rtmp... to destroy.');
             client.close();
@@ -236,7 +243,9 @@ function createNodejsSrv(port) {
         }
         setupFMSClient(client);
     });
-
+    server.on("ping", function (evt) {
+        //回應時間
+    });
     server.on('message', function (evt) {
         NSLog.log('error','message :', evt.data);
         var socket = evt.client;
@@ -265,7 +274,7 @@ function createNodejsSrv(port) {
 
             if (event == "Connect") {
                 NSLog.log('trace','data', json["data"]);
-                
+
             }else if (event == "close") {
                 socket.close();
 
@@ -309,7 +318,7 @@ function createNodejsSrv(port) {
             removeItem.fms.state = "closed";
             removeItem.fms.socket.destroy();
             delete connections[name];
-            NSLog.log('debug','disconnect count:', Object.keys(connections).length,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
+            NSLog.log('debug','disconnect count:', connsCount,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
         };
         connsCount--;
     });
@@ -385,7 +394,7 @@ function onSocketClose(name) {
         removeItem["ws"] = null;
         delete connections[name];
 
-        NSLog.log('debug','disconnect count:', Object.keys(connections).length,typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
+        NSLog.log('debug','disconnect count:', connsCount, typeof removeItem != 'undefined' , typeof removeItem.fms != 'undefined' );
     }
 }
 
@@ -405,6 +414,7 @@ process.on('disconnect', function () {
     process.exit(0);
 });
 process.on('message', function (data, handle) {
+    // console.log(data);
     var json = data;
     if (typeof json === 'string') {
 
@@ -424,9 +434,22 @@ process.on('message', function (data, handle) {
             socket.emit("connect");
             socket.emit('data',new Buffer(data.data));
             socket.resume();
-        }else if(data.evt == "processInfo") {
-            process.send({"evt":"processInfo", "data" : {"memoryUsage":process.memoryUsage(),"connections": connsCount}})
-        }else{
+        } else if(data.evt == "kickUsersOut") {
+            NSLog.log("warning", "start kick user out.");
+            var cliKeys = Object.keys(connections);
+            for (var i = 0; i < cliKeys.length; i++) {
+                onSocketClose(cliKeys[i]);
+            }
+
+
+        } else if(data.evt == "processInfo") {
+            process.send({"evt":"processInfo", "data" : {"memoryUsage":process.memoryUsage(),"connections": connsCount, "lv": LOG_LEVEL}})
+        } else if (data.evt == "setLogLevel") {
+            LOG_LEVEL = data.params.lv;
+            NSLog.configure({level:LOG_LEVEL});
+            // NSLog.log('warning', "Server manager change NSLog level: [%s]", LOG_LEVEL);
+
+        } else{
             NSLog.log('debug', 'out of hand. dismiss message');
         }
     }

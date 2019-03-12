@@ -4,9 +4,13 @@
 var config = {};
 config.appConfig = appParames();
 config.env = process.env.NODE_ENV;
+
+process.env.pkg_compiler = config.pkg_compiler = (typeof process.versions.pkg != "undefined" && typeof process.pkg != "undefined");
+if (config.pkg_compiler) process.pkg.compiler = true;
+
 /**
  * host: ip4 - '0.0.0.0', ip6 - '::'
- *
+ * FX
  * Backlog: pending connections
  * **/
 
@@ -15,10 +19,7 @@ config.numCPUs = require('os').cpus().length;
 if (config.env == 'development') {
     config.bFMSHost = require('fxNetSocket').getConfiguration("OctoProxy-Dev");
     config.bExceptions = [
-        {
-            "Host":require('fxNetSocket').getConfiguration("OctoProxy-Dev"),
-            "rules":["/BacPlayerVip"]
-        }
+        {"Host":"127.0.0.1", "rules":["/BacPlayerVip"]}
     ];
     config.bFMSPort = 1935;
     config.srvOptions = {
@@ -30,22 +31,22 @@ if (config.env == 'development') {
     //建立第二台一樣服務只需複製一樣設定即可
     //合併服務用逗號區隔ex:'Hall, Hall2'
     //會清除空白符號
-    config.forkOptions = require('fxNetSocket').getConfig('../configuration/Assign.json');
+    config.forkOptions = require('fxNetSocket').getConfig('../configuration/Assign-gm.json');
     config.gamSLB = {
         enabled:true,
-        file: './unittest/GLBS.js',
-        assign:'/fxLB'
+        // file: './unittest/GLBS.js',
+        file: '../../SVN/NodeJS/LoadBalancer/NodeLB.js',
+        assign:'/fxLB',
+        /* 處理視訊lb */
+        videoEnabled:false,
+        vPrefix: 'edge_'
     };
-}
-else {
+} else {
     
     /** 伺服器環境設定 **/
     config.bFMSHost = require('fxNetSocket').getConfiguration("OctoProxy");
     config.bExceptions = [
-        {
-            "Host":require('fxNetSocket').getConfiguration("OctoProxy-Dev"),
-            "rules":["/BacPlayerVip"]
-        }
+        {"Host":"127.0.0.1", "rules":["/BacPlayerVip"]}
     ];
     config.bFMSPort = 1935;
     config.srvOptions = {
@@ -55,10 +56,14 @@ else {
         'backlog': 511
     };
     config.forkOptions = require('fxNetSocket').getConfig('../configuration/Assign.json');
+
     config.gamSLB = {
         enabled:true,
-        file: '../LoadBalancer/NodeLB.js',
-        assign:'/fxLB'
+        file: '../../SVN/NodeJS/LoadBalancer/NodeLB.js',
+        assign:'/fxLB',
+        /* 處理視訊lb */
+        videoEnabled:false,
+        vPrefix: 'edge_'
     };
 }
 //todo define the balance
@@ -66,8 +71,8 @@ config.balance = 'leastconn';//roundrobin
 
 /**
  * Application parameters
- * -p port
- * -f loadfile or remote link
+ * @param -p port
+ * @param -f loadfile or remote link
  * **/
 function appParames(){
     var args = {};
@@ -90,6 +95,15 @@ function appParames(){
             }else {
                 config.rtmpHostname = rtmpHost;
             }
+        }else if (element === "-fo") {
+            var assign = process.argv[index + 1];
+            if (!assign && typeof assign != "undefined" && assign !=0) {
+                config.forkOptions = require('fxNetSocket').getConfig(assign);
+            }
+        } else if (element === "-m") {
+            args["mgmtPort"] = parseInt(process.argv[index + 1]);
+        } else if (element === "--gc") {
+            config.gc = true;
         }
 
             });
