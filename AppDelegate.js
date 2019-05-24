@@ -610,7 +610,8 @@ AppDelegate.prototype.setupCluster = function (opt) {
             execArgv = ["--nouse-idle-notification", "--max-old-space-size=" + mxoss];
             if (opt.cluster[i].gc == true) execArgv.push("--expose-gc");
             if (opt.cluster[i].compact == true) execArgv.push("--always-compact");
-            if (process.env.pkg_compiler) execArgv = []; // octoProxy pkg versions
+            if (opt.cluster[i].inspect == true) execArgv.push("--inspect");
+            if (Boolean(process.env.pkg_compiler) == true) execArgv = []; // octoProxy pkg versions
             if (opt.cluster[i].lookout == false) lookout = false;
             if (opt.cluster[i].file.indexOf(".js") == -1) pkg = true;
             //var cluster = proc.fork(opt.cluster,{silent:false}, {env:env});
@@ -626,6 +627,8 @@ AppDelegate.prototype.setupCluster = function (opt) {
             cluster.init();
             cluster.name = assign;
             cluster.mxoss = mxoss;
+            cluster.ats = (typeof opt.cluster[i].ats == "boolean") ? opt.cluster[i].ats : false;
+            cluster.optConf = opt.cluster[i];
             if (!this.clusters[cluster.name]) {
                 this.clusters[cluster.name] = [];
                 this.roundrobinNum[cluster.name] = 0;
@@ -653,7 +656,6 @@ AppDelegate.prototype.setupCluster = function (opt) {
  * @param cb callback
  * @returns {undefined}
  */
-
 AppDelegate.prototype.assign = function (namespace, cb) {
     var cluster = undefined;
     var path = namespace.split("/");
@@ -731,21 +733,23 @@ AppDelegate.prototype.assign = function (namespace, cb) {
 AppDelegate.prototype.awaitTrashUserEmpty = function () {
     var self = this;
     var garbagedump = this.garbageDump;
-    this.awaitTrashTimes = setTimeout(function () {
+    if (typeof this.awaitTrashTimes != "undefined") {
+        return;
+    }
+    this.awaitTrashTimes = setInterval(function () {
         for (var i = 0; i < garbagedump.length; i++) {
             var cluster = garbagedump[i];
             var count = cluster.nodeInfo.connections;
             if (count == 0) {
+                NSLog.log("warning", "AppDelegate.awaitTrashUserEmpty(), name:%s", cluster.name);
                 cluster.stop();
                 cluster.stopHeartbeat();
                 garbagedump.splice(i, 1);
                 i--;
             }
         }
-        if (garbagedump.length > 0) self.awaitTrashUserEmpty();
     }, 5 * 60 * 1000);
 
-    NSLog.log("trace", "awaitTrashUserEmpty()");
 };
 
 AppDelegate.prototype.BindingProcEvent = function () {

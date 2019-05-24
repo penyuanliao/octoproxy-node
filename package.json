@@ -1,14 +1,11 @@
 {
-  "name": "ocotoproxy",
+  "name": "octoproxy",
   "version": "2.0.0",
-  "update": "2016.10.12 11:00",
+  "update": "2019.03.14 14:55",
   "private": true,
   "dependencies": {
-    "buffertools": "^2.1.6",
     "debug": "^2.2.0",
-    "fxNetSocket": "https://github.com/penyuanliao/fxNetSocket.git",
-    "ms": "^2.0.0",
-    "underscore": "^1.8.3"
+    "fxNetSocket": "https://github.com/penyuanliao/fxNetSocket.git"
   },
   "config": {
     "debug": "TRUE"
@@ -16,7 +13,7 @@
   "main": "octoproxy.js",
   "bin": "octoproxy.js",
   "pkg": {
-    "scripts": [],
+    "scripts": ["./config.js"],
     "assets": [],
     "targets": [
       "node8-win-x64",
@@ -25,11 +22,8 @@
     ]
   },
   "scripts": {
-    "compress": "",
     "start": "sudo sh startup.sh",
-    "test": "echo $npm_package_config_debug",
-    "clean": "",
-    "build": "pkg"
+    "build": "sh build.sh"
   },
   "description": ""
 }

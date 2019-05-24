@@ -4,16 +4,17 @@
 var config = {};
 config.appConfig = appParames();
 config.env = process.env.NODE_ENV;
-
-process.env.pkg_compiler = config.pkg_compiler = (typeof process.versions.pkg != "undefined" && typeof process.pkg != "undefined");
+config.pkg_compiler = (typeof process.versions.pkg != "undefined" && typeof process.pkg != "undefined");
+process.env.pkg_compiler = config.pkg_compiler;
 if (config.pkg_compiler) process.pkg.compiler = true;
-
+const path = require("path");
+var octo;
+try {octo = require(path.join(process.cwd(), "octo.json")); } catch (e) {}
 /**
  * host: ip4 - '0.0.0.0', ip6 - '::'
  * FX
  * Backlog: pending connections
  * **/
-
 config.numCPUs = require('os').cpus().length;
 /** 開發環境設定 **/
 if (config.env == 'development') {
@@ -59,12 +60,18 @@ if (config.env == 'development') {
 
     config.gamSLB = {
         enabled:true,
-        file: '../../SVN/NodeJS/LoadBalancer/NodeLB.js',
+        file: '../../../../SVN/NodeJS/LoadBalancer/NodeLB.js',
         assign:'/fxLB',
         /* 處理視訊lb */
         videoEnabled:false,
         vPrefix: 'edge_'
     };
+
+    if (typeof octo != "undefined") {
+        if (octo.bFMSHost) config.bFMSHost = octo.bFMSHost;
+        if (octo.bFMSPort) config.bFMSPort = octo.bFMSPort;
+        //if (octo["loadBalancerFile"]) config.gamSLB.file = octo["loadBalancerFile"];
+    }
 }
 //todo define the balance
 config.balance = 'leastconn';//roundrobin
@@ -104,6 +111,8 @@ function appParames(){
             args["mgmtPort"] = parseInt(process.argv[index + 1]);
         } else if (element === "--gc") {
             config.gc = true;
+        } else if (element === "--push") {
+            config.push = true;
         }
 
             });
