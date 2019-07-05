@@ -28,6 +28,10 @@ const cfg           = require('./config.js');
 const gLBSrv        = require('./lib/gameLBSrv.js');
 var   mgmt          = require('./lib/mgmt.js');
 const Dashboard     = require("./lib/Dashboard.js");
+const TelegramBot   = require("./lib/FxTelegramBot.js");
+const hostname      = require('os').hostname();
+const BotToken      = {bot: "", token:""};
+const ProxyMode     = {host: "", port: 0};
 NSLog.configure({
     logFileEnabled:true,
     consoleEnabled:true,
@@ -124,6 +128,8 @@ AppDelegate.prototype.init = function () {
     this.BindingProcEvent();
 
     this.management();
+
+    // this.createTelegramBot(BotToken, ProxyMode);
 };
 
 /**
@@ -144,7 +150,11 @@ AppDelegate.prototype.createServer = function (opt) {
         } else {
             tcp_handle = new TCP(tcp_wrap.constants.SERVER);
         }
-        err = tcp_handle.bind(opt.host, opt.port);
+        if (typeof opt.host != "undefined" && require("net").isIPv6(opt.host)) {
+            err = tcp_handle.bind6(opt.host, opt.port);
+        } else {
+            err = tcp_handle.bind(opt.host, opt.port);
+        }
         if (err) {
             NSLog.log('error','tcp_handle Bind:',err , opt.host, opt.port);
             tcp_handle.close(close_callback);
@@ -284,7 +294,7 @@ AppDelegate.prototype.createServer = function (opt) {
                 var temp = namespace.toString().match(new RegExp("({.+?})(?={|)", "g"));
                 if (Array.isArray(temp) && temp.length >= 1 && temp[0].indexOf("setup") != -1) {
                     var json = JSON.parse(temp[0]);
-                    var rule1 = (json.action == "setup" && typeof json.cluID != "undefined");
+                    var rule1 = (json.action == "setup" && (typeof json.cluID != "undefined" || typeof json.uuid != "undefined" ));
                     if (rule1 && typeof json.balance == "string") {
                         namespace = json.balance;
                         general = ["", json.balance];
@@ -594,6 +604,7 @@ AppDelegate.prototype.setupCluster = function (opt) {
     if (typeof opt === 'undefined') {
         opt = { 'cluster': [0] };
     }
+    var self = this;
     var num = Number(opt.cluster.length);
     var env = process.env;
     var assign, mxoss, execArgv, args;
@@ -611,9 +622,9 @@ AppDelegate.prototype.setupCluster = function (opt) {
             if (opt.cluster[i].gc == true) execArgv.push("--expose-gc");
             if (opt.cluster[i].compact == true) execArgv.push("--always-compact");
             if (opt.cluster[i].inspect == true) execArgv.push("--inspect");
-            if (Boolean(process.env.pkg_compiler) == true) execArgv = []; // octoProxy pkg versions
             if (opt.cluster[i].lookout == false) lookout = false;
             if (opt.cluster[i].file.indexOf(".js") == -1) pkg = true;
+            if (pkg) execArgv = []; // octoProxy pkg versions
             //var cluster = proc.fork(opt.cluster,{silent:false}, {env:env});
             var cmdLine = [assign];
             if (typeof opt.cluster[i].args == "string") {
@@ -640,6 +651,10 @@ AppDelegate.prototype.setupCluster = function (opt) {
             });
             cluster.emitter.on('status', function (message) {
                 NSLog.log('warning', message);
+            });
+            cluster.emitter.on('unexpected', function (err) {
+                NSLog.log('warning', "unexpected:", err.name);
+                self.tgBotTemplate("-1001314121392", "shutdown", [err.name]);
             });
 
         }
@@ -729,6 +744,21 @@ AppDelegate.prototype.assign = function (namespace, cb) {
     }
 };
 
+AppDelegate.prototype.createTelegramBot = function (opt, proxy) {
+    this.tgBot = TelegramBot.getInstance();
+    this.tgBot.setBot(opt.bot, opt.token);
+    this.tgBot.setProxy(proxy.host, proxy.port);
+};
+AppDelegate.prototype.tgBotSend = function (chatID, message) {
+    if (typeof this.tgBot != "undefined") {
+        this.tgBot.sendMessage(chatID, message);
+    }
+};
+AppDelegate.prototype.tgBotTemplate = function (chatID, type, args) {
+    if (type == "shutdown") {
+        this.tgBotSend(chatID, util.format("%s ❗️shutdown: reboot by \n<code>%s</code>|<b>%s</b>", hostname, TelegramBot.dateFormat(new Date()), args[0]));
+    }
+};
 /** 清除回收桶裡的cluster **/
 AppDelegate.prototype.awaitTrashUserEmpty = function () {
     var self = this;
