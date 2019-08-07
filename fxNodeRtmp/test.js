@@ -6,6 +6,16 @@ var log = require('./log');
 
 var amfUtils = require('./amfutils.js');
 
+
+console.log(amfUtils.amf0encObject(null));
+console.log(amfUtils.amf0encString("play"));
+console.log(amfUtils.amf0encNumber(0));// transactionID = 0
+console.log(amfUtils.amf0encNull()); // Command Object = NULL
+console.log(amfUtils.amf0encString("videosd"));
+
+
+
+return;
 // simplest
 var obj = [ {a1: 'this a1',
     a2: [ 1, 2, 3, '4', '5' ],

@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="octoproxy.js" type="NodeJSConfigurationType" factoryName="Node.js" application-parameters="-p 8000 --gc" node-parameters="--nouse-idle-notification --expose-gc" path-to-js-file="octoproxy.js" working-dir="$PROJECT_DIR$">
+    <envs>
+      <env name="NODE_ENV" value="development" />
+      <env name="DEBUG" value="rtmp:*,daemon" />
+      <env name="DEBUG_COLORS" value="''" />
+      <env name="NODE_DEBUG" value="''" />
+    </envs>
+    <method />
+  </configuration>
+</component>

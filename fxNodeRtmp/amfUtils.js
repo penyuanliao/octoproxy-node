@@ -57,7 +57,8 @@ var amf0dRules = {
 //    0x0D: amf0decUnsupported, // Has been never originally implemented by Adobe!
 //    0x0E: amf0decRecSet, // Has been never originally implemented by Adobe!
     0x0F: amf0decXmlDoc,
-    0x10: amf0decTypedObj
+    0x10: amf0decTypedObj,
+    0x11: switchToAmf3
 };
 
 var amf0eRules = {
@@ -111,7 +112,7 @@ function amf3decUndefined() {
  * @returns {Buffer}
  */
 function amf3encUndefined() {
-    var buf = new Buffer(1);
+    var buf = Buffer.alloc(1);
     buf.writeUInt8(0x00);
     return buf;
 }
@@ -129,7 +130,7 @@ function amf3decNull() {
  * @returns {Buffer}
  */
 function amf3encNull() {
-    var buf = new Buffer(1);
+    var buf = Buffer.alloc(1);
     buf.writeUInt8(0x01);
     return buf;
 }
@@ -147,7 +148,7 @@ function amf3decFalse() {
  * @returns {Buffer}
  */
 function amf3encFalse() {
-    var buf = new Buffer(1);
+    var buf = Buffer.alloc(1);
     buf.writeUInt8(0x02);
     return buf;
 }
@@ -165,7 +166,7 @@ function amf3decTrue() {
  * @returns {Buffer}
  */
 function amf3encTrue() {
-    var buf = new Buffer(1);
+    var buf = Buffer.alloc(1);
     buf.writeUInt8(0x03);
     return buf;
 }
@@ -201,7 +202,7 @@ function amf3encUI29(num) {
     if (num < 0x4000) len = 2;
     if (num < 0x200000) len = 3;
     if (num >= 0x200000) len = 4;
-    var buf = new Buffer(len);
+    var buf = Buffer.alloc(len);
     switch (len) {
         case 1:
             buf.writeUInt8(num, 0);
@@ -242,7 +243,7 @@ function amf3decInteger(buf) { // Invert the integer
  * @returns {Buffer}
  */
 function amf3encInteger(num) {
-    var buf = new Buffer(1);
+    var buf = Buffer.alloc(1);
     buf.writeUInt8(0x4, 0);
     return Buffer.concat([buf, amf3encUI29(num & 0x3FFFFFFF)]); // This AND will auto convert the sign bit!
 }
@@ -267,9 +268,9 @@ function amf3decString(buf) {
  */
 function amf3encString(str) {
     var sLen = amf3encUI29(str.length << 1);
-    var buf = new Buffer(1);
+    var buf = Buffer.alloc(1);
     buf.writeUInt8(0x6, 0);
-    return Buffer.concat([buf, sLen, new Buffer(str, 'utf8')]);
+    return Buffer.concat([buf, sLen, Buffer.from(str, 'utf8')]);
 }
 
 /**
@@ -292,9 +293,9 @@ function amf3decXmlDoc(buf) {
  */
 function amf3encXmlDoc(str) {
     var sLen = amf3encUI29(str.length << 1);
-    var buf = new Buffer(1);
+    var buf = Buffer.alloc(1);
     buf.writeUInt8(0x7, 0);
-    return Buffer.concat([buf, sLen, new Buffer(str, 'utf8')]);
+    return Buffer.concat([buf, sLen, Buffer.from(str, 'utf8')]);
 }
 
 /**
@@ -317,9 +318,9 @@ function amf3decXml(buf) {
  */
 function amf3encXml(str) {
     var sLen = amf3encUI29(str.length << 1);
-    var buf = new Buffer(1);
+    var buf = Buffer.alloc(1);
     buf.writeUInt8(0x0B, 0);
-    return Buffer.concat([buf, sLen, new Buffer(str, 'utf8')]);
+    return Buffer.concat([buf, sLen, Buffer.alloc(str, 'utf8')]);
 }
 
 /**
@@ -342,9 +343,9 @@ function amf3decByteArray(buf) {
  */
 function amf3encByteArray(str) {
     var sLen = amf3encUI29(str.length << 1);
-    var buf = new Buffer(1);
+    var buf = Buffer.alloc(1);
     buf.writeUInt8(0x0C, 0);
-    return Buffer.concat([buf, sLen, (typeof str == 'string') ? new Buffer(str, 'binary') : str]);
+    return Buffer.concat([buf, sLen, (typeof str == 'string') ? Buffer.from(str, 'binary') : str]);
 }
 
 /**
@@ -362,7 +363,7 @@ function amf3decDouble(buf) {
  * @returns {Buffer}
  */
 function amf3encDouble(num) {
-    var buf = new Buffer(9);
+    var buf = Buffer.alloc(9);
     buf.writeUInt8(0x05, 0);
     buf.writeDoubleBE(num, 1);
     return buf;
@@ -385,9 +386,9 @@ function amf3decDate(buf) {  // The UI29 should be 1
  * @returns {Buffer}
  */
 function amf3encDate(ts) {
-    var buf = new Buffer(1);
+    var buf = Buffer.alloc(1);
     buf.writeUInt8(0x8, 0);
-    var tsBuf = new Buffer(8);
+    var tsBuf = Buffer.alloc(8);
     tsBuf.writeDoubleBE(ts, 0);
     return Buffer.concat([buf, amf3encUI29(1), tsBuf]); // We always do 1
 }
@@ -446,7 +447,7 @@ function amf0decNumber(buf) {
  * @returns {Buffer}
  */
 function amf0encNumber(num) {
-    var buf = new Buffer(9);
+    var buf = Buffer.alloc(9);
     buf.writeUInt8(0x00, 0);
     buf.writeDoubleBE(num, 1);
     return buf;
@@ -467,7 +468,7 @@ function amf0decBool(buf) {
  * @returns {Buffer}
  */
 function amf0encBool(num) {
-    var buf = new Buffer(2);
+    var buf = Buffer.alloc(2);
     buf.writeUInt8(0x01, 0);
     buf.writeUInt8((num ? 1 : 0), 1);
     return buf;
@@ -486,7 +487,7 @@ function amf0decNull() {
  * @returns {Buffer}
  */
 function amf0encNull() {
-    var buf = new Buffer(1);
+    var buf = Buffer.alloc(1);
     buf.writeUInt8(0x05, 0);
     return buf;
 }
@@ -504,7 +505,7 @@ function amf0decUndefined() {
  * @returns {Buffer}
  */
 function amf0encUndefined() {
-    var buf = new Buffer(1);
+    var buf = Buffer.alloc(1);
     buf.writeUInt8(0x06, 0);
     return buf;
 }
@@ -526,7 +527,7 @@ function amf0decDate(buf) {
  * @returns {Buffer}
  */
 function amf0encDate(ts) {
-    var buf = new Buffer(11);
+    var buf = Buffer.alloc(11);
     buf.writeUInt8(0x0B, 0);
     buf.writeInt16BE(0, 1);
     buf.writeDoubleBE(ts, 3);
@@ -547,7 +548,7 @@ function amf0decObject(buf) { // TODO: Implement references!
         // console.log('Field', iBuf.readUInt8(0), iBuf);
         var prop = amf0decUString(iBuf);
         if (prop.lost != -1) {
-            iBuf = Buffer.concat([new Buffer([prop.lost]), iBuf],iBuf.length+1);
+            iBuf = Buffer.concat([Buffer.from([prop.lost]), iBuf],iBuf.length+1);
         }
          // console.log('Got field for property', prop);
         len += prop.len;
@@ -576,13 +577,13 @@ function amf0decObject(buf) { // TODO: Implement references!
 function amf0encObject(o) {
     if (typeof o !== 'object') return;
 
-    var data = new Buffer(1);
+    var data = Buffer.alloc(1);
     data.writeUInt8(0x03,0); // Type object
     var k;
     for (k in o) {
         data = Buffer.concat([data,amf0encUString(k),amf0EncodeOne(o[k])]);
     }
-    var termCode = new Buffer(1);
+    var termCode = Buffer.alloc(1);
     termCode.writeUInt8(0x09,0);
     return Buffer.concat([data,amf0encUString(''),termCode]);
 }
@@ -603,7 +604,7 @@ function amf0decRef(buf) {
  * @returns {Buffer}
  */
 function amf0encRef(index) {
-    var buf = new Buffer(3);
+    var buf = Buffer.alloc(3);
     buf.writeUInt8(0x07, 0);
     buf.writeUInt16BE(index, 1);
     return buf;
@@ -632,11 +633,11 @@ function amf0decUString(buf) {
     var lost = -1;
     //console.log(buf.readUInt8(0));
     if (buf.readUInt8(0) == 0x06) {
-        buf = Buffer.concat([new Buffer([0x00]), buf],buf.length+1);
+        buf = Buffer.concat([Buffer.from([0x00]), buf],buf.length+1);
         lost = 0x00;
     }else if (buf.readUInt8(0) == 0x08 && buf.readUInt8(1) != 0x00 && buf.readUInt8(2) != 0x00 && buf.readUInt8(3) != 0x00)
     {
-        buf = Buffer.concat([new Buffer([0x00]), buf],buf.length+1);
+        buf = Buffer.concat([Buffer.from([0x00]), buf],buf.length+1);
         lost = 0x00;
     }
     var sLen = buf.readUInt16BE(0);
@@ -649,8 +650,8 @@ function amf0decUString(buf) {
  * @returns {Buffer}
  */
 function amf0encUString(s) {
-    var data = new Buffer(s,'utf8');
-    var sLen = new Buffer(2);
+    var data = Buffer.from(s,'utf8');
+    var sLen = Buffer.alloc(2);
     sLen.writeUInt16BE(data.length,0);
     return Buffer.concat([sLen,data]);
 }
@@ -661,10 +662,11 @@ function amf0encUString(s) {
  * @returns {Buffer}
  */
 function amf0encString(str) {
-    var buf = new Buffer(3);
+    var buf = Buffer.alloc(3);
+    var strBuf = Buffer.from(str, 'utf8');
     buf.writeUInt8(0x02, 0);
-    buf.writeUInt16BE(str.length, 1);
-    return Buffer.concat([buf, new Buffer(str, 'utf8')]);
+    buf.writeUInt16BE(strBuf.length, 1);
+    return Buffer.concat([buf, strBuf]);
 }
 
 /**
@@ -683,10 +685,10 @@ function amf0decLongString(buf) {
  * @returns {Buffer}
  */
 function amf0encLongString(str) {
-    var buf = new Buffer(5);
+    var buf = Buffer.alloc(5);
     buf.writeUInt8(0x0C, 0);
     buf.writeUInt32BE(str.length, 1);
-    return Buffer.concat([buf, new Buffer(str, 'utf8')]);
+    return Buffer.concat([buf, Buffer.from(str, 'utf8')]);
 }
 
 /**
@@ -696,8 +698,13 @@ function amf0encLongString(str) {
  */
 function amf0decArray(buf) {
 //    var count = buf.readUInt32BE(1);
-    var obj = amf0decObject(buf.slice(4));
-    return { len: 5 + obj.len, value: obj.value }
+    var buf2 = buf.slice(4);
+    // 0x08會錯？？
+    buf2[0] = 0x03;
+    buf2[1] = 0x00;
+    var obj = amf0decObject(buf2);
+    // return { len: 5 + obj.len, value: obj.value }
+    return { len: 4 + obj.len, value: obj.value }
 }
 
 /**
@@ -707,7 +714,7 @@ function amf0encArray(a) {
     var l = 0;
     if (a instanceof Array) l = a.length; else l = Object.keys(a).length;
     console.log('Array encode', l, a);
-    var buf = new Buffer(5);
+    var buf = Buffer.alloc(5);
     buf.writeUInt8(8,0);
     buf.writeUInt32BE(l,1);
     var data = amf0encObject(a);
@@ -720,7 +727,7 @@ function amf0encArray(a) {
  * @returns {Buffer}
  */
 function amf0cnvArray2Object(aData) {
-    var buf = new Buffer(1);
+    var buf = Buffer.alloc(1);
     buf.writeUInt8(0x3,0); // Object id
     return Buffer.concat([buf,aData.slice(5)]);
 }
@@ -731,7 +738,7 @@ function amf0cnvArray2Object(aData) {
  * @returns {Buffer}
  */
 function amf0cnvObject2Array(oData) {
-    var buf = new Buffer(5);
+    var buf = Buffer.alloc(5);
     var o = amf0decObject(oData);
     var l = Object.keys(o).length;
     buf.writeUInt32BE(l,1);
@@ -754,10 +761,10 @@ function amf0decXmlDoc(buf) {
  * @returns {Buffer}
  */
 function amf0encXmlDoc(str) { // Essentially it is the same as string
-    var buf = new Buffer(3);
+    var buf = Buffer.alloc(3);
     buf.writeUInt8(0x0F, 0);
     buf.writeUInt16BE(str.length, 1);
-    return Buffer.concat([buf, new Buffer(str, 'utf8')]);
+    return Buffer.concat([buf, Buffer.from(str, 'utf8')]);
 }
 
 /**
@@ -790,7 +797,7 @@ function amf0decSArray(buf) {
  */
 function amf0encSArray(a) {
     //console.log('Do strict array!');
-    var buf = new Buffer(5);
+    var buf = Buffer.alloc(5);
     buf.writeUInt8(0x0A,0);
     buf.writeUInt32BE(a.length,1);
     var i;
@@ -815,6 +822,10 @@ function amf0decTypedObj(buf) {
     var obj = amf0decObject(buf.slice(className.len - 1));
     obj.value.__className__ = className.value;
     return { len: className.len + obj.len - 1, value: obj.value }
+}
+
+function switchToAmf3(buf) {
+    throw new Error("Error: switchToAmf3 encoding is not yet implemented!"); // TODO: Error
 }
 
 /**
@@ -933,7 +944,7 @@ function amf3EncodeOne(o) {
  * @returns {Buffer}
  */
 function amf3Encode(a) {
-    var buf = new Buffer(0);
+    var buf = Buffer.alloc(0);
     a.forEach(function (o) {
         buf = Buffer.concat([buf, amf3EncodeOne(o)]);
     });
@@ -946,7 +957,7 @@ function amf3Encode(a) {
  * @returns {Buffer}
  */
 function amf0Encode(a) {
-    var buf = new Buffer(0);
+    var buf = Buffer.alloc(0);
     a.forEach(function (o) {
         buf = Buffer.concat([buf, amf0EncodeOne(o)]);
     });
@@ -955,26 +966,30 @@ function amf0Encode(a) {
 
 
 var rtmpCmdDecode = {
-    "_result": [ "transId","cmdObj","info" ],
-    "_error": [ "transId","cmdObj","info","streamId" ], // Info / Streamid are optional
-    "onStatus": [ "transId","cmdObj","info" ],
-    "releaseStream": [ "transId", "cmdObj", "streamId" ],
-    "getStreamLength": [ "transId", "cmdObj", "streamId" ],
-    "getMovLen": [ "transId", "cmdObj", "streamId" ],
-    "FCPublish": [ "transId", "cmdObj", "streamId" ],
-    "onFCPublish": [ "transId", "cmdObj", "info" ],
-    "connect": [ "transId","cmdObj","args" ],
-    "call": [ "transId","cmdObj","args" ],
-    "createStream": [ "transId","cmdObj"],
-    "close": ["transId","cmdObj"],
-    "play": [ "transId","cmdObj","streamName","start","duration","reset" ],
-    "play2": [ "transId","cmdObj","params" ],
-    "deleteStream": [ "transId","cmdObj","streamId" ],
-    "receiveAudio": [ "transId","cmdObj","bool" ],
-    "receiveVideo": [ "transId","cmdObj","bool" ],
-    "publish": [ "transId","cmdObj","name","type" ],
-    "seek": [ "transId","cmdObj","ms" ],
-    "pause": [ "transId","cmdObj","pause","ms" ]
+    "_result": ["transId", "cmdObj", "info"],
+    "_error": ["transId", "cmdObj", "info", "streamId"], // Info / Streamid are optional
+    "@setDataFrame": ["method", "cmdObj"],
+    "onStatus": ["transId", "cmdObj", "info"],
+    "releaseStream": ["transId", "cmdObj", "streamId"],
+    "getStreamLength": ["transId", "cmdObj", "streamId"],
+    "getMovLen": ["transId", "cmdObj", "streamId"],
+    "FCPublish": ["transId", "cmdObj", "streamId"],
+    "FCUnpublish": ["transId", "cmdObj", "streamId"],
+    "onFCPublish": ["transId", "cmdObj", "info"],
+    "connect": ["transId", "cmdObj", "args"],
+    "call": ["transId", "cmdObj", "args"],
+    "createStream": ["transId", "cmdObj"],
+    "close": ["transId", "cmdObj"],
+    "play": ["transId", "cmdObj", "streamName", "start", "duration", "reset"],
+    "play2": ["transId", "cmdObj", "params"],
+    "deleteStream": ["transId", "cmdObj", "streamId"],
+    "receiveAudio": ["transId", "cmdObj", "bool"],
+    "receiveVideo": ["transId", "cmdObj", "bool"],
+    "publish": ["transId", "cmdObj", "streamName", "type"],
+    "seek": ["transId", "cmdObj", "ms"],
+    "pause": ["transId", "cmdObj", "pause", "ms"],
+    "|RtmpSampleAccess": ["bool1", "bool2"],
+    "onMetaData": ["cmdObj"]
 };
 
 /**
@@ -990,7 +1005,6 @@ function decodeAMF0Cmd(dbuf) {
     resp.cmd = cmd.value;
     resp.byteLength = cmd.len;
     buffer = buffer.slice(cmd.len);
-
     if (rtmpCmdDecode[cmd.value]) {
         rtmpCmdDecode[cmd.value].forEach(function (n) {
             if (buffer.length > 0) {

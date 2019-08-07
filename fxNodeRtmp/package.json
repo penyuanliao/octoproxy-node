@@ -1,0 +1,23 @@
+{
+  "name": "fxNodeRtmp",
+  "version": "0.0.1",
+  "private": true,
+  "dependencies": {
+  },
+  "author": {
+    "name": "Benson Liao",
+    "email": "anaylst@gmail.com"
+  },
+  "contributors": [
+    {
+      "name": "Benson Liao",
+      "email": "anaylst@gmail.com"
+    }
+  ],
+  "license": "MIT",
+  "keywords": [],
+  "main": "index.js",
+  "engines": {
+    "node": ">= 4.5.0"
+  }
+}
