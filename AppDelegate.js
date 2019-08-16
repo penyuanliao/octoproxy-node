@@ -656,7 +656,6 @@ AppDelegate.prototype.setupCluster = function (opt) {
                 NSLog.log('warning', "unexpected:", err.name);
                 self.tgBotTemplate("-1001314121392", "shutdown", [err.name]);
             });
-
         }
         NSLog.log('info',"Cluster active number:", num);
         this.clusterNum = num;
@@ -743,7 +742,6 @@ AppDelegate.prototype.assign = function (namespace, cb) {
         if (cb) cb(undefined);
     }
 };
-
 AppDelegate.prototype.createTelegramBot = function (opt, proxy) {
     this.tgBot = TelegramBot.getInstance();
     this.tgBot.setBot(opt.bot, opt.token);
