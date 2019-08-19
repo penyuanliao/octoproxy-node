@@ -1,0 +1,5 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="remoteSrv.js" type="NodeJSConfigurationType" factoryName="Node.js" path-to-js-file="remoteSrv.js" working-dir="$PROJECT_DIR$/lib">
+    <method />
+  </configuration>
+</component>

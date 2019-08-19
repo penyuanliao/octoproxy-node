@@ -1,0 +1,3 @@
+{
+  "loadBalancerFile": "../../../LoadBalancer/NodeLB.js"
+}

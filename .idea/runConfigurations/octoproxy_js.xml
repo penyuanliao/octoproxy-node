@@ -4,7 +4,7 @@
       <env name="NODE_ENV" value="development" />
       <env name="DEBUG" value="rtmp:*,daemon" />
       <env name="DEBUG_COLORS" value="''" />
-      <env name="NODE_DEBUG" value="''" />
+      <env name="NODE_DEBUG" value="'true'" />
     </envs>
     <method />
   </configuration>

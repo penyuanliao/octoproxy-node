@@ -23,14 +23,13 @@ const NSLog         = fxNetSocket.logger.getInstance();
 const fileName      = path.basename(require.main.filename) + process.argv[2];
 var LOG_LEVEL = "info";
 NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:LOG_LEVEL, dateFormat:'[yyyy-MM-dd hh:mm:ss]',fileName:fileName,filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100,
-                id:process.argv[2], remoteEnabled: false});
+                id:process.argv[2], remoteEnabled: true});
 
 const OPEN_BRACE     = 123;
 
 var connections = []; //記錄連線物件
 var connsCount = 0; //連線數
 var srv = createNodejsSrv(config.srvOptions.port);
-
 /**
  * 連線到伺服器
  * @param uri obj{host,port}
@@ -87,6 +86,7 @@ function connect(uri, client) {
             // debug('INFO :: cmd:%s, argument:%s', cmd, Object.keys(argument));
             //這邊暫時忽略_result訊息
             if(cmd != '_result') {
+                NSLog.log("error", "rtmp(%s) > client | client status:%s %s %s, cmd:%s", uri, client.isConnect, client.socket.writable, !client.socket.destroyed, cmd);
                 if (client.isConnect && client.socket.writable && !client.socket.destroyed)
                     client.write(JSON.stringify({"NetStatusEvent":"Data","cmd":cmd, args:argument}));
             }else
@@ -435,7 +435,7 @@ process.on('message', function (data, handle) {
             socket.emit('data',new Buffer(data.data));
             socket.resume();
         } else if(data.evt == "kickUsersOut") {
-            NSLog.log("warning", "start kick user out.");
+            NSLog.log("warning", "start kick user out.", json.params);
             var cliKeys = Object.keys(connections);
             for (var i = 0; i < cliKeys.length; i++) {
                 onSocketClose(cliKeys[i]);
@@ -455,9 +455,12 @@ process.on('message', function (data, handle) {
     }
 });
 
+
 function makeSureComplete() {
     if (process.send instanceof Function) {
         process.send({"action":"creationComplete"});
+        process.send({evt:"processConf", data: {lv:LOG_LEVEL, f2db:undefined}});
     }
+    process.on("SIGTERM", function (signal) {})
 }
 makeSureComplete();

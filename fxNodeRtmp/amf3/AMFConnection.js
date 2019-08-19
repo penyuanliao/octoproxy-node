@@ -192,7 +192,7 @@ NetAMF.prototype.call = function (command, responder /* args */) {
     } else if (typeof responder != "undefined" && responder != null) {
 
         reqKey += (++this.response_count);
-        this.responders[reqKey] = {selector:responder, command:command,ts:new Date().getTime()};
+        this.responders[reqKey] = {selector:responder, command:command,ts:new Date().getTime(), args:JSON.stringify({args:args})};
     }
     responseURI = this.amf3Serializer.encodeDynamic(reqKey); // amf3 string
     this.addTokenList(reqKey);
@@ -212,16 +212,16 @@ NetAMF.prototype.call = function (command, responder /* args */) {
 
     this.waitToSend = true; // Use pending to be done.
 
-/*    setTimeout(function () {
-        self.sendMessage2();
-    }, 1);*/
-
-    self.sendMessage2();
-    return reqKey;
+    // setTimeout(function () {
+    //     self.sendMessage2();
+    // },0);
+    return {
+        reqKey: reqKey,
+        req: self.sendMessage2()
+    };
 };
 NetAMF.prototype.sendMessage2 = function () {
     var self = this;
-    // console.log('do Buffer.concat', self.messages.length);
     var msg_len = self.messages.length;
     var data = self.messages.slice(0,msg_len);
     self.messages = self.messages.slice(msg_len,self.messages.length);
@@ -246,10 +246,9 @@ NetAMF.prototype.sendMessage2 = function () {
         NSLog.log("error", "http.agent.maxSockets:", this.httpAgent.maxSockets);
         this.recordcount = 0;
     }
-
     var req  = http.request(this.options, function (response) {
         // console.log('STATUS: ',response.statusCode);
-        NSLog.log("trace", 'HEADERS: ',response.headers["keep-alive"]);//, response.headers
+        // NSLog.log("debug", 'HEADERS: ',response.headers);//, response.headers
         var nbufs;
         response.on("data", function (chunk) {
             if (typeof nbufs == "undefined") {
@@ -284,8 +283,15 @@ NetAMF.prototype.sendMessage2 = function () {
             self.deserialize("",404, resKey);
         }, 10);
         req.removeAllListeners();
-        NSLog.log("error","AMFConnection error:", resKey, error);
+        var args = "";
+        var cmd = "";
+        if (typeof self.responders[resKey] == "object") {
+            args = self.responders[resKey]["args"];
+            cmd = self.responders[resKey]["command"];
+        }
+        NSLog.log("error","AMFConnection error:", resKey, error, cmd, args);
     });
+    /*
     req.setTimeout(30000, function () {
 
         NSLog.log("error","AMFConnection timeout. localPort:", req.socket.localPort);
@@ -300,6 +306,7 @@ NetAMF.prototype.sendMessage2 = function () {
             }, 10);
         }
     });
+    */
     // req.on("timeout", function () {
     //     NSLog.log("error","AMFConnection timeout.");
     //     req.abort()
@@ -311,7 +318,7 @@ NetAMF.prototype.sendMessage2 = function () {
 
     self.Message_Count = 0;
     self.waitToSend = false;
-
+    return req;
 };
 
 
@@ -472,7 +479,7 @@ NetAMF.prototype.encodeMessage = function () {
     return merge;
 };
 NetAMF.prototype.__validateURLString = function (uri) {
-    return uri.match(/^(rtmp|http)?:\/\/?([\w.]+):?([0-9]+)?([\/\w\._]+)/i);
+    return uri.match(/^(rtmp|http)?:\/\/?([\w.-]+):?([0-9]+)?([\/\w\._]+)/i);
 };
 /**
  *
@@ -529,13 +536,16 @@ NetAMF.prototype.deserialize = function (nbufs, status, resKey) {
 
         this.emit("StatusCodeError", status, resKey);
         NSLog.log("error", "===== STATUS: =====", status);
-        if (typeof this.responders[resKey] != "undefined") {
-            // release object //
-            this.responders[resKey]["selector"] = undefined;
-            this.responders[resKey]["command"]  = undefined;
-            this.responders[resKey] = undefined;
-            delete this.responders[resKey];
-        }
+        var self = this;
+        setTimeout(function() {
+            if (typeof self.responders[resKey] != "undefined") {
+                // release object //
+                self.responders[resKey]["selector"] = undefined;
+                self.responders[resKey]["command"]  = undefined;
+                self.responders[resKey] = undefined;
+                delete self.responders[resKey];
+            }
+        }, 100)
         return false;
     }
     content = undefined;
@@ -758,7 +768,7 @@ NetAMF.prototype.__executionAction = function (AMFObject) {
         }
 
         if (key != '/' && (typeof self.client != "undefined")) {
-
+            if (typeof this.responders[key] == "undefined") return;
             responder = this.responders[key]["selector"];
             if (typeof responder[remoteMessage] != "undefined") {
 
@@ -790,8 +800,8 @@ NetAMF.prototype.__executionAction = function (AMFObject) {
             responder["selector"] = undefined;
             responder["command"]  = undefined;
             responder = undefined;
-            this.responders[key] = undefined;
-            delete this.responders[key];
+            //this.responders[key] = undefined;
+            //delete this.responders[key];
 
         }
         else if (typeof self.client != "undefined") {
@@ -993,8 +1003,18 @@ NetServices.prototype.setAMFService = function (/** ...args **/) {
     var args = Array.prototype.slice.call(arguments);
     args.unshift(this.selectors);
     args.unshift(this._command);
-    var resKey = this.AMFSocket.call.apply(this.AMFSocket,args);
-    this._tmpHands[resKey] = {"func":this._tmpHand, "delegate": this.delegate, "args":args, "retries": retries_maximum};
+    var info = this.AMFSocket.call.apply(this.AMFSocket, args);
+    var resKey = info.reqKey;
+    var seconds = 1000;
+    var self = this;
+    var timeout = setTimeout(function () {
+        if (typeof info.req.aborted != "undefined") {
+            info.req.abort();
+        }
+        NSLog.log("error", "ResKey:%s, Wait:%s, API:%s, Err:RequestTimeout, reqAborted:%s", resKey, seconds, args["0"], info.req.aborted);
+
+    }, seconds);
+    this._tmpHands[resKey] = {"func":this._tmpHand, "delegate": this.delegate, "args":args, "retries": retries_maximum, "timeout": timeout};
 };
 NetServices.prototype.__defineSetter__("tmpHand", function (name) {
     this._tmpHand = name;
@@ -1048,6 +1068,8 @@ NetServices.prototype.onResult = function (result, resKey, command, rtt) {
         if (typeof iDelegate[funName] != "undefined" ) iDelegate[funName + "_Result"](result, command);
         context.emit(funName + "_Result", result, command, rtt);
     }
+    iDelegate = null;
+    funName = null;
 };
 NetServices.prototype.onStatus = function (fault, resKey, command, rtt) {
     // console.log("onFault ",fault, command);
@@ -1055,19 +1077,36 @@ NetServices.prototype.onStatus = function (fault, resKey, command, rtt) {
     var funName = this._tmpHands[resKey]["func"];
     var iDelegate = this._tmpHands[resKey]["delegate"];
     var hasTmpHand = (funName != "" && typeof funName != "undefined" && funName != null && funName != 0);
+    var onReallocate = false;
     if (!hasTmpHand) {
         funName = command.slice(command.lastIndexOf(".")+1, command.length);
     }
+
+    if ((this.socket instanceof net.Socket && (this.socket.writable && !this.socket.destroyed) == false)) {
+        onReallocate = true;
+    } else if (this["deallocated"] instanceof Function) {
+        var socket = this["deallocated"]("socket");
+        if (socket instanceof net.Socket && (socket.writable && !socket.destroyed) == false) {
+            onReallocate = true;
+        } else if (typeof socket == "undefined") {
+            onReallocate = true;
+        }
+    }
+    this._tmpHands[resKey]["func"] = null;
+    this._tmpHands[resKey]["delegate"] = null;
+    clearTimeout(this._tmpHands[resKey]["timeout"]);
+    delete this._tmpHands[resKey];
+
+    if (onReallocate) return;
+    
     if (typeof iDelegate[funName + "_Status"] != "undefined") {
         iDelegate[funName + "_Status"](fault, command, rtt);
     }else {
         if (typeof iDelegate["Status"] != "undefined" ) iDelegate["Status"](fault, command);
         context.emit(funName + "_Status", fault, command, rtt);
     }
-    this._tmpHands[resKey]["func"] = null;
-    this._tmpHands[resKey]["delegate"] = null;
-    clearTimeout(this._tmpHands[resKey]["timeout"]);
-    delete this._tmpHands[resKey];
+    iDelegate = null;
+    funName = null;
 };
 NetServices.prototype.release = function () {
     this.delegate = null;

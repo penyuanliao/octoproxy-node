@@ -1,0 +1,16 @@
+{
+  "name": "pkgBuild",
+  "version": "2.0.0",
+  "dependencies": {},
+  "main": "pkgBuild.js",
+  "bin": "pkgBuild.js",
+  "pkg": {
+    "scripts": ["cc.js", "*.*.js"],
+    "targets":["node8-macos-x64"]
+  },
+  "scripts": {
+    "start": "sudo sh startup.sh",
+    "build": "sh build.sh"
+  },
+  "description": ""
+}
