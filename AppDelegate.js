@@ -376,7 +376,8 @@ AppDelegate.prototype.createServer = function (opt) {
                         if (typeof lbtimes != 'undefined') clearTimeout(lbtimes);
                         lbtimes = undefined;
                         if (typeof json.path == "undefined") json.path = "";
-                        namespace = json.path.toString('utf8');
+                        if (mode == "socket") { namespace = "/" + json.path.toString('utf8'); }
+                        else {namespace = json.path.toString('utf8');}
                         var src_string = source.toString('utf8').replace(originPath, namespace);
                         // var indx = source.indexOf(originPath);
                         if (typeof handle.getSockInfos != "undefined" && handle.getSockInfos != null && namespace != null && typeof namespace != "undefined") {
