@@ -113,14 +113,14 @@ AppDelegate.prototype.init = function () {
     var count = 10;
     if (cfg["env"] == "development") {
         NSLog.log('info', 'Ready to start create server.');
-        self.createServer(cfg.srvOptions);
+        self.server = self.createServer(cfg.srvOptions);
     }else {
         NSLog.log('info', 'Ready to start create server wait...',count);
         setTimeout(waitingHandle,1000);
 
         function waitingHandle() {
             NSLog.log('info', 'Ready start create server wait...',--count);
-            if (count == 0) self.createServer(cfg.srvOptions);
+            if (count == 0) self.server = self.createServer(cfg.srvOptions);
             else setTimeout(waitingHandle,1000);
         }
     }
@@ -195,7 +195,6 @@ AppDelegate.prototype.createServer = function (opt) {
                 return;
             }
             NSLog.log('trace', 'Client Handle onConnection(%s:%s)', out.address, out.port);
-
             handle.setNoDelay(true);
 
             // handle.setKeepAlive(true, 30); // handle(sec) socket(msecs)
@@ -218,7 +217,7 @@ AppDelegate.prototype.createServer = function (opt) {
             }, closeWaitTime);
         };
 
-        self.server = tcp_handle;
+        return tcp_handle;
 
     }
     catch (e) {
@@ -272,7 +271,8 @@ AppDelegate.prototype.createServer = function (opt) {
         var isBrowser = (typeof general != 'undefined');
         var mode = "";
         var namespace = undefined;
-        if (typeof headers["x-forwarded-for"] != "undefined") handle.getSockInfos.address = headers["x-forwarded-for"];
+        if (typeof headers["x-forwarded-for"] != "undefined") handle.getSockInfos.xff = headers["x-forwarded-for"];
+        else handle.getSockInfos.xff = null;
         if (self.mgmtSrv.blockIPsEnabled && self.mgmtSrv.checkedIPDeny(handle.getSockInfos.address)) {
             self.rejectClientExcpetion(handle, "CON_DENY_CONNECT");
             handle.close(close_callback);
@@ -347,7 +347,7 @@ AppDelegate.prototype.createServer = function (opt) {
         if ((buffer.byteLength == 0 || mode == "socket" || !headers) && !headers.swfPolicy) mode = "socket";
         if (headers.unicodeNull != null && headers.swfPolicy && mode != 'ws') mode = "flashsocket";
 
-        if ((mode === 'ws' && isBrowser) || mode === 'socket' || mode === "flashsocket") {
+        if ((mode === 'ws' && isBrowser) || mode === 'socket' || mode === "flashsocket" || (cfg.gamSLB.httpEnabled && mode === 'http' && isBrowser)) {
             if(namespace.indexOf("policy-file-request") != -1 ) {
 
                 tcp_write(handle, policy + '\0');
@@ -358,8 +358,19 @@ AppDelegate.prototype.createServer = function (opt) {
                 return;
                 // namespace = 'figLeaf';
             }
+            if (mode == "http") {
+                const httpUrl = require("url").parse(general[1]);
+                const params = {f5: general[1], host:handle.getSockInfos.address};
+                NSLog.log('debug','socket is http connection', params);
+
+                const tokencode = self.gameLBSrv.getLoadBalancePath(url_args, params, function (action, json) {
+                    namespace = json.path;
+                    clusterEndpoint(namespace, source, originPath);
+                });
+                return;
+            }
             //const chk_assign = cfg.gamSLB.assign.split(",").indexOf(namespace);
-            const chk_assign = (namespace == cfg.gamSLB.assign);
+            const chk_assign = (cfg.gamSLB.assign == namespace);
             if (cfg.gamSLB.enabled && chk_assign || (cfg.gamSLB.videoEnabled && typeof url_args != "undefined" && typeof url_args.stream != "undefined")) {
                 var lbtimes;
                 var kickOut = false;
@@ -378,7 +389,7 @@ AppDelegate.prototype.createServer = function (opt) {
                         if (typeof json.path == "undefined") json.path = "";
                         namespace = json.path.toString('utf8');
                         var src_string;
-                        if (mode == "socket") {
+                        if (mode == "socket" || mode === "flashsocket") {
                             src_string = source.toString('utf8');
                         } else {
                             src_string = source.toString('utf8').replace(originPath, namespace);
@@ -401,7 +412,7 @@ AppDelegate.prototype.createServer = function (opt) {
                         namespace = '/godead';
                         handle.getSockInfos.lbPath = namespace;
                         self.rejectClientExcpetion(handle, "CON_DONT_CONNECT");
-                        var chgSrc = source.toString('utf8').replace(originPath, namespace);
+                        const chgSrc = source.toString('utf8').replace(originPath, namespace);
                         src = new Buffer(chgSrc);
                         self.gameLBSrv.getGoDead(handle, src);
                         setTimeout(function () {
@@ -421,7 +432,7 @@ AppDelegate.prototype.createServer = function (opt) {
                     kickOut = true;
                 }, sendWaitClose);
 
-            }else {
+            } else {
                 if (cfg.gamSLB.videoEnabled) {
                     var spPath = namespace.split("/");
                     var offset = 2;
@@ -486,9 +497,8 @@ AppDelegate.prototype.createServer = function (opt) {
             }
 
 
-        }else if(mode === 'http' && isBrowser)
+        } else if(mode === 'http' && isBrowser)
         {
-            NSLog.log('trace','socket is http connection');
             /** TODO 2016/10/06 -- ADMIN DEMO **/
             /*
             var cluster = self.clusters["administrator"][0];
@@ -548,10 +558,11 @@ AppDelegate.prototype.createServer = function (opt) {
                 var now = new Date();
                 var nowFomat = now.getFullYear() + '/' + (now.getMonth() + 1) + '/' + now.getDate() + " " + now.getHours() + ':' + now.getMinutes() + ':' + now.getSeconds();
                 var lb = (this.getSockInfos.lbPath ? this.getSockInfos.lbPath : "null");
-                NSLog.log( status, '{"msg":"%s", "ts": "%s", "src":"%s", "mode":"%s", "path":"%s", "lb":%s}',
+                NSLog.log( status, '{"msg":"%s", "ts": "%s", "src":"%s", "xff":"%s" , "mode":"%s", "path":"%s", "lb":%s}',
                     message,
                     nowFomat,
                     this.getSockInfos.address,
+                    this.getSockInfos.xff,
                     this.getSockInfos.mode,
                     this.getSockInfos.path,
                     lb
@@ -599,7 +610,7 @@ AppDelegate.prototype.reboot = function () {
     delete this.server;
     this.server = undefined;
 
-    this.createServer(cfg.srvOptions);
+    this.server = this.createServer(cfg.srvOptions);
 };
 /**
  * 建立子執行緒
@@ -615,6 +626,7 @@ AppDelegate.prototype.setupCluster = function (opt) {
     var assign, mxoss, execArgv, args;
     var lookout = true;
     var pkg = false;
+    var cmd = false;
     if (num != 0) { //
         for (var i = 0; i < num; i++) {
             lookout = true;
@@ -627,7 +639,18 @@ AppDelegate.prototype.setupCluster = function (opt) {
             if (opt.cluster[i].gc == true) execArgv.push("--expose-gc");
             if (opt.cluster[i].compact == true) execArgv.push("--always-compact");
             if (opt.cluster[i].inspect == true) execArgv.push("--inspect");
+            if (typeof opt.cluster[i].v8Flags != "undefined") {
+                const flags = opt.cluster[i].v8Flags;
+                if (Array.isArray(flags)) {
+                    for (var f = 0; f < flags.length; f++) {
+                        execArgv.push(flags[f]);
+                    }
+                } else if (typeof flags == "string") {
+                    execArgv.push(flags);
+                }
+            }
             if (opt.cluster[i].lookout == false) lookout = false;
+            if (opt.cluster[i].cmd != false) cmd = opt.cluster[i].cmd;
             if (opt.cluster[i].file.indexOf(".js") == -1) pkg = true;
             if (pkg) execArgv = []; // octoProxy pkg versions
             //var cluster = proc.fork(opt.cluster,{silent:false}, {env:env});
@@ -639,7 +662,16 @@ AppDelegate.prototype.setupCluster = function (opt) {
                 args = utilities.trimAny(opt.cluster[i].args.join(","));
                 cmdLine = cmdLine.concat(args.split(","));
             }
-            var cluster = new daemon(opt.cluster[i].file, cmdLine, {env:env, silent:false, execArgv:execArgv, lookoutEnabled:lookout, pkgFile: pkg}); //心跳系統
+            const daemonOptions = {
+                env: env,
+                silent: false,
+                execArgv: execArgv,
+                //心跳系統
+                lookoutEnabled: lookout,
+                pkgFile: pkg,
+                cmd: cmd
+            };
+            const cluster = new daemon(opt.cluster[i].file, cmdLine, daemonOptions);
             cluster.init();
             cluster.name = assign;
             cluster.mxoss = mxoss;
