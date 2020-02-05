@@ -176,21 +176,21 @@ AppDelegate.prototype.createServer = function (opt) {
             handle.getSockInfos = out;
 
             if (self._lockState === true) {
-                self.rejectClientExcpetion(handle ,"CON_LOCK_CONNECT");
+                self.rejectClientException(handle ,"CON_LOCK_CONNECT");
                 handle.close(close_callback);
                 return;
             }
 
             if (err) {
                 NSLog.log('error', util._errnoException(err, 'accept'));
-                self.rejectClientExcpetion(handle ,"UV_ERR_CON");
+                self.rejectClientException(handle ,"UV_ERR_CON");
                 handle.close(close_callback);
                 return;
             }
 
             err = handle.getpeername(out);
             if (err) {
-                self.rejectClientExcpetion(handle ,"UV_EADDRINUSE");
+                self.rejectClientException(handle ,"UV_EADDRINUSE");
                 handle.close(close_callback);
                 return;
             }
@@ -204,7 +204,7 @@ AppDelegate.prototype.createServer = function (opt) {
             err = handle.readStart(); //讀header封包
 
             if (err) {
-                self.rejectClientExcpetion(handle ,"UV_ERR_RS");
+                self.rejectClientException(handle ,"UV_ERR_RS");
                 handle.close(close_callback);
             }
 
@@ -212,7 +212,7 @@ AppDelegate.prototype.createServer = function (opt) {
 
             handle.closeWaiting = setTimeout(function () {
                 handle.closeWaiting = undefined;
-                self.rejectClientExcpetion(handle ,"CON_TIMEOUT");
+                self.rejectClientException(handle ,"CON_TIMEOUT");
                 handle.close(close_callback);
             }, closeWaitTime);
         };
@@ -243,7 +243,7 @@ AppDelegate.prototype.createServer = function (opt) {
             // Error, end of file. -4095
             if (nread === uv.UV_EOF) {
 
-                self.rejectClientExcpetion(handle ,"UV_EOF");
+                self.rejectClientException(handle ,"UV_EOF");
                 handle.close(close_callback);
                 handleRelease(handle);
                 clearTimeout(handle.closeWaiting);
@@ -273,8 +273,9 @@ AppDelegate.prototype.createServer = function (opt) {
         var namespace = undefined;
         if (typeof headers["x-forwarded-for"] != "undefined") handle.getSockInfos.xff = headers["x-forwarded-for"];
         else handle.getSockInfos.xff = null;
-        if (self.mgmtSrv.blockIPsEnabled && self.mgmtSrv.checkedIPDeny(handle.getSockInfos.address)) {
-            self.rejectClientExcpetion(handle, "CON_DENY_CONNECT");
+        const host = (typeof handle.getSockInfos.xff != "undefined" && handle.getSockInfos.xff != null) ? handle.getSockInfos.xff: handle.getSockInfos.address;
+        if (self.mgmtSrv.blockIPsEnabled && self.mgmtSrv.checkedIPDeny(host)) {
+            self.rejectClientException(handle, "CON_DENY_CONNECT");
             handle.close(close_callback);
             handleRelease(handle);
             handle = null;
@@ -315,7 +316,7 @@ AppDelegate.prototype.createServer = function (opt) {
             cluster = cluster[0];
             cluster.send({'evt':'c_init2',data:source}, handle,{keepOpen:false});
             setTimeout(function () {
-                self.rejectClientExcpetion(handle, "CON_VERIFIED");
+                self.rejectClientException(handle, "CON_VERIFIED");
                 handle.close(close_callback);
             }, sendWaitClose);
             return;
@@ -351,7 +352,7 @@ AppDelegate.prototype.createServer = function (opt) {
             if(namespace.indexOf("policy-file-request") != -1 ) {
 
                 tcp_write(handle, policy + '\0');
-                self.rejectClientExcpetion(handle, "FL_POLICY");
+                self.rejectClientException(handle, "FL_POLICY");
                 handle.close(close_callback);
                 handleRelease(handle);
                 handle = null;
@@ -360,7 +361,7 @@ AppDelegate.prototype.createServer = function (opt) {
             }
             if (mode == "http") {
                 const httpUrl = require("url").parse(general[1]);
-                const params = {f5: general[1], host:handle.getSockInfos.address};
+                const params = {f5: general[1], host: host};
                 NSLog.log('debug','socket is http connection', params);
 
                 const tokencode = self.gameLBSrv.getLoadBalancePath(url_args, params, function (action, json) {
@@ -374,7 +375,7 @@ AppDelegate.prototype.createServer = function (opt) {
             if (cfg.gamSLB.enabled && chk_assign || (cfg.gamSLB.videoEnabled && typeof url_args != "undefined" && typeof url_args.stream != "undefined")) {
                 var lbtimes;
                 var kickOut = false;
-                var params = {f5: general[1], host:handle.getSockInfos.address};
+                var params = {f5: general[1], host: host};
                 var tokencode = self.gameLBSrv.getLoadBalancePath(url_args, params, function (action, json) {
                     NSLog.log('trace','--------------------------');
                     NSLog.log('info', 'action: %s:%s, token code:%s', action, (typeof url_args == "object") ? JSON.stringify(url_args) : url_args, JSON.stringify(json));
@@ -411,7 +412,7 @@ AppDelegate.prototype.createServer = function (opt) {
                         lbtimes = undefined;
                         namespace = '/godead';
                         handle.getSockInfos.lbPath = namespace;
-                        self.rejectClientExcpetion(handle, "CON_DONT_CONNECT");
+                        self.rejectClientException(handle, "CON_DONT_CONNECT");
                         const chgSrc = source.toString('utf8').replace(originPath, namespace);
                         src = new Buffer(chgSrc);
                         self.gameLBSrv.getGoDead(handle, src);
@@ -427,7 +428,7 @@ AppDelegate.prototype.createServer = function (opt) {
 
                 lbtimes = setTimeout(function () {
                     self.gameLBSrv.removeCallbackFunc(tokencode);
-                    self.rejectClientExcpetion(handle, "CON_LB_TIMEOUT");
+                    self.rejectClientException(handle, "CON_LB_TIMEOUT");
                     handle.close(close_callback);
                     kickOut = true;
                 }, sendWaitClose);
@@ -455,7 +456,7 @@ AppDelegate.prototype.createServer = function (opt) {
                     if (typeof worker === 'undefined' || !worker) {
                         worker = self.clusters["*"]; //TODO 未來準備擋奇怪連線
                         if (typeof worker == 'undefined'  || !worker) {
-                            self.rejectClientExcpetion(handle, "PROC_NOT_FOUND");
+                            self.rejectClientException(handle, "PROC_NOT_FOUND");
                             handle.close(close_callback);
                             NSLog.log('trace','!!!! close();');
                             handle = null;
@@ -464,7 +465,7 @@ AppDelegate.prototype.createServer = function (opt) {
                             NSLog.log('trace','1. Socket goto %s(*)', lastnamspace);
                             worker[0].send({'evt':'c_init',data:source, namespace:lastnamspace, originPath:originPath}, handle,{keepOpen:false});
                             setTimeout(function () {
-                                self.rejectClientExcpetion(handle, "CON_VERIFIED");
+                                self.rejectClientException(handle, "CON_VERIFIED");
                                 handle.close(close_callback);
                                 handle = null;
                             }, sendWaitClose);
@@ -474,7 +475,7 @@ AppDelegate.prototype.createServer = function (opt) {
 
                         // don't disconnect
                         if (worker._dontDisconnect == true) {
-                            self.rejectClientExcpetion(handle, "CON_DONT_CONNECT");
+                            self.rejectClientException(handle, "CON_DONT_CONNECT");
                             handle.close(close_callback);
                             handle = null;
                             return;
@@ -482,7 +483,7 @@ AppDelegate.prototype.createServer = function (opt) {
 
                         NSLog.log('trace','2. Socket goto %s', lastnamspace);
                         setTimeout(function () {
-                            self.rejectClientExcpetion(handle, "CON_VERIFIED");
+                            self.rejectClientException(handle, "CON_VERIFIED");
                             handle.close(close_callback);
                             handle = null;
                         }, sendWaitClose);
@@ -499,26 +500,27 @@ AppDelegate.prototype.createServer = function (opt) {
 
         } else if(mode === 'http' && isBrowser)
         {
+            NSLog.log('trace','socket is http connection');
             /** TODO 2016/10/06 -- ADMIN DEMO **/
             /*
             var cluster = self.clusters["administrator"][0];
             if (cluster!= "undefined") {
                 cluster.send({'evt':'c_init',data:source}, handle,{keepOpen:false});
                 setTimeout(function () {
-                    self.rejectClientExcpetion(handle, "CON_VERIFIED");
+                    self.rejectClientException(handle, "CON_VERIFIED");
                     handle.close(close_callback);
                 }, sendWaitClose);
                 return;
             }
             */
 
-            self.rejectClientExcpetion(handle, "CON_MOD_NOT_FOUND");
+            self.rejectClientException(handle, "CON_MOD_NOT_FOUND");
             handle.close(close_callback);
             handleRelease(handle);
             handle = null;
             return;// current no http service
         }else {
-            self.rejectClientExcpetion(handle, "CON_MOD_NOT_FOUND");
+            self.rejectClientException(handle, "CON_MOD_NOT_FOUND");
             handle.close(close_callback);
             handleRelease(handle);
             handle = null;
@@ -599,7 +601,7 @@ AppDelegate.prototype.createServer = function (opt) {
     }
 
 };
-AppDelegate.prototype.rejectClientExcpetion = function(handle, name) {
+AppDelegate.prototype.rejectClientException = function(handle, name) {
     if (typeof handle != "undefined" && TRACE_SOCKET_IO) {
         handle.getSockInfos.exception = utilities.errorException(name);
     }
@@ -683,8 +685,8 @@ AppDelegate.prototype.setupCluster = function (opt) {
             }
             this.clusters[cluster.name].push(cluster);
 
-            cluster.emitter.on('socket_handle', function (message, handle) {
-
+            cluster.emitter.on('warp_handle', function (message, handle) {
+                self.duringWarp(message, handle);
             });
             cluster.emitter.on('status', function (message) {
                 NSLog.log('warning', message);
@@ -795,7 +797,7 @@ AppDelegate.prototype.tgBotTemplate = function (chatID, type, args) {
     }
 };
 /** 清除回收桶裡的cluster **/
-AppDelegate.prototype.awaitTrashUserEmpty = function () {
+AppDelegate.prototype.awaitRecycle = function () {
     var self = this;
     var garbagedump = this.garbageDump;
     if (typeof this.awaitTrashTimes != "undefined") {
@@ -805,7 +807,10 @@ AppDelegate.prototype.awaitTrashUserEmpty = function () {
         for (var i = 0; i < garbagedump.length; i++) {
             var cluster = garbagedump[i];
             var count = cluster.nodeInfo.connections;
-            if (count == 0) {
+            //到期時間回收
+            const expired = (typeof cluster.optConf["recycleExpired"] != "undefined" && (new Date().getTime() - cluster.recycleStartDate) > (cluster.optConf["recycleExpired"] * 1000));
+
+            if (count <= 10 || expired) {
                 NSLog.log("warning", "AppDelegate.awaitTrashUserEmpty(), name:%s", cluster.name);
                 cluster.stop();
                 cluster.stopHeartbeat();
@@ -816,7 +821,6 @@ AppDelegate.prototype.awaitTrashUserEmpty = function () {
     }, 5 * 60 * 1000);
 
 };
-
 AppDelegate.prototype.BindingProcEvent = function () {
     /** process state **/
     process.on('uncaughtException', function (err) {
@@ -874,15 +878,24 @@ AppDelegate.prototype.reLoadManagement = function () {
     mgmt = require('./lib/mgmt.js');
     this.management();
 };
-/** not implement **/
-AppDelegate.prototype.ebbMoveAssign = function (handle, source, namespace) {
-    var self = this;
-    var worker = this.clusters[namespace];
-    worker[0].send({'evt':'c_init',data:source}, handle,{keepOpen:false});
-    setTimeout(function () {
-        self.rejectClientExcpetion(handle, "CON_VERIFIED");
-        handle.close(self.close_callback);
-    }, sendWaitClose);
+//socket hot reload
+AppDelegate.prototype.duringWarp = function (message, handle) {
+    const self = this;
+    const assign = String(message.goto);
+    const event = "wrap_socket";
+    this.assign(assign, function (worker) {
+        if (typeof worker === 'undefined' || !worker) {
+            handle = null;
+            return;
+        }
+        worker.send({
+            evt: event,
+            raw: message.raw,
+            metadata: message.metadata,
+            namespace: assign,
+            originPath: message.originPath
+        }, handle, {keepOpen: false});
+    })
 };
 AppDelegate.prototype.addClusterDialog = function (cluster) {
     console.log(cluster.name, cluster._modulePath, cluster.uptime);
