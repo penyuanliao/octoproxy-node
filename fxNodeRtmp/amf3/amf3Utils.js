@@ -472,7 +472,7 @@ Serializer.prototype.writeTypeMarker = function(data, markerType) {
             else markerType = AMF_Constants.AMF3_BOOL_FALSE;
         }
         else if (isInt(data)) {
-            if ((data > 0xFFFFFFF) || (data < -268435456)) {
+            if ((data > 0xFFFFFFF) || (data < -268435456) || data < 0) {
                 markerType = AMF_Constants.AMF3_NUMBER;
             }else {
                 markerType = AMF_Constants.AMF3_INTEGER;
