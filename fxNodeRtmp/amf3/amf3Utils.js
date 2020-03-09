@@ -91,6 +91,7 @@ Deserializer.prototype.readInteger = function () {
             result != ~0xFFFFFFF;
         }
     }
+    if (result == 536870911) return -1;
     return result;
 };
 /**
