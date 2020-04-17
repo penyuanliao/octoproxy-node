@@ -674,7 +674,6 @@ AppDelegate.prototype.setupCluster = function (opt) {
                 cmd: cmd
             };
             const cluster = new daemon(opt.cluster[i].file, cmdLine, daemonOptions);
-            cluster.init();
             cluster.name = assign;
             cluster.mxoss = mxoss;
             cluster.ats = (typeof opt.cluster[i].ats == "boolean") ? opt.cluster[i].ats : false;
@@ -683,10 +682,15 @@ AppDelegate.prototype.setupCluster = function (opt) {
                 this.clusters[cluster.name] = [];
                 this.roundrobinNum[cluster.name] = 0;
             }
+            cluster.init();
+
             this.clusters[cluster.name].push(cluster);
 
             cluster.emitter.on('warp_handle', function (message, handle) {
                 self.duringWarp(message, handle);
+            });
+            cluster.emitter.on("onIpcMessage", function (message) {
+                self.mgmtSrv.onIpcMessage(message);
             });
             cluster.emitter.on('status', function (message) {
                 NSLog.log('warning', message);
