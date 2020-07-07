@@ -1,0 +1,2 @@
+Tcp: RtoAlgorithm RtoMin RtoMax MaxConn ActiveOpens PassiveOpens AttemptFails EstabResets CurrEstab InSegs OutSegs RetransSegs InErrs OutRsts InCsumErrors
+Tcp: 1 200 120000 -1 1569984370 796933114 944469756 75705279 41642 540194805240 529586478578 51452864 83402 30098863 0

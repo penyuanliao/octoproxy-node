@@ -1,0 +1,13 @@
+/Users/Benson/Downloads/Shared/tmp/hwapp/obj/Debug/netcoreapp2.2/hwapp.csprojAssemblyReference.cache
+/Users/Benson/Downloads/Shared/tmp/hwapp/obj/Debug/netcoreapp2.2/hwapp.csproj.CoreCompileInputs.cache
+/Users/Benson/Downloads/Shared/tmp/hwapp/obj/Debug/netcoreapp2.2/hwapp.AssemblyInfoInputs.cache
+/Users/Benson/Downloads/Shared/tmp/hwapp/obj/Debug/netcoreapp2.2/hwapp.AssemblyInfo.cs
+/Users/Benson/Downloads/Shared/tmp/hwapp/bin/Debug/netcoreapp2.2/hwapp.deps.json
+/Users/Benson/Downloads/Shared/tmp/hwapp/bin/Debug/netcoreapp2.2/hwapp.runtimeconfig.json
+/Users/Benson/Downloads/Shared/tmp/hwapp/bin/Debug/netcoreapp2.2/hwapp.runtimeconfig.dev.json
+/Users/Benson/Downloads/Shared/tmp/hwapp/bin/Debug/netcoreapp2.2/hwapp.dll
+/Users/Benson/Downloads/Shared/tmp/hwapp/bin/Debug/netcoreapp2.2/hwapp.pdb
+/Users/Benson/Downloads/Shared/tmp/hwapp/bin/Debug/netcoreapp2.2/LiveCasinoWSClient.Core.dll
+/Users/Benson/Downloads/Shared/tmp/hwapp/obj/Debug/netcoreapp2.2/hwapp.csproj.CopyComplete
+/Users/Benson/Downloads/Shared/tmp/hwapp/obj/Debug/netcoreapp2.2/hwapp.dll
+/Users/Benson/Downloads/Shared/tmp/hwapp/obj/Debug/netcoreapp2.2/hwapp.pdb

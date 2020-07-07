@@ -3,11 +3,13 @@ var RTMPClient = require('./client');
 var RTMPPacket = require('./packet');
 var RTMPMessage = require('./message');
 var log = require('./log');
+const querystring = require('querystring');
 const amf3Utils      = require('./amf3/amf3Utils.js');
 var amf3Deserializer = new amf3Utils.deserializer();
 
 var amfUtils = require('./amfutils.js');
 
+console.log(querystring.stringify({d:"1234"}));
 
 // console.log(amfUtils.amf0encObject(null));
 // console.log(amfUtils.amf0encString("play"));

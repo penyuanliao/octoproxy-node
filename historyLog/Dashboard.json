@@ -1,0 +1,16 @@
+{
+	"visitors": {
+		"success": 0,
+		"failure": 0
+	},
+	"incomeCount": {
+		"1": {},
+		"2": {},
+		"3": {},
+		"4": {},
+		"5": {}
+	},
+	"income": {},
+	"connections": [],
+	"incomeAmount": 0
+}

@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <module type="WEB_MODULE" version="4">
   <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$/../LoadBalancer" />
     <content url="file://$MODULE_DIR$/../admin-node" />
     <content url="file://$MODULE_DIR$/../configuration" />
     <content url="file://$MODULE_DIR$" />
-    <content url="file://$MODULE_DIR$/../../SVN/NodeJS/FxCouchbase" />
-    <content url="file://$MODULE_DIR$/../../SVN/NodeJS/LoadBalancer" />
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>

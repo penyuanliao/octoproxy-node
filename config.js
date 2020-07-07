@@ -36,10 +36,11 @@ if (config.env == 'development') {
     config.gamSLB = {
         enabled:true,
         // file: './unittest/GLBS.js',
-        file: '../../SVN/NodeJS/LoadBalancer/NodeLB.js',
+        file: '../LoadBalancer/NodeLB.js',
         assign:'/fxLB',
         /* 處理視訊lb */
-        videoEnabled:false,
+        videoEnabled:true,
+        httpEnabled:true,
         vPrefix: 'edge_'
     };
 } else {
@@ -60,10 +61,11 @@ if (config.env == 'development') {
 
     config.gamSLB = {
         enabled:true,
-        file: '../../../../SVN/NodeJS/LoadBalancer/NodeLB.js',
+        file: '../LoadBalancer/NodeLB.js',
         assign:'/fxLB',
         /* 處理視訊lb */
         videoEnabled:false,
+        httpEnabled:false,
         vPrefix: 'edge_'
     };
 

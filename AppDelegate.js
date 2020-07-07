@@ -399,7 +399,7 @@ AppDelegate.prototype.createServer = function (opt) {
                         if (typeof handle.getSockInfos != "undefined" && handle.getSockInfos != null && namespace != null && typeof namespace != "undefined") {
                             handle.getSockInfos.lbPath = namespace;
                         }
-                        src = new Buffer(src_string);
+                        src = Buffer.from(src_string);
                         if (cfg.gamSLB.videoEnabled) {
                             clusterEndpoint(namespace , source, originPath);
                         } else {
@@ -414,7 +414,7 @@ AppDelegate.prototype.createServer = function (opt) {
                         handle.getSockInfos.lbPath = namespace;
                         self.rejectClientException(handle, "CON_DONT_CONNECT");
                         const chgSrc = source.toString('utf8').replace(originPath, namespace);
-                        src = new Buffer(chgSrc);
+                        src = Buffer.from(chgSrc);
                         self.gameLBSrv.getGoDead(handle, src);
                         setTimeout(function () {
                             handleRelease(handle);
@@ -622,16 +622,18 @@ AppDelegate.prototype.setupCluster = function (opt) {
     if (typeof opt === 'undefined') {
         opt = { 'cluster': [0] };
     }
-    var self = this;
-    var num = Number(opt.cluster.length);
+    const self = this;
+    const num = Number(opt.cluster.length);
     var env = process.env;
     var assign, mxoss, execArgv, args;
     var lookout = true;
+    var heartbeat = true;
     var pkg = false;
     var cmd = false;
     if (num != 0) { //
         for (var i = 0; i < num; i++) {
             lookout = true;
+            heartbeat = true;
             pkg = false;
             // file , fork.settings, args
             mxoss = opt.cluster[i].mxoss || 2048;
@@ -652,6 +654,7 @@ AppDelegate.prototype.setupCluster = function (opt) {
                 }
             }
             if (opt.cluster[i].lookout == false) lookout = false;
+            if (opt.cluster[i].heartbeat == false) heartbeat = false;
             if (opt.cluster[i].cmd != false) cmd = opt.cluster[i].cmd;
             if (opt.cluster[i].file.indexOf(".js") == -1) pkg = true;
             if (pkg) execArgv = []; // octoProxy pkg versions
@@ -670,6 +673,7 @@ AppDelegate.prototype.setupCluster = function (opt) {
                 execArgv: execArgv,
                 //心跳系統
                 lookoutEnabled: lookout,
+                heartbeatEnabled: heartbeat,
                 pkgFile: pkg,
                 cmd: cmd
             };

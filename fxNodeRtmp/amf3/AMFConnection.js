@@ -12,6 +12,7 @@ const log            = require('../log.js');
 const amfUtils       = require('../amfUtils.js');
 const responder      = require('./responder.js');
 const objectType     = require('./ObjectType.js');
+const querystring    = require('querystring');
 /** html flag **/
 const CRLF           = "\r\n";
 /** AMF flag **/
@@ -21,6 +22,8 @@ const FLASH_VERSION   = "17,0,0,160";
 // const SWF             = "Adobe Flash Player 17";
 const retries_maximum = 1;
 const SWF = "Shockwave Flash";
+
+const GATEWAY_PATH = '/amfphp/gateway.php';
 
 var NSLog  = ifdef('../../FxLogger.js','fxNetSocket');
 var debugEnabled = false;
@@ -40,7 +43,8 @@ function NetAMF(options) {
     this.Message_Count    = 0;
     this.responders       = {}; // dispatch Event
     this.response_count   = 0;
-    this.done_count       = 0;
+    this.requestCount     = 0;
+    this.requestorCounts  = {req: 0, res: 0, waitReq: 0, success:0, fault: 0};
     this.amf3Serializer   = new amf3Utils.serializer();
     this.amf3Deserializer = new amf3Utils.deserializer();
 
@@ -61,7 +65,6 @@ function NetAMF(options) {
     http.globalAgent      = this.httpAgent;
     this.maxSockets       = this.httpAgent.maxSockets;
     this.tokenList        = []; // send all reqKey
-    this.requestCount     = 0;
     /**
      * request header key & value
      * @type {Array}
@@ -104,8 +107,14 @@ NetAMF.prototype.setup = function (options) {
         var cookie = "PHPSESSID=" + mCrypto.createHash("md5").update(new Date().getTime() + '-' + key4).digest("hex");
         this.cookies.push(cookie);
     }
-
-
+    const self = this;
+    Object.defineProperty(this.requestorCounts, "res", {
+        get: function () {
+            return (this.success + this.fault);
+        },
+        configurable: false
+    });
+    this.taskManager();
 };
 /**
  * initial process
@@ -217,23 +226,23 @@ NetAMF.prototype.call = function (command, responder /* args */) {
     // },0);
     return {
         reqKey: reqKey,
-        req: self.sendMessage2()
+        req: self.sendMessage2(command)
     };
 };
-NetAMF.prototype.sendMessage2 = function () {
-    var self = this;
-    var msg_len = self.messages.length;
-    var data = self.messages.slice(0,msg_len);
-    self.messages = self.messages.slice(msg_len,self.messages.length);
+NetAMF.prototype.sendMessage2 = function (command) {
+    const self = this;
+    const msg_len = self.messages.length;
+    const data = self.messages.slice(0, msg_len);
+    self.messages = self.messages.slice(msg_len, self.messages.length);
     /* Sets a single header value */
     self.setHeader("Content-Length", msg_len + self.content_header.length);
 
     // var rawHeaders = Buffer.from(self.getHeaders());
 
-    var request = Buffer.concat([self.content_header, data], self.content_header.length + msg_len);
+    const request = Buffer.concat([self.content_header, data], self.content_header.length + msg_len);
 
     this.options["headers"]['Content-Length'] = msg_len + self.content_header.length;
-    var cookie = this.cookies[this.recordcount++];
+    const cookie = this.cookies[this.recordcount++];
     if (typeof cookie == "undefined") {
         this.recordcount = 0;
         this.options["headers"]['Cookie'] = this.cookies[this.recordcount++];
@@ -246,9 +255,11 @@ NetAMF.prototype.sendMessage2 = function () {
         NSLog.log("error", "http.agent.maxSockets:", this.httpAgent.maxSockets);
         this.recordcount = 0;
     }
-    var req  = http.request(this.options, function (response) {
+    this.options.path = util.format("%s?%s", GATEWAY_PATH, querystring.stringify({cmd: command}));
+    const req  = http.request(this.options, function (response) {
         // console.log('STATUS: ',response.statusCode);
         // NSLog.log("debug", 'HEADERS: ',response.headers);//, response.headers
+        self.requestorCounts.success++;
         var nbufs;
         response.on("data", function (chunk) {
             if (typeof nbufs == "undefined") {
@@ -262,6 +273,7 @@ NetAMF.prototype.sendMessage2 = function () {
             req.end();
             if (response.statusCode != 200) NSLog.log("info","POST Response STATUS: %s", response.statusCode);
             var resKey = self.removeTokenListtoCount(req.index);
+            if (Array.isArray(resKey)) resKey = resKey[0];
             response.removeAllListeners();
             req.removeAllListeners();
             if (typeof nbufs != "undefined" && nbufs.length > 0) {
@@ -275,9 +287,11 @@ NetAMF.prototype.sendMessage2 = function () {
 
     });
     req.on("error", function (error) {
+        self.requestorCounts.fault++;
         if (req.turnOff == true) return;
 
         var resKey = self.removeTokenListtoCount(req.index);
+        if (Array.isArray(resKey)) resKey = resKey[0];
         req.turnOff = true;
         setTimeout(function () {
             self.deserialize("",404, resKey);
@@ -290,6 +304,7 @@ NetAMF.prototype.sendMessage2 = function () {
             cmd = self.responders[resKey]["command"];
         }
         NSLog.log("error","AMFConnection error:", resKey, error, cmd, args);
+        self.responders[resKey]["selector"]["onStatus"](error, resKey, self.responders[resKey]["command"], -1);
     });
     /*
     req.setTimeout(30000, function () {
@@ -315,7 +330,8 @@ NetAMF.prototype.sendMessage2 = function () {
     ++self.requestCount;
     // req.write(request);
     req.end(request);
-
+    self.requestorCounts.req++;
+    self.requestorCounts.waitReq++;
     self.Message_Count = 0;
     self.waitToSend = false;
     return req;
@@ -519,7 +535,6 @@ NetAMF.prototype.deserialize = function (nbufs, status, resKey) {
         offset += 4;
     }
     content = nbufs.slice(offset, nbufs.length);
-    this.done_count++;
     if (status == 200) {
 
 
@@ -838,6 +853,24 @@ NetAMF.prototype.createFailMessage = function (status, command) {
     };
     return errMsg;
 };
+NetAMF.prototype.taskManager = function () {
+    const self = this;
+
+    if (typeof this.taskMgr != "undefined") {
+        clearInterval(this.taskMgr);
+        this.taskMgr = undefined;
+    }
+
+    this.taskMgr = setInterval(function () {
+        self.requestorCounts.waitReq -= (self.requestorCounts.success + self.requestorCounts.fault);
+        //NSLog.log("info", '{"log": "Invoke_AMFPHP", "req":%s, "res":%s, "waitReq":%s, "success": %s, "fault":%s}', self.requestorCounts.req, self.requestorCounts.res, self.requestorCounts.waitReq, self.requestorCounts.success, self.requestorCounts.fault);
+        self.requestorCounts.req = 0;
+        self.requestorCounts.success = 0;
+        self.requestorCounts.fault = 0;
+    }, 1000);
+
+    return this.taskMgr;
+};
 /**
  * leaving the one you need release
  */
@@ -1003,11 +1036,11 @@ NetServices.prototype.setAMFService = function (/** ...args **/) {
     var args = Array.prototype.slice.call(arguments);
     args.unshift(this.selectors);
     args.unshift(this._command);
-    var info = this.AMFSocket.call.apply(this.AMFSocket, args);
-    var resKey = info.reqKey;
-    var seconds = 1000;
-    var self = this;
-    var timeout = setTimeout(function () {
+    const info = this.AMFSocket.call.apply(this.AMFSocket, args);
+    const resKey = info.reqKey;
+    const seconds = 60000;
+    const self = this;
+    const timeout = setTimeout(function () {
         if (typeof info.req.aborted != "undefined") {
             info.req.abort();
         }

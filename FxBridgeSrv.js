@@ -23,7 +23,7 @@ const NSLog         = fxNetSocket.logger.getInstance();
 const fileName      = path.basename(require.main.filename) + process.argv[2];
 var LOG_LEVEL = "info";
 NSLog.configure({logFileEnabled:true, consoleEnabled:true, level:LOG_LEVEL, dateFormat:'[yyyy-MM-dd hh:mm:ss]',fileName:fileName,filePath:__dirname+"/historyLog", maximumFileSize: 1024 * 1024 * 100,
-                id:process.argv[2], remoteEnabled: true});
+                id:process.argv[2], remoteEnabled: false});
 
 const OPEN_BRACE     = 123;
 
