@@ -58,7 +58,7 @@ const TCP_MTU = 2048;
 /** 多執行緒 **/
 function noop() {}
 /**
- *
+ * 主服務
  * @constructor AppDelegate
  * @property server
  * @property clusters
@@ -263,9 +263,7 @@ AppDelegate.prototype.createServer = function (opt) {
         handle.closeWaiting = undefined;
 
         var headers = pheaders.onReadTCPParser(buffer);
-        /**
-         * @type {Buffer}
-         */
+        /** @property {Buffer} */
         var source = headers.source;
         var general = headers.general;
         var isBrowser = (typeof general != 'undefined');
