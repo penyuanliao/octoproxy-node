@@ -3,7 +3,7 @@ var net = require('net'),
     util = require('util'),
     os = require('os');
 var uptime = new Date().getTime();
-require('buffertools'); // used for Buffer.compare
+// require('buffertools'); // used for Buffer.compare
 
 const RTMP_SIG_SIZE = 1536;
 
