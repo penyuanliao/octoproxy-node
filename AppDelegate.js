@@ -567,8 +567,6 @@ AppDelegate.prototype.createServer = function (opt) {
                     this.getSockInfos.path,
                     lb
                 );
-                NSLog.tracking("getSockProxyInfo", {"status":status,"msg":message, "ts":nowFomat, "src":this.getSockInfos.address, "mode": this.getSockInfos.mode, "path": this.getSockInfos.path,
-                    "lb": lb});
                 this.getSockInfos.exception = null;
                 this.getSockInfos.address = null;
                 this.getSockInfos.mode = null;
