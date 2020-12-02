@@ -16,6 +16,13 @@ try {octo = require(path.join(process.cwd(), "octo.json")); } catch (e) {}
  * Backlog: pending connections
  * **/
 config.numCPUs = require('os').cpus().length;
+
+config.InfluxDBConf = Object.freeze({
+    enabled: false,
+    port: 10084,
+    host: "127.0.0.1"
+});
+
 /** 開發環境設定 **/
 if (config.env == 'development') {
     config.bFMSHost = require('fxNetSocket').getConfiguration("OctoProxy-Dev");

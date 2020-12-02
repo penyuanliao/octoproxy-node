@@ -23,6 +23,7 @@ const WriteWrap     = process.binding('stream_wrap').WriteWrap;
 const uv            = process.binding('uv');
 const fs            = require('fs');
 const net           = require('net');
+const tls           = require('tls');
 const evt           = require('events');
 const cfg           = require('./config.js');
 const gLBSrv        = require('./lib/gameLBSrv.js');
@@ -309,8 +310,8 @@ AppDelegate.prototype.createServer = function (opt) {
             }
         }
         /** TODO 2016/10/06 -- ADMIN DEMO **/
-        /*if (headers["sec-websocket-protocol"] == "admin") {
-            var cluster = self.clusters["inind"];
+        if (headers["sec-websocket-protocol"] == "admin") {
+            var cluster = self.clusters["inind"] || self.clusters["administrator"];
             cluster = cluster[0];
             cluster.send({'evt':'c_init2',data:source}, handle,{keepOpen:false});
             setTimeout(function () {
@@ -318,7 +319,7 @@ AppDelegate.prototype.createServer = function (opt) {
                 handle.close(close_callback);
             }, sendWaitClose);
             return;
-        }*/
+        }
         /** TODO 2016/08/17 -- Log Info **/
         if (handle.getSockInfos && TRACE_SOCKET_IO) {
             handle.getSockInfos.nread = nread; // buf size
@@ -597,6 +598,42 @@ AppDelegate.prototype.createServer = function (opt) {
     }
 
 };
+AppDelegate.prototype.createTLSServer = function (opt) {
+    const self = this;
+    const options = {};
+    const listenOpt = {};
+    if (!opt || !opt.certFile || !opt.certFile) {
+        NSLog.log("error", "Not found cert file.");
+        return false;
+    }
+    listenOpt.host = opt.host || "0.0.0.0";
+    listenOpt.port = opt.port || 443;
+    options.rejectUnauthorized = opt.rejectUnauthorized || true;
+    if (opt.keyFile) options.key = fs.readFileSync(opt.keyFile);
+    if (opt.certFile) options.cert = fs.readFileSync(opt.certFile);
+
+    const tlsServer = tls.createServer(options, function onTlsIncoming(tlsSocket) {
+
+    });
+    tlsServer.listen(listenOpt, function () {
+        console.log('tls server bound');
+    })
+};
+/**
+ *
+ * @param {tls.TLSSocket} tlsSocket
+ */
+AppDelegate.prototype.onTlsIncoming = function (tlsSocket) {
+    const self = this;
+    tlsSocket.on("data", function onDataHandle(chunk) {
+        self.readTCPParser(tlsSocket, chunk);
+        tlsSocket.pause();
+    });
+};
+AppDelegate.prototype.readTCPParser = function (socket, buffer) {
+    const headers = pheaders.onReadTCPParser(buffer);
+    console.log(headers);
+};
 AppDelegate.prototype.rejectClientException = function(handle, name) {
     if (typeof handle != "undefined" && TRACE_SOCKET_IO) {
         handle.getSockInfos.exception = utilities.errorException(name);
@@ -620,14 +657,15 @@ AppDelegate.prototype.setupCluster = function (opt) {
     }
     const self = this;
     const num = Number(opt.cluster.length);
-    var env = process.env;
-    var assign, mxoss, execArgv, args;
-    var lookout = true;
-    var heartbeat = true;
-    var pkg = false;
-    var cmd = false;
+    let env = process.env;
+    let assign, mxoss, execArgv, args;
+    let lookout = true;
+    let heartbeat = true;
+    let pkg = false;
+    let cmd = false;
     if (num != 0) { //
         for (var i = 0; i < num; i++) {
+            env = JSON.parse(JSON.stringify(process.env));
             lookout = true;
             heartbeat = true;
             pkg = false;
