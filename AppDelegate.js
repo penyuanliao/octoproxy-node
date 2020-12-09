@@ -19,7 +19,11 @@ const path          = require('path');
 const NSLog         = fxNetSocket.logger.getInstance();
 const tcp_wrap      = process.binding("tcp_wrap");
 const TCP           = tcp_wrap.TCP; // TCP連線
-const WriteWrap     = process.binding('stream_wrap').WriteWrap;
+const {
+    WriteWrap,
+    kReadBytesOrError,
+    streamBaseState
+}                   = process.binding('stream_wrap');
 const uv            = process.binding('uv');
 const fs            = require('fs');
 const net           = require('net');
@@ -229,9 +233,17 @@ AppDelegate.prototype.createServer = function (opt) {
     NSLog.log('debug','listen:',opt.port);
 
     /** reload request header and assign **/
-    function onread_url_param(nread, buffer) {
+    function onread_url_param() {
 
         // NSLog.log('debug',"reload request header and assign, nread:", nread);
+        var nread, buffer;
+        if (version >= 12) {
+            buffer = Buffer.from(arguments[0]);
+            nread = streamBaseState[kReadBytesOrError];
+        } else {
+            nread = arguments[0];
+            buffer = arguments[1];
+        }
 
         var handle = this;
         // var srv = self.server;
