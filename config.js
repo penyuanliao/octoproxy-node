@@ -20,7 +20,7 @@ config.numCPUs = require('os').cpus().length;
 config.InfluxDBConf = Object.freeze({
     enabled: false,
     port: 10084,
-    host: "127.0.0.1"
+    host: "192.168.188.123"
 });
 
 /** 開發環境設定 **/

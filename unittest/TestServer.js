@@ -65,11 +65,12 @@ TestServer.prototype.setup = function (server) {
         return true;
     };
     var onCustomMessage = function onCustomMessage(data, handle) {
-        console.log(data);
+        console.log("onCustomMessage",data);
         //客製化事件
     };
     var onKickUsersOut = function onKickUsersOut(data, handle) {
         //踢人事件
+        console.log("onKickUsersOut",data);
     };
     this.octoPlugins.on("ipcMessage", onCustomMessage);
 
