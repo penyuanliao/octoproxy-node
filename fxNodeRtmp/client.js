@@ -352,7 +352,10 @@ RTMPClient.prototype.onData = function(data) {
                 try {
                     cmd = amfUtils.amf0DecodeOne(bodyFilter);
                 }catch (e){
+                    sock.chunkPacket = sock.chunkPacket.slice(filter.header.offset,sock.chunkPacket.length);
                     NSLog.log("error",log.logHex(bodyFilter));
+                    return;
+
                 }
 
                 NSLog.log('trace','+ CommandName : ', cmd);
