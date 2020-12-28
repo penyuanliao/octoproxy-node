@@ -120,7 +120,7 @@ RTMPMessage.prototype.__defineGetter__('data', function() {
 		return this.rawData;
 	}
 });
-var packet_result = new Buffer([0x02,0x0,0x07,0x5f,0x72,0x65,0x73,0x75,0x6c,0x74,0x00,0x3f,0xf0,0x00,0x00,0x00,0x00,0x00,0x00]);
+var packet_result = Buffer.from([0x02,0x0,0x07,0x5f,0x72,0x65,0x73,0x75,0x6c,0x74,0x00,0x3f,0xf0,0x00,0x00,0x00,0x00,0x00,0x00]);
 function arrayIndexOf(buffer, value) {
 	for (var i = buffer.length-1; i >= 0 ; i--) {
 		var obj = buffer[i];
@@ -167,7 +167,7 @@ RTMPMessage.prototype.sendData = function(channel, messageType, data) {
 		this.chunks.push(chunk);
 	}
 
-	var buf = new Buffer(byteLength);
+	var buf = Buffer.alloc(byteLength);
 	var buf_offset = buf.slice(0);
 	for (var i = 0; i < this.chunks.length; i++) {
 		var chunk = this.chunks[i];

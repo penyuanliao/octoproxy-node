@@ -19,7 +19,7 @@ var S0Chunk = function(buffer) {
     if (buffer && buffer instanceof Buffer) {
         this.buffer = buffer.slice(0, S0Chunk.byteLength);
     } else {
-        this.buffer = new Buffer(S0Chunk.byteLength);
+        this.buffer = Buffer.alloc(S0Chunk.byteLength);
         this.setDefaults();
     }
 }
@@ -42,7 +42,7 @@ var S1Chunk = function(buffer) {
     if (buffer && buffer instanceof Buffer) {
         this.buffer = buffer.slice(0, S1Chunk.byteLength);
     } else {
-        this.buffer = new Buffer(S1Chunk.byteLength);
+        this.buffer = Buffer.alloc(S1Chunk.byteLength);
         this.setDefaults();
     }
 }
@@ -93,7 +93,7 @@ var S2Chunk = function(buffer) {
     if (buffer && buffer instanceof Buffer) {
         this.buffer = buffer.slice(0, S2Chunk.byteLength);
     } else {
-        this.buffer = new Buffer(S2Chunk.byteLength);
+        this.buffer = Buffer.alloc(S2Chunk.byteLength);
         this.setDefaults();
     }
 }
@@ -168,7 +168,7 @@ RTMPHandshake.prototype.sendClientHandshake = function() {
 };
 RTMPHandshake.prototype.sendC0C1 = function() {
     /* Create temporary buffer for both */
-    var handshakeBuf = new Buffer(C0Chunk.byteLength + C1Chunk.byteLength);
+    var handshakeBuf = Buffer.alloc(C0Chunk.byteLength + C1Chunk.byteLength);
 
     /* C0 Handshake Chunk */
     this.c0chunk = new C0Chunk(handshakeBuf);

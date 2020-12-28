@@ -19,7 +19,7 @@ RTMPChunk.prototype.read = function(buf) {
 };
 RTMPChunk.prototype.write = function(buf) {
 	if (!buf)
-		buf = new Buffer(this.byteLength)
+		buf = Buffer.alloc(this.byteLength)
 	this.buffer = buf;
 
 	// invoke setters to write to buffer

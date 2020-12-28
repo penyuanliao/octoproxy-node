@@ -17,16 +17,12 @@ log.warn = function() {
 }
 
 log.logHex = function( data ) {
-    var line = new Buffer(BP_LEN);
-    var str = "";
+    var line = Buffer.alloc(BP_LEN);
     for (var i = 0; i < data.length; i++) {
         var n = i % 16;
         var off;
         if ( !n ) {
-            if ( i ) {
-                process.stdout.write(line.toString()+"\n");
-                str += line.toString()+"\n";
-            }
+            if ( i ) process.stdout.write(line.toString()+"\n");
             line.fill(' ');
             
             off = i % 0x0ffff;
@@ -50,7 +46,7 @@ log.logHex = function( data ) {
 			line[BP_GRAPH + n + ((n >= 8)?1:0)] = '.'.charCodeAt();
 		}
     }
-    str += line.toString()+"\n";
-    process.stdout.write(line.toString()+"\n");
+    var str = line.toString()+"\n";
+    process.stdout.write(str);
     return str;
 };

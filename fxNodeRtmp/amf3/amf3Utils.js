@@ -50,7 +50,7 @@ Deserializer.prototype.readTypeMarker = function () {
         case AMF_Constants.AMF3_XMLSTRING:
             return this.readXmlString();
         case AMF_Constants.AMF3_BYTEARRAY:
-            var buf = new Buffer(this.readString());
+            var buf = Buffer.from(this.readString());
             this.objectReferences.push(buf);
             return buf;
         case AMF_Constants.AMF3_DICTIONARY:
@@ -389,7 +389,7 @@ function Serializer() {
     this.ref = null;
 
 
-    this.stream = new Buffer(1024);
+    this.stream = Buffer.alloc(1024);
     this.offset = 0;
 }
 Serializer.prototype.amf3Encode = function (data, markerType) {
@@ -765,9 +765,9 @@ Serializer.prototype.writeByteArray = function (data) {
     }else if (data instanceof Buffer) {
 
     }else if (data instanceof DataView) {
-        data = new Buffer(new Uint8Array(data.buffer));
+        data = Buffer.from(new Uint8Array(data.buffer));
     }else if (data instanceof ArrayBuffer) {
-        data = new Buffer(new Uint8Array(data));
+        data = Buffer.from(new Uint8Array(data));
     }else {
         var err = new TypeError('Invalid ByteArray specified; must be a string or Zend_Amf_Value_ByteArray');
         err.name = "amf3Utils";
@@ -841,13 +841,13 @@ Serializer.prototype.writeBinaryString = function (str) {
 Serializer.prototype.writeByte = function (data) {
     const len = 1;
     if (this.stream.length < (this.offset + len)) {
-        this.stream = Buffer.concat([this.stream, new Buffer(len)], this.stream.length + len);
+        this.stream = Buffer.concat([this.stream, Buffer.alloc(len)], this.stream.length + len);
     }
 
     this.stream.writeUInt8(data, this.offset++);
 };
 Serializer.prototype.writeBytes = function (data) {
-    var dataBuf = new Buffer(data);
+    var dataBuf = Buffer.from(data);
     var len = dataBuf.length;
     if (this.stream.length < (this.offset + len)) {
         this.stream = Buffer.concat([this.stream, dataBuf], this.stream.length + len);
@@ -864,7 +864,7 @@ Serializer.prototype.writeBytes = function (data) {
 Serializer.prototype.writeDouble = function (num) {
     const len = 8;
     if (this.stream.length < (this.offset + len)) {
-        this.stream = Buffer.concat([this.stream, new Buffer(len)], this.stream.length + len);
+        this.stream = Buffer.concat([this.stream, Buffer.alloc(len)], this.stream.length + len);
     }
 
     this.stream.writeDoubleBE(num, this.offset);
@@ -874,8 +874,8 @@ Serializer.prototype.writeDouble = function (num) {
 Serializer.prototype.encodeDynamic = function (str) {
     var hex = Number(str.length).toString(16);
     var hexHeader = '00' + (hex.length % 2 == 1 ? "0":"") + hex;
-    var buf = new Buffer(hexHeader, 'hex');
-    var data = new Buffer(str);
+    var buf = Buffer.from(hexHeader, 'hex');
+    var data = Buffer.from(str);
     return Buffer.concat([buf, data], buf.length + data.length);
 };
 Serializer.prototype.MARKER_TYPE_MAP = {

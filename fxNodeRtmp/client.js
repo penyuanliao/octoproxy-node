@@ -37,7 +37,7 @@ var RTMPClient = function(socket) {
     this.socket.videoInfos          = {};
 
     this._objectEncoding            = defaultObjectEncoding; //預設物件編碼
-	this.pauseTime                  = 0;
+    this.pauseTime                  = 0;
 
     this.invokeHeader               = Buffer.alloc(8);
     this.pauseTime                  = 0;
@@ -48,12 +48,15 @@ var RTMPClient = function(socket) {
 
     this.previousHeader             = [];
 
+    this.transId = 1;
+
     socket.on('connect', this.onSocketConnect.bind(this));
 };
 
 util.inherits(RTMPClient, events.EventEmitter);
 RTMPClient.prototype.onSocketConnect = function() {
     // On connection send handshake
+    console.log('onSocketConnect');
     var self = this;
     this.handshake = new RTMPHandshake(this);
     this.handshake.on('error', function(err) {
@@ -130,7 +133,7 @@ RTMPClient.prototype.onData = function(data) {
             const onRead = (data.length > this.BasicHeaderSize[fmt]);
 
             // csid = 2 is message type
-			if (csid == 2 && fmt < 4 && data.length == 18 && data.readUInt24BE(1) == 0) {
+            if (csid == 2 && fmt < 4 && data.length == 18 && data.readUInt24BE(1) == 0) {
                 var typeID = undefined;
                 var timestamp = undefined;
                 // var bodysize = undefined;
@@ -282,7 +285,7 @@ RTMPClient.prototype.onData = function(data) {
     // NSLog.log("error", "filter.header.offset: %s", filter.header.offset, data.length);
     // The data received in the "echo ping request" and ping response time. //
     if (filter.header.fmt == 0 && filter.header.CSID == 2 && filter.header.typeID == 0x04 && filter.header.offset == 18) {
-        NSLog.log('info','#0 PingResponse in front Packet data.');
+        NSLog.log('trace','#0 PingResponse in front Packet data.');
         var num = filter.header.bodyBuf.readInt32BE(0); // get timestamp value
         this.pingResponse(num);
         sock.chunkPacket = sock.chunkPacket.slice(filter.header.offset,sock.chunkPacket.length);
@@ -353,9 +356,9 @@ RTMPClient.prototype.onData = function(data) {
                     cmd = amfUtils.amf0DecodeOne(bodyFilter);
                 }catch (e){
                     sock.chunkPacket = sock.chunkPacket.slice(filter.header.offset,sock.chunkPacket.length);
-                    NSLog.log("error",log.logHex(bodyFilter));
+                    NSLog.log("error", log.logHex(bodyFilter));
+                    NSLog.log("error", e);
                     return;
-
                 }
 
                 NSLog.log('trace','+ CommandName : ', cmd);
@@ -381,7 +384,12 @@ RTMPClient.prototype.onData = function(data) {
                 }
                 if (bodyFilter.length - decodeLen > 0){
                     NSLog.log('trace','＋ CmdArgs : ',cmdArgs, "length:",bodyFilter.length,decodeLen);
-                    cmdArgs = amfUtils.amf0DecodeOne(bodyFilter.slice(decodeLen, bodyFilter.length));
+                    try {
+                        cmdArgs = amfUtils.amf0DecodeOne(bodyFilter.slice(decodeLen, bodyFilter.length));
+                    } catch (e) {
+                        decodeLen += cmdArgs.len;
+
+                    }
 
                     if (cmdArgs) {
                         decodeLen += cmdArgs.len;
@@ -464,7 +472,7 @@ RTMPClient.prototype.filterPing = function (data) {
         if (index + 18 > data.length) {
             this.chkBroken = true;
             this.frontBroken = data;
-            return new Buffer();
+            return Buffer.alloc(0);
         } else {
             this.chkBroken = false;
             var num = ping.readUInt32BE(14); // get timestamp value
@@ -543,10 +551,11 @@ RTMPClient.prototype.sendInvokeMessage = function(commandName, transactionId, co
     this.sendPacket(0x14, RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE, amfData);
 };
 RTMPClient.prototype.fmsCall = function (commandName, arg) {
+    var transId = this.transId++;
     //command name名稱
     var s1 = new AMF.AMFSerialiser(commandName);
     //streamid 1 - fms通道
-    var s2 = new AMF.AMFSerialiser(1);
+    var s2 = new AMF.AMFSerialiser(transId);
     var args = [{}];
     var count = 1;
     while (count < arguments.length) {
@@ -560,6 +569,8 @@ RTMPClient.prototype.fmsCall = function (commandName, arg) {
     buf = Buffer.concat([buf, body]);
     if (this)
         this.sendPacket(0x14, RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE, buf);
+
+    return transId;
 };
 RTMPClient.prototype.genMetaData = function (commandName, arg) {
     //command name名稱
@@ -573,7 +584,7 @@ RTMPClient.prototype.genMetaData = function (commandName, arg) {
     }
     NSLog.log("trace","fmsCall:",args);
     var body = amfUtils.amf0Encode(args);
-    var buf = new Buffer(s1.byteLength + s2.byteLength).fill(0x0);
+    var buf = Buffer.alloc(s1.byteLength + s2.byteLength).fill(0x0);
     s1.write(buf.slice(0,s1.byteLength));
     s2.write(buf.slice(s1.byteLength,s1.byteLength + s2.byteLength));
     buf = Buffer.concat([buf, body]);
@@ -768,17 +779,17 @@ RTMPClient.prototype.streamPlay = function(name) {
     }
     self.callbackfunc = function (data) {
         NSLog.log("trace", "start stream Play data:", data.length);
-		/*
-		 while (data.length > 0){
-		 var iPacket = self.filterPacket(data);
-		 var obj = self.RTMP_ReadPacketType(iPacket);
-		 if (iPacket.header.typeID == 0x09) {
-		 self.emit('videoData', data);
-		 self.callbackfunc = undefined;
-		 return;
-		 }
-		 data = data.slice(iPacket.header.offset, data.length);
-		 }*/
+        /*
+         while (data.length > 0){
+         var iPacket = self.filterPacket(data);
+         var obj = self.RTMP_ReadPacketType(iPacket);
+         if (iPacket.header.typeID == 0x09) {
+         self.emit('videoData', data);
+         self.callbackfunc = undefined;
+         return;
+         }
+         data = data.slice(iPacket.header.offset, data.length);
+         }*/
 
         // self.callbackfunc = null;
         // #1 server SetChunkSize
@@ -899,13 +910,13 @@ RTMPClient.prototype.streamPlay = function(name) {
             data = data.slice(iPacket.header.offset, data.length);
         }
 
-		/*if (data.length > 0) {
-		 NSLog.log('trace', '==☆== PLAYER RESULT (%d) ==☆==', data.length);
+        /*if (data.length > 0) {
+         NSLog.log('trace', '==☆== PLAYER RESULT (%d) ==☆==', data.length);
 
-		 data = data.slice(iPacket.header.offset, data.length);
-		 iPacket = self.filterPacket(data);
-		 NSLog.log('trace',JSON.stringify(iPacket.header));
-		 }*/
+         data = data.slice(iPacket.header.offset, data.length);
+         iPacket = self.filterPacket(data);
+         NSLog.log('trace',JSON.stringify(iPacket.header));
+         }*/
 
 
         console.log('Stream Packet parser OK(%s)', data.length);
@@ -1072,7 +1083,7 @@ RTMPClient.prototype.filterPacket = function (data, doFindC3) {
         var end = ((bodySize % this.socket.rtmpChunkSize == 0 && bodySize > 0) ? 1 : 0);
         find = parseInt(bodySize / this.socket.rtmpChunkSize);
         if (data[headerBytesLength + bodySize + find] != 0xC3) find = find - end;
-
+        find = (find < 0) ? 0 : find;
         if (typeof doFindC3 != 'undefined' && doFindC3 == true) {
             bodySize = bodySize + find;
         }else if (this.socket.rtmpChunkSize != 'undefined'){
@@ -1118,13 +1129,13 @@ RTMPClient.prototype.filterPacket = function (data, doFindC3) {
         }
 
     }
-	/*
-	 console.log(' fmt:%d \n csid:%d \n timestamp:%s \n bodySize:%d \n typeID(message):%d(%s) \n streamID:%d \n ' +
-	 'offset:%d \n data-len: %d \n find: %d \n',
-	 fmt, CSID,timestamp, bodySize,typeID, "0x" + typeID.toString(16), streamID,
-	 offset,data.length,find
-	 );
-	 */
+    /*
+     console.log(' fmt:%d \n csid:%d \n timestamp:%s \n bodySize:%d \n typeID(message):%d(%s) \n streamID:%d \n ' +
+     'offset:%d \n data-len: %d \n find: %d \n',
+     fmt, CSID,timestamp, bodySize,typeID, "0x" + typeID.toString(16), streamID,
+     offset,data.length,find
+     );
+     */
     return iRTMPPacket;
 };
 
@@ -1610,11 +1621,11 @@ RTMPClient.prototype.PacketType = {
     PACKET_TYPE_CLIENTBW:			0x06,
     PACKET_TYPE_AUDIO:				0x08,
     PACKET_TYPE_VIDEO:				0x09,
-	/*
-	 PACKET_TYPE_FLEX_STREAM_SEND:	0x0f,
-	 PACKET_TYPE_FLEX_SHARED_OBJECT:	0x10,
-	 PACKET_TYPE_FLEX_MESSAGE:		0x11,
-	 */
+    /*
+     PACKET_TYPE_FLEX_STREAM_SEND:	0x0f,
+     PACKET_TYPE_FLEX_SHARED_OBJECT:	0x10,
+     PACKET_TYPE_FLEX_MESSAGE:		0x11,
+     */
     PACKET_TYPE_METADATA:			0x12,
     PACKET_TYPE_SHARED_OBJECT:		0x13,
     PACKET_TYPE_INVOKE:				0x14,

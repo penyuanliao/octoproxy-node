@@ -11,7 +11,7 @@ RTMPPacket.prototype.serialize = function() {
     const RTMP_DEFAULT_CHUNKSIZE = 128;
     var bChunkSize = this.chunkSize || RTMP_DEFAULT_CHUNKSIZE;
 
-    this.buffer = new Buffer(4096);
+    this.buffer = Buffer.alloc(4096);
     this.header.bodySize = (this.body.length) ?
         this.body.serialize(this.buffer.slice(RTMP_MAX_HEADER_SIZE)) : 0;
         
@@ -159,7 +159,7 @@ RTMPPacketHeader.prototype.chunkHeader = function() {
     else if (this.channel > 63)
         cSize = 1;
     hSize = (cSize) ? cSize+1 : 1;
-    var header = new Buffer(hSize);
+    var header = Buffer.alloc(hSize);
     var c = this.headerType << 6;
     switch(cSize) {
         case 0:

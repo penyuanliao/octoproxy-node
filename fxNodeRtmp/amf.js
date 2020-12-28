@@ -272,7 +272,7 @@ AMF.AMFSerialiser.prototype.__defineGetter__('byteLength', function() {
 })
 AMF.AMFSerialiser.prototype.write = function(buf) {
     ///if (!buf)
-    ///    buf = new Buffer(this.byteLength)
+    ///    buf = Buffer.alloc(this.byteLength)
     var type = normaliseType(this.value);
 
     // write type marker
