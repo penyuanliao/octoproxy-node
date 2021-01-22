@@ -44,7 +44,7 @@ NSLog.configure({
     dateFormat:'[yyyy-MM-dd hh:mm:ss]',
     filePath: path.join(process.cwd(), "./historyLog"),
     id:"octoproxy",
-    remoteEnabled: true,
+    remoteEnabled: false,
     /*console:console,*/
     trackBehaviorEnabled: false, // toDB server [not implement]
     trackOptions:{db:"couchbase://127.0.0.1", bucket:"nodeHistory"},
@@ -685,6 +685,9 @@ AppDelegate.prototype.setupCluster = function (opt) {
             mxoss = opt.cluster[i].mxoss || 2048;
             assign = utilities.trimAny(opt.cluster[i].assign);
             env.NODE_CDID = i;
+            if (Array.isArray(opt.cluster[i].env)) {
+               mgmt.setEnvironmentVariables(env, opt.cluster[i].env);
+            }
             execArgv = ["--nouse-idle-notification", "--max-old-space-size=" + mxoss];
             if (opt.cluster[i].gc == true) execArgv.push("--expose-gc");
             if (opt.cluster[i].compact == true) execArgv.push("--always-compact");
@@ -922,8 +925,8 @@ AppDelegate.prototype.__defineSetter__("lockState", function (state) {
  * //not implement//
  */
 AppDelegate.prototype.management = function () {
-    this.mgmtSrv = new mgmt(this, cfg, 8100);
-    NSLog.log('trace', '** Setup management service port:8100 **');
+    this.mgmtSrv = new mgmt(this, cfg, cfg.managePort || 8100);
+    NSLog.log('debug', '** Setup management service port:%s **', cfg.managePort);
 
 };
 AppDelegate.prototype.reLoadManagement = function () {

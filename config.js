@@ -22,6 +22,21 @@ config.InfluxDBConf = Object.freeze({
     port: 10084,
     host: "192.168.188.123"
 });
+/**
+ * FxLogger 監控Log資料接收Port
+ * @type {number}
+ */
+config.WPC_Logging_Port = 10080;
+/**
+ * 服務對外Port
+ * @type {number}
+ */
+config.WPC_HTTP_Port = 10082;
+/**
+ * 跟Ocoto 對接服務接口
+ * @type {number}
+ */
+config.managePort = 8100;
 
 /** 開發環境設定 **/
 if (config.env == 'development') {
@@ -81,6 +96,11 @@ if (config.env == 'development') {
         if (octo.bFMSPort) config.bFMSPort = octo.bFMSPort;
         //if (octo["loadBalancerFile"]) config.gamSLB.file = octo["loadBalancerFile"];
     }
+}
+if (process.env.Policy == "pipe2") {
+    config.WPC_Logging_Port = 10081;
+    config.WPC_HTTP_Port = 10083;
+    config.managePort = 8101;
 }
 //todo define the balance
 config.balance = 'leastconn';//roundrobin
@@ -167,6 +187,9 @@ module.exports = exports = configure.getInstance();
  * @property gamSLB
  * @property env
  * @property balance
+ * @property managePort
+ * @property WPC_HTTP_Port
+ * @property WPC_Logging_Port
  **/
 /**
  * @namespace srvOptions
