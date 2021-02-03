@@ -752,6 +752,10 @@ AppDelegate.prototype.setupCluster = function (opt) {
                 NSLog.log('warning', "unexpected:", err.name);
                 self.tgBotTemplate("-1001314121392", "shutdown", [err.name]);
             });
+            cluster.emitter.on('restart', function () {
+
+                self.mgmtSrv.refreshClusterParams(cluster);
+            });
         }
         NSLog.log('info',"Cluster active number:", num);
         this.clusterNum = num;
