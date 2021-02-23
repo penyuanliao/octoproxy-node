@@ -37,6 +37,11 @@ config.WPC_HTTP_Port = 10082;
  * @type {number}
  */
 config.managePort = 8100;
+/**
+ *
+ * @type {string}
+ */
+config.heartbeat_namespace = "/x-ping-pong";
 
 /** 開發環境設定 **/
 if (config.env == 'development') {

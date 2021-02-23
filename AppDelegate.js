@@ -1,3 +1,4 @@
+"use strict";
 /**
  * Created by Benson.Liao on 15/12/9.
  * 多執行緒 執行
@@ -48,6 +49,9 @@ NSLog.configure({
     /*console:console,*/
     trackBehaviorEnabled: false, // toDB server [not implement]
     trackOptions:{db:"couchbase://127.0.0.1", bucket:"nodeHistory"},
+    fileDateHide: true,
+    fileMaxCount: 0,
+    fileSort:"asc",
     maximumFileSize: 1024 * 1024 * 500});
 
 /** remove a socket was pending timeout. **/
@@ -87,7 +91,7 @@ function AppDelegate() {
     this._lockState      = false;
     /** casino load balance **/
     this.gameLBSrv       = new gLBSrv(cfg.gamSLB, this);
-    this.mgmtSrv         = {};
+    this.mgmtSrv         = undefined;
     /** record visitor remote address **/
     this.recordDashboard = new Dashboard(Dashboard.loadFile("./historyLog/Dashboard.json"));
     this.recordEnabled   = true;
@@ -320,6 +324,7 @@ AppDelegate.prototype.createServer = function (opt) {
                 namespace = buffer.toString();
                 namespace = namespace.replace("\0","");
             }
+
         }
         /** TODO 2016/10/06 -- ADMIN DEMO **/
         if (headers["sec-websocket-protocol"] == "admin") {
@@ -330,6 +335,14 @@ AppDelegate.prototype.createServer = function (opt) {
                 self.rejectClientException(handle, "CON_VERIFIED");
                 handle.close(close_callback);
             }, sendWaitClose);
+            return;
+        }
+        if (mode === "socket" && namespace == cfg["heartbeat_namespace"]) {
+            tcp_write(handle, JSON.stringify({status: "ok" , hostname: hostname}));
+            self.rejectClientException(handle, "FL_POLICY");
+            handle.close(close_callback);
+            handleRelease(handle);
+            handle = null;
             return;
         }
         /** TODO 2016/08/17 -- Log Info **/
