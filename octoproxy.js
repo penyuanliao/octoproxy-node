@@ -10,6 +10,10 @@ if (index != -1) {
     console.log("v" + require("./package.json").version);
     process.exit(0);
 }
+const Config = require("./config.js");
+const AppDelegate = require('./AppDelegate');
+const main = new AppDelegate();
+if (Config["telegram"].enabled) {
+    this.createTelegramBot(Config["telegram"].credentials, Config["telegram"].proxyMode);
+}
 
-const appDelegate = require('./AppDelegate');
-const main = new appDelegate();

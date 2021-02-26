@@ -1,7 +1,11 @@
 /**
  * Created by Benson.Liao on 16/1/5.
  */
-var config = {};
+/**
+ * @constructor
+ */
+function config() {
+}
 config.appConfig = appParames();
 config.env = process.env.NODE_ENV;
 config.pkg_compiler = (typeof process.versions.pkg != "undefined" && typeof process.pkg != "undefined");
@@ -38,10 +42,19 @@ config.WPC_HTTP_Port = 10082;
  */
 config.managePort = 8100;
 /**
- *
+ * 心跳事件
  * @type {string}
  */
 config.heartbeat_namespace = "/x-ping-pong";
+/**
+ * telegram通知系統
+ * @type {{credentials: {bot: string, token: string}, proxyMode: {port: number, host: string}, enabled: boolean}}
+ */
+config.telegram = {
+    credentials: {bot: "", token:""},
+    proxyMode: {host: "", port: 0},
+    enabled: false
+};
 
 /** 開發環境設定 **/
 if (config.env == 'development') {
@@ -59,7 +72,7 @@ if (config.env == 'development') {
     //建立第二台一樣服務只需複製一樣設定即可
     //合併服務用逗號區隔ex:'Hall, Hall2'
     //會清除空白符號
-    config.forkOptions = require('fxNetSocket').getConfig('../configuration/Assign-gm.json');
+    config.forkOptions = require('fxNetSocket').getConfig('../configuration/Assign.json');
     config.gamSLB = {
         enabled:true,
         // file: './unittest/GLBS.js',

@@ -36,8 +36,6 @@ var   mgmt          = require('./lib/mgmt.js');
 const Dashboard     = require("./lib/Dashboard.js");
 const TelegramBot   = require("./lib/FxTelegramBot.js");
 const hostname      = require('os').hostname();
-const BotToken      = {bot: "", token:""};
-const ProxyMode     = {host: "", port: 0};
 NSLog.configure({
     logFileEnabled:true,
     consoleEnabled:true,
@@ -137,8 +135,6 @@ AppDelegate.prototype.init = function () {
     this.BindingProcEvent();
 
     this.management();
-
-    // this.createTelegramBot(BotToken, ProxyMode);
 };
 
 /**
@@ -866,6 +862,7 @@ AppDelegate.prototype.tgBotSend = function (chatID, message) {
     }
 };
 AppDelegate.prototype.tgBotTemplate = function (chatID, type, args) {
+    if (typeof this.tgBot == "undefined") return false;
     if (type == "shutdown") {
         this.tgBotSend(chatID, util.format("%s ❗️shutdown: reboot by \n<code>%s</code>|<b>%s</b>", hostname, TelegramBot.dateFormat(new Date()), args[0]));
     }
