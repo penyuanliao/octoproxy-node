@@ -584,6 +584,7 @@ AppDelegate.prototype.createServer = function (opt) {
             }, function (worker) {
                 worker.send({'evt':'c_init',data: (Buffer.isBuffer(packet[0]) ? packet[0] : Buffer.alloc(0)), namespace: dir, originPath: dir}, handle,{keepOpen:false});
                 setTimeout(function () {
+                    mc.socket._handle = null; // node v14.16.1 //ERR_INVALID_ARG_TYPE
                     self.rejectClientException(handle, "CON_VERIFIED");
                     handle.close(close_callback);
                     handle = null;
