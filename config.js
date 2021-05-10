@@ -43,11 +43,13 @@ config.WPC_HTTP_Port = 10082;
 config.managePort = 8100;
 /**
  * 心跳事件
+ * @version 2.0.0
  * @type {string}
  */
 config.heartbeat_namespace = "/x-ping-pong";
 /**
  * telegram通知系統
+ * @version 2.0.0
  * @type {{credentials: {bot: string, token: string}, proxyMode: {port: number, host: string}, enabled: boolean}}
  */
 config.telegram = {
@@ -81,7 +83,8 @@ if (config.env == 'development') {
         /* 處理視訊lb */
         videoEnabled:true,
         httpEnabled:true,
-        vPrefix: 'edge_'
+        vPrefix: 'edge_',
+        rtmpFrontendEnabled: false
     };
 } else {
     
@@ -106,7 +109,8 @@ if (config.env == 'development') {
         /* 處理視訊lb */
         videoEnabled:false,
         httpEnabled:false,
-        vPrefix: 'edge_'
+        vPrefix: 'edge_',
+        rtmpFrontendEnabled: false
     };
 
     if (typeof octo != "undefined") {

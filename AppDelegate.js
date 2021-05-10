@@ -16,7 +16,7 @@ const pheaders      = parser.headers;
 const utilities     = fxNetSocket.utilities;
 const daemon        = fxNetSocket.daemon;
 const client        = fxNetSocket.wsClient;
-const path          = require('path');
+const xPath          = require('path');
 const NSLog         = fxNetSocket.logger.getInstance();
 const tcp_wrap      = process.binding("tcp_wrap");
 const TCP           = tcp_wrap.TCP; // TCP連線
@@ -41,7 +41,7 @@ NSLog.configure({
     consoleEnabled:true,
     level:'debug',
     dateFormat:'[yyyy-MM-dd hh:mm:ss]',
-    filePath: path.join(process.cwd(), "./historyLog"),
+    filePath: xPath.join(process.cwd(), "./historyLog"),
     id:"octoproxy",
     remoteEnabled: false,
     /*console:console,*/
@@ -274,6 +274,16 @@ AppDelegate.prototype.createServer = function (opt) {
         handle.readStop();
         clearTimeout(handle.closeWaiting);
         handle.closeWaiting = undefined;
+
+        if (cfg.gamSLB.rtmpFrontendEnabled === true) {
+            const MediaClientBinder = require("./Framework/FlServer/MediaClientBinder.js");
+            const hasRTMP = MediaClientBinder.hasHandshake(buffer);
+
+            if (hasRTMP) {
+                onread_rtmp_param(this, buffer);
+                return;
+            }
+        }
 
         var headers = pheaders.onReadTCPParser(buffer);
         /** @property {Buffer} */
@@ -549,6 +559,48 @@ AppDelegate.prototype.createServer = function (opt) {
 
         if (handle) handle.readStop();
     }
+    /** reload request rtmp/tcp **/
+    function onread_rtmp_param(handle, buffer) {
+        NSLog.log("info", "Parse and respond RTMP/TCP handshake.");
+        const MediaClientBinder = require("./Framework/FlServer/MediaClientBinder.js");
+        const mc = new MediaClientBinder();
+        mc.binder.enabled = true;
+        mc.binder.mode = "transmit";
+
+        mc.on("connect", function onMediaConnect(cmd, packet) {
+            handle.readStop();
+            NSLog.log("debug", "binder:", cmd);
+            NSLog.log("debug", "src:", packet);
+            let dir = xPath.parse(cmd.cmdObj.app).dir;
+            if (dir.split("/").length == 1) {
+                dir = cmd.cmdObj.app;
+            }
+            if (dir.substr(dir.length-1, 1) == "/") {
+                dir = dir.substr(0, dir.length-1);
+            }
+            NSLog.log("debug", "onread_rtmp_param.dir:", dir);
+            self.assign({
+                dir: dir
+            }, function (worker) {
+                worker.send({'evt':'c_init',data: (Buffer.isBuffer(packet[0]) ? packet[0] : Buffer.alloc(0)), namespace: dir, originPath: dir}, handle,{keepOpen:false});
+                setTimeout(function () {
+                    self.rejectClientException(handle, "CON_VERIFIED");
+                    handle.close(close_callback);
+                    handle = null;
+                }, sendWaitClose);
+            });
+        });
+        mc.on("close", function () {
+            NSLog.log("debug", "close");
+        });
+        const tmp = new net.Socket({
+            handle: handle
+        });
+        mc.setup(tmp);
+        tmp.emit("data", buffer);
+        handle.readStart(); // need socket create if not Error: read EALREADY
+        return mc;
+    }
     /** handle dealloc ref **/
     function handleRelease(handle){
         handle.readStop();
@@ -780,13 +832,20 @@ AppDelegate.prototype.setupCluster = function (opt) {
  * @returns {undefined}
  */
 AppDelegate.prototype.assign = function (namespace, cb) {
-    var cluster = undefined;
-    var path = namespace.split("/");
-    if (path[2]) {
-        namespace = path[1];
-    }else{
-        namespace = path[1];
-        if (typeof namespace == 'undefined') namespace = path[0];
+    let cluster = undefined;
+    let path;
+    if (typeof namespace == "string") {
+        path = namespace.split("/");
+        if (path[2]) {
+            namespace = path[1];
+        } else {
+            namespace = path[1];
+            if (typeof namespace == 'undefined') namespace = path[0];
+        }
+    } else if (typeof arguments[0] == "object") {
+        const args = arguments[0];
+        namespace = args.dir;
+
     }
     // NSLog.log('log',"assign::namespace:", namespace);
     // url_param

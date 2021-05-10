@@ -11,7 +11,7 @@ if (index != -1) {
     process.exit(0);
 }
 const Config = require("./config.js");
-const AppDelegate = require('./AppDelegate');
+const AppDelegate = require('./AppDelegate.js');
 const main = new AppDelegate();
 if (Config["telegram"].enabled) {
     this.createTelegramBot(Config["telegram"].credentials, Config["telegram"].proxyMode);
