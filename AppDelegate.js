@@ -95,7 +95,8 @@ function AppDelegate() {
     this.recordEnabled   = true;
 
     NSLog.log('info','LockState:[%s]', this._lockState);
-    NSLog.log('debug',"** Initialize octoproxy.js **");
+    NSLog.log('debug', "** Initialize octoproxy.js **");
+    NSLog.log("debug", " > Frontend support listens for RTMP/TCP requests to enabled: [%s]", cfg.gamSLB.rtmpFrontendEnabled);
     this.init();
 }
 /**
@@ -340,12 +341,28 @@ AppDelegate.prototype.createServer = function (opt) {
             setTimeout(function () {
                 self.rejectClientException(handle, "CON_VERIFIED");
                 handle.close(close_callback);
+                handleRelease(handle);
             }, sendWaitClose);
             return;
         }
-        if (mode === "socket" && namespace == cfg["heartbeat_namespace"]) {
-            tcp_write(handle, JSON.stringify({status: "ok" , hostname: hostname}));
-            self.rejectClientException(handle, "FL_POLICY");
+        if (namespace.indexOf(cfg["heartbeat_namespace"]) != -1) {
+            let heartbeatRes = "";
+            if (mode === "socket" ) {
+                heartbeatRes = JSON.stringify({status: "ok" , hostname: hostname});
+
+            } else if (mode == "http") {
+                heartbeatRes = [
+                    "HTTP/1.1 200 OK",
+                    "Connection: close",
+                    "Content-Type: text/plain",
+                    "",
+                    "200 ok"
+                ].join("\r\n");
+            } else {
+
+            }
+            tcp_write(handle, heartbeatRes);
+            self.rejectClientException(handle, "CON_MOD_HTTP");
             handle.close(close_callback);
             handleRelease(handle);
             handle = null;
@@ -390,13 +407,15 @@ AppDelegate.prototype.createServer = function (opt) {
                 // namespace = 'figLeaf';
             }
             if (mode == "http") {
-                const httpUrl = require("url").parse(general[1]);
+                // const httpUrl = require("url").parse(general[1]);
+                const URL = require("url").URL;
+                console.log(new URL("http://127.0.0.1" + general[1]));
                 const params = {f5: general[1], host: host};
                 NSLog.log('debug','socket is http connection', params);
 
                 const tokencode = self.gameLBSrv.getLoadBalancePath(url_args, params, function (action, json) {
                     namespace = json.path;
-                    clusterEndpoint(namespace, source, originPath);
+                    clusterEndpoint(namespace, source, originPath, mode);
                 });
                 return;
             }
@@ -431,9 +450,9 @@ AppDelegate.prototype.createServer = function (opt) {
                         }
                         src = Buffer.from(src_string);
                         if (cfg.gamSLB.videoEnabled) {
-                            clusterEndpoint(namespace , source, originPath);
+                            clusterEndpoint(namespace , source, originPath, mode);
                         } else {
-                            clusterEndpoint(namespace , src, originPath);
+                            clusterEndpoint(namespace , src, originPath, mode);
                         }
 
                     }else if (json.action == self.gameLBSrv.LBActionEvent.ON_BUSY) {
@@ -447,8 +466,8 @@ AppDelegate.prototype.createServer = function (opt) {
                         src = Buffer.from(chgSrc);
                         self.gameLBSrv.getGoDead(handle, src);
                         setTimeout(function () {
-                            handleRelease(handle);
                             handle.close(close_callback);
+                            handleRelease(handle);
                             handle = null;
                         }, sendWaitClose);
                     }
@@ -460,6 +479,7 @@ AppDelegate.prototype.createServer = function (opt) {
                     self.gameLBSrv.removeCallbackFunc(tokencode);
                     self.rejectClientException(handle, "CON_LB_TIMEOUT");
                     handle.close(close_callback);
+                    handleRelease(handle);
                     kickOut = true;
                 }, sendWaitClose);
 
@@ -471,13 +491,18 @@ AppDelegate.prototype.createServer = function (opt) {
                         if (spPath[1] != "video") offset = 1;
                         namespace = (cfg.gamSLB.vPrefix + spPath[offset]);
                     }
+                    if (url_args.s === "root") {
+                        namespace = {
+                            dir: spPath.splice(1, 2).join("/")
+                        }
+                    }
                 }
-                clusterEndpoint(namespace, source);
+                clusterEndpoint(namespace, source, originPath, mode);
             }
 
-            function clusterEndpoint(lastnamspace, chgSource, originPath) {
+            function clusterEndpoint(lastnamspace, chgSource, originPath, mode) {
 
-                self.assign(lastnamspace.toString(), function (worker) {
+                self.assign(lastnamspace, function (worker) {
 
                     if (typeof chgSource != 'undefined') {
                         source = chgSource;
@@ -488,15 +513,17 @@ AppDelegate.prototype.createServer = function (opt) {
                         if (typeof worker == 'undefined'  || !worker) {
                             self.rejectClientException(handle, "PROC_NOT_FOUND");
                             handle.close(close_callback);
+                            handleRelease(handle);
                             NSLog.log('trace','!!!! close();');
                             handle = null;
 
                         }else{
                             NSLog.log('trace','1. Socket goto %s(*)', lastnamspace);
-                            worker[0].send({'evt':'c_init',data:source, namespace:lastnamspace, originPath:originPath}, handle,{keepOpen:false});
+                            worker[0].send({'evt':'c_init',data:source, namespace:lastnamspace, originPath:originPath, mode}, handle,{keepOpen:false});
                             setTimeout(function () {
                                 self.rejectClientException(handle, "CON_VERIFIED");
                                 handle.close(close_callback);
+                                handleRelease(handle);
                                 handle = null;
                             }, sendWaitClose);
                         }
@@ -507,6 +534,7 @@ AppDelegate.prototype.createServer = function (opt) {
                         if (worker._dontDisconnect == true) {
                             self.rejectClientException(handle, "CON_DONT_CONNECT");
                             handle.close(close_callback);
+                            handleRelease(handle);
                             handle = null;
                             return;
                         }
@@ -515,9 +543,10 @@ AppDelegate.prototype.createServer = function (opt) {
                         setTimeout(function () {
                             self.rejectClientException(handle, "CON_VERIFIED");
                             handle.close(close_callback);
+                            handleRelease(handle);
                             handle = null;
                         }, sendWaitClose);
-                        worker.send({'evt':'c_init',data:source, namespace:lastnamspace, originPath:originPath}, handle,{keepOpen:false}); //KeepOpen = KeepAlive
+                        worker.send({'evt':'c_init',data:source, namespace:lastnamspace, originPath:originPath, mode}, handle,{keepOpen:false}); //KeepOpen = KeepAlive
                     }
 
                     //noinspection JSUnresolvedFunction
@@ -570,7 +599,7 @@ AppDelegate.prototype.createServer = function (opt) {
         mc.on("connect", function onMediaConnect(cmd, packet) {
             handle.readStop();
             NSLog.log("debug", "binder:", cmd);
-            NSLog.log("debug", "src:", packet);
+            // NSLog.log("debug", "src:", packet);
             let dir = xPath.parse(cmd.cmdObj.app).dir;
             if (dir.split("/").length == 1) {
                 dir = cmd.cmdObj.app;
@@ -582,17 +611,24 @@ AppDelegate.prototype.createServer = function (opt) {
             self.assign({
                 dir: dir
             }, function (worker) {
-                worker.send({'evt':'c_init',data: (Buffer.isBuffer(packet[0]) ? packet[0] : Buffer.alloc(0)), namespace: dir, originPath: dir}, handle,{keepOpen:false});
+                if (typeof worker === 'undefined' || !worker) {
+                    self.rejectClientException(handle, "CON_MOD_NOT_FOUND");
+                    mc.socket.destroy();
+                    return;
+                }
+                worker.send({'evt':'c_init',data: (Buffer.isBuffer(packet[0]) ? Buffer.concat(packet) : Buffer.alloc(0)), namespace: dir, originPath: dir, mode}, handle,{keepOpen:false});
                 setTimeout(function () {
-                    mc.socket._handle = null; // node v14.16.1 //ERR_INVALID_ARG_TYPE
+
+                    NSLog.log("debug", "onread_rtmp_param setTimeout", )
                     self.rejectClientException(handle, "CON_VERIFIED");
-                    handle.close(close_callback);
-                    handle = null;
+                    mc.socket.destroy();
+                    // mc.socket._handle = null;
                 }, sendWaitClose);
-            });
-        });
+            }.bind(this));
+        }.bind(this));
         mc.on("close", function () {
-            NSLog.log("debug", "close");
+            NSLog.log("debug", "FMS parse connect is closed");
+            close_callback.apply(handle);
         });
         const tmp = new net.Socket({
             handle: handle
@@ -604,6 +640,7 @@ AppDelegate.prototype.createServer = function (opt) {
     }
     /** handle dealloc ref **/
     function handleRelease(handle){
+        if (handle == null) return;
         handle.readStop();
         handle.onread = noop;
 
