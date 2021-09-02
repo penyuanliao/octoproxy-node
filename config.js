@@ -83,7 +83,7 @@ if (config.env == 'development') {
         /* 處理視訊lb */
         videoEnabled:true,
         httpEnabled:true,
-        vPrefix: 'edge_',
+        vPrefix: '',
         rtmpFrontendEnabled: false
     };
 } else {
@@ -109,7 +109,7 @@ if (config.env == 'development') {
         /* 處理視訊lb */
         videoEnabled:false,
         httpEnabled:false,
-        vPrefix: 'edge_',
+        vPrefix: '',
         rtmpFrontendEnabled: false
     };
 

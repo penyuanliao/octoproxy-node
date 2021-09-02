@@ -409,14 +409,23 @@ AppDelegate.prototype.createServer = function (opt) {
             if (mode == "http") {
                 // const httpUrl = require("url").parse(general[1]);
                 const URL = require("url").URL;
-                console.log(new URL("http://127.0.0.1" + general[1]));
+                // console.log(new URL("http://127.0.0.1" + general[1]));
                 const params = {f5: general[1], host: host};
                 NSLog.log('debug','socket is http connection', params);
 
-                const tokencode = self.gameLBSrv.getLoadBalancePath(url_args, params, function (action, json) {
-                    namespace = json.path;
+                if (url_args.gametype || url_args.stream) {
+                    const tokencode = self.gameLBSrv.getLoadBalancePath(url_args, params, function (action, json) {
+                        namespace = json.path;
+                        clusterEndpoint(namespace, source, originPath, mode);
+                    });
+                } else {
+                    namespace = self.gameLBSrv.urlParse({
+                        path: general[1],
+                        host: host,
+                        vPrefix: cfg.gamSLB.vPrefix
+                    });
                     clusterEndpoint(namespace, source, originPath, mode);
-                });
+                }
                 return;
             }
             //const chk_assign = cfg.gamSLB.assign.split(",").indexOf(namespace);
