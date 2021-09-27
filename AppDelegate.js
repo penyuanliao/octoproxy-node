@@ -333,11 +333,13 @@ AppDelegate.prototype.createServer = function (opt) {
             }
 
         }
+        let mAppid = false;
         /** TODO 2016/10/06 -- ADMIN DEMO **/
-        if (headers["sec-websocket-protocol"] == "admin") {
+        if (headers["sec-websocket-protocol"] == "admin" ||
+            ((self.mgmtSrv["getSignature"] instanceof Function) && (mAppid = self.mgmtSrv["getSignature"](headers["appid"])))) {
             var cluster = self.clusters["inind"] || self.clusters["administrator"];
             cluster = cluster[0];
-            cluster.send({'evt':'c_init2',data:source}, handle,{keepOpen:false});
+            cluster.send({'evt':'c_init2',data:source, mode: (mAppid ? 'http': 'ws')}, handle,{keepOpen:false});
             setTimeout(function () {
                 self.rejectClientException(handle, "CON_VERIFIED");
                 handle.close(close_callback);
@@ -345,7 +347,7 @@ AppDelegate.prototype.createServer = function (opt) {
             }, sendWaitClose);
             return;
         }
-        if (namespace.indexOf(cfg["heartbeat_namespace"]) != -1) {
+        if ((namespace || "").indexOf(cfg["heartbeat_namespace"]) != -1) {
             let heartbeatRes = "";
             if (mode === "socket" ) {
                 heartbeatRes = JSON.stringify({status: "ok" , hostname: hostname});
@@ -722,7 +724,7 @@ AppDelegate.prototype.createTLSServer = function (opt) {
     const self = this;
     const options = {};
     const listenOpt = {};
-    if (!opt || !opt.certFile || !opt.certFile) {
+    if (!opt || !opt.keyFile || !opt.certFile) {
         NSLog.log("error", "Not found cert file.");
         return false;
     }
@@ -733,6 +735,23 @@ AppDelegate.prototype.createTLSServer = function (opt) {
     if (opt.certFile) options.cert = fs.readFileSync(opt.certFile);
 
     const tlsServer = tls.createServer(options, function onTlsIncoming(tlsSocket) {
+        NSLog.log("info", "TLS Inbound %s, %s:%s", tlsSocket.remoteFamily, tlsSocket.remoteAddress, tlsSocket.remotePort);
+        tlsSocket.pause();
+        const sock = new net.Socket();
+        sock.connect(80, "127.0.0.1", () => {
+            sock.pipe(tlsSocket);
+            tlsSocket.pipe(sock);
+        });
+        sock.once("close", () => {
+           if (!tlsSocket.destroyed) tlsSocket.destroy();
+        });
+        tlsSocket.once("close", () => {
+            sock.unpipe(tlsSocket);
+            tlsSocket.unpipe(sock);
+            if (!sock.destroyed) sock.destroy();
+        });
+
+
 
     });
     tlsServer.listen(listenOpt, function () {
