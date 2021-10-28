@@ -239,7 +239,7 @@ AppDelegate.prototype.createServer = function (opt) {
         // NSLog.log('debug',"reload request header and assign, nread:", nread);
         var nread, buffer;
         if (version >= 12) {
-            buffer = Buffer.from(arguments[0]);
+            buffer = (arguments[0] ? Buffer.from(arguments[0]) : Buffer.alloc(0));
             nread = streamBaseState[kReadBytesOrError];
         } else {
             nread = arguments[0];
@@ -286,11 +286,11 @@ AppDelegate.prototype.createServer = function (opt) {
             }
         }
 
-        var headers = pheaders.onReadTCPParser(buffer);
+        let headers = pheaders.onReadTCPParser(buffer);
         /** @property {Buffer} */
-        var source = headers.source;
-        var general = headers.general;
-        var isBrowser = (typeof general != 'undefined');
+        let source = headers.source;
+        let general = headers.general;
+        let isBrowser = (typeof general != 'undefined');
         var mode = "";
         var namespace = undefined;
         if (typeof headers["x-forwarded-for"] != "undefined") handle.getSockInfos.xff = headers["x-forwarded-for"];
@@ -307,6 +307,15 @@ AppDelegate.prototype.createServer = function (opt) {
             mode = general[0].match('HTTP/') != null ? "http" : mode;
             mode = headers.iswebsocket  ? "ws" : mode;
             namespace = general[1];
+
+            if (general[2] == "OPTIONS") {
+                tcp_write(handle, self.corsOptions(headers));
+                handle.close(close_callback);
+                handleRelease(handle);
+                handle = null;
+                return;
+            }
+
         }else
         {
             mode = "socket";
@@ -1074,7 +1083,7 @@ AppDelegate.prototype.reLoadManagement = function () {
     mgmt = require('./lib/mgmt.js');
     this.management();
 };
-//socket hot reload
+//socket hot reload0
 AppDelegate.prototype.duringWarp = function (message, handle) {
     const self = this;
     const assign = String(message.goto);
@@ -1096,6 +1105,19 @@ AppDelegate.prototype.duringWarp = function (message, handle) {
 AppDelegate.prototype.addClusterDialog = function (cluster) {
     console.log(cluster.name, cluster._modulePath, cluster.uptime);
 };
+AppDelegate.prototype.corsOptions = function (headers) {
+    let corsPolicy = [
+        'HTTP/1.1 200 OK',
+        'Access-Control-Allow-Origin: *',
+        'Access-Control-Allow-Credentials: true',
+        'Access-Control-Allow-Method: ' + headers['access-control-request-method'],
+        'Access-Control-Allow-Headers: ' + headers['access-control-request-headers'],
+        'Connection: Close'
+    ].join("\r\n");
+    corsPolicy += '\r\n\r\n';
+    return corsPolicy;
+};
+
 module.exports = exports = AppDelegate;
 
 
