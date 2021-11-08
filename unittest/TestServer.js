@@ -5,6 +5,7 @@ const EventEmitter   = require("events");
 const OctoPlugins    = require("../lib/OctoPlugins.js");
 const WSClient       = require("fxNetSocket").wsClient;
 
+
 util.inherits(TestServer, EventEmitter);
 function TestServer() {
     EventEmitter.call(this);
@@ -28,6 +29,7 @@ TestServer.prototype.createServer = function (options) {
         const options = {
             zlibDeflatedEnabled: true,
             baseVersion: WSClient.Versions.v2,
+            baseEvtShow: false,
             // binaryType: "arraybuffer",
             // binary: true
         };
@@ -85,4 +87,52 @@ TestServer.prototype.getInfo = function () {
 }
 module.exports = exports = TestServer;
 
-const main = new TestServer();
+const {Worker, isMainThread, parentPort, workerData, MessageChannel, MessagePort} = require("worker_threads");
+if (isMainThread) {
+    const main = new TestServer();
+    const sab = new SharedArrayBuffer(1024);
+    const worker = new Worker("./unittest/TestServer.js");
+    worker.on("message", function (str) {
+        console.log('message', str);
+        const int8Arr = new Int8Array(sab);
+        console.log(`${int8Arr[0]}`);
+        if (str == "ok") worker.postMessage({
+            act: "ok"
+        });
+    });
+    worker.on("exit", function () {
+        console.log(arguments);
+    });
+    worker.postMessage({
+        act: "buf",
+        sab: sab
+    });
+
+} else {
+
+    // const { parse } = require('some-js-parsing-library');
+    const { parentPort } = require('worker_threads');
+    const script = workerData;
+    parentPort.on("message", function (json) {
+        if (json.act == "buf") {
+            const int8Arr = new Int8Array(json.sab);
+            const stores = Buffer.alloc(1024);
+            stores.write("Hello");
+            stores.forEach(function (value, index, array) {
+                int8Arr[index] = value;
+            });
+            parentPort.postMessage("ok");
+        } else {
+            console.log('ok');
+        }
+    });
+    console.log('isNotMainThread');
+    setInterval(function () {
+
+    }, 1000);
+    process.on("message", function (data) {
+        console.log(data);
+    });
+}
+
+

@@ -127,6 +127,12 @@ if (process.env.Policy == "pipe2") {
 //todo define the balance
 config.balance = 'leastconn';//roundrobin
 
+config.tlsOptions = {
+    keyFile: '',
+    certFile: '',
+    enabled: false
+};
+
 /**
  * Application parameters
  * @param -p port

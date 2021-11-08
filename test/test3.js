@@ -34,13 +34,18 @@ NSLog.configure({
     /** file show times **/
     fileDateHide: true,
     initClear: true,
+
+    elasticOptions: {
+        extensions: elastic
+    },
     maximumFileSize: 50000});
 
-const message = NSLog.entry(
-    "debug", {
+const message = NSLog.entry("debug", {
         code: 10010101,
-        messgae: "helloword"
+        message: "helloword22",
+        status: "124",
+        byebye: "yes",
     }
 );
-// console.log(typeof message);
-elastic.bulk(message);
+console.log(typeof message);
+// console.log(elastic.bulk(message));

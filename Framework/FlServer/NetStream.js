@@ -257,6 +257,7 @@ NetStream.prototype.setup = function () {
         handshakeHandle = undefined;
         socket = undefined;
     });
+    socket.on("error", this.emit.bind(this, "error"));
 };
 /** Duplicate the live service stream **/
 NetStream.prototype.onConnection = function () {
@@ -270,7 +271,6 @@ NetStream.prototype.onConnection = function () {
 
     this.socket.on("error", function onError(err) {
         NSLog.log("error", "Socket.Error() # %s %s", err.code, err.message);
-        self.emit("error", err);
         if (err.code === "ENETUNREACH") {
 
         }

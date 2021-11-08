@@ -7,7 +7,7 @@
 ```
 //
 ```
-Web Publishing Component : WPC 
+Website Publishing Component : WPC 
 WPC Logging Port : 10081
 WPC HTTP Port : 10083
 ```

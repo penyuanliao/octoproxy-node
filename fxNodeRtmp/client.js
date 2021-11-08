@@ -526,6 +526,29 @@ RTMPClient.prototype.sendInvoke = function(commandName, transactionId, commandOb
 
     this.sendPacket(0x03, RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE, amfData);
 };
+
+RTMPClient.prototype.sendInvoke2 = function (commandName, transactionId, commandObj, arr_args) {
+    //command name名稱
+    var s1 = new AMF.AMFSerialiser(commandName);
+    //streamid 1 - fms通道
+    var s2 = new AMF.AMFSerialiser(transactionId);
+    var args = [commandObj];
+    var count = 0;
+    while (count < arr_args.length) {
+        args.push(arr_args[count++]);
+    }
+    NSLog.log("info","fmsCall:", args);
+    var body = amfUtils.amf0Encode(args);
+    var buf = Buffer.alloc(s1.byteLength + s2.byteLength).fill(0x0);
+    s1.write(buf.slice(0,s1.byteLength));
+    s2.write(buf.slice(s1.byteLength,s1.byteLength + s2.byteLength));
+    buf = Buffer.concat([buf, body]);
+    if (this)
+        this.sendPacket(0x03, RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE, buf);
+
+    return transactionId;
+};
+
 RTMPClient.prototype.sendInvokeMessage = function(commandName, transactionId, commandObj, invokeArguments) {
     // TODO: create RTMPInvoke class to parse and/or handle this (that inherits from a general RTMPPacket class)
     var commandNameSerialiser = new AMF.AMFSerialiser(commandName);
@@ -550,6 +573,7 @@ RTMPClient.prototype.sendInvokeMessage = function(commandName, transactionId, co
 
     this.sendPacket(0x14, RTMPMessage.RTMP_MESSAGE_TYPE_INVOKE, amfData);
 };
+
 RTMPClient.prototype.fmsCall = function (commandName, arg) {
     var transId = this.transId++;
     //command name名稱
@@ -561,7 +585,7 @@ RTMPClient.prototype.fmsCall = function (commandName, arg) {
     while (count < arguments.length) {
         args.push(arguments[count++]);
     }
-    NSLog.log("info","fmsCall:",args);
+    NSLog.log("info","fmsCall:", arguments , args);
     var body = amfUtils.amf0Encode(args);
     var buf = Buffer.alloc(s1.byteLength + s2.byteLength).fill(0x0);
     s1.write(buf.slice(0,s1.byteLength));
@@ -693,7 +717,7 @@ RTMPClient.prototype.setChunkSize = function (size) {
 RTMPClient.prototype.sendPacket = function(channel, messageType, data) {
     //TODO: Check if given a RTMPPacket object that specifies channel, messageType, data inside the object (e.g. RTMPInvoke)
 
-    // If we aren't handshaken, then defer sending until we have
+    // If we aren't handshake, then defer sending until we have
     if (!this.handshake || this.handshake.state != RTMPHandshake.STATE_HANDSHAKE_DONE) {
         this.on('connect', (function(){ // TODO: test this works correctly and does not end up with undefined parameters
             NSLog.log('error','!!!!!!! then defer sending until we have !!!!!!');
