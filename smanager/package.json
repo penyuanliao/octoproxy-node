@@ -1,0 +1,18 @@
+{
+  "name": "smanager",
+  "version": "1.0.0",
+  "description": "",
+  "main": "IManager.js",
+  "scripts": {
+    "test": "echo \\\"Error: no ../test specified\\\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "commander": "^8.2.0",
+    "prettyjson": "^1.2.1",
+    "progress": "^2.0.3",
+    "systeminformation": "^5.8.9"
+  }
+}
