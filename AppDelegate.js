@@ -902,21 +902,21 @@ AppDelegate.prototype.setupCluster = function (opt) {
  * url_param: config assign 區分
  * roundrobin: 輪詢規則不管伺服器使用者數量
  * leastconn: 檢查伺服器數量平均使用者
- * @param namespace
+ * @param {Object|String} namespace
  * @param cb callback
  * @returns {undefined}
  */
 AppDelegate.prototype.assign = function (namespace, cb) {
     let cluster = undefined;
-    let path;
+    let url_path;
+    let subname = "";
     if (typeof namespace == "string") {
-        path = namespace.split("/");
-        if (path[2]) {
-            namespace = path[1];
-        } else {
-            namespace = path[1];
-            if (typeof namespace == 'undefined') namespace = path[0];
+        url_path = namespace || "";
+        if (url_path[0] === "\/") {
+            namespace = url_path.substr(1);
         }
+        let split = url_path.split("/");
+        subname = split[1] || split[0];
     } else if (typeof arguments[0] == "object") {
         const args = arguments[0];
         namespace = args.dir;
@@ -928,7 +928,8 @@ AppDelegate.prototype.assign = function (namespace, cb) {
 
     }
     else if (cfg.balance === "roundrobin") {
-
+        let isExist = (typeof this.clusters[namespace] !== 'undefined');
+        if (isExist == false) namespace = subname;
         if(typeof this.clusters[namespace] == 'undefined') {
             if (cb) cb(undefined);
             return;
@@ -944,7 +945,10 @@ AppDelegate.prototype.assign = function (namespace, cb) {
     else if (cfg.balance === "leastconn") { //Each server with the lowest number of connections
         var clusterName = namespace;
         var group = this.clusters[clusterName];
-        // todo more namespace
+        if ((typeof group == "undefined")) {
+            clusterName = subname;
+            group = this.clusters[clusterName];
+        }
         if (typeof group == "undefined") {
 
             for (var more in this.clusters) {
