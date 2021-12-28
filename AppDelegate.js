@@ -316,7 +316,7 @@ AppDelegate.prototype.createServer = function (opt) {
                 return;
             }
 
-        }else
+        } else
         {
             mode = "socket";
             namespace = buffer.toString('utf8');
@@ -907,7 +907,6 @@ AppDelegate.prototype.setupCluster = function (opt) {
  * @returns {undefined}
  */
 AppDelegate.prototype.assign = function (namespace, cb) {
-    let cluster = undefined;
     let url_path;
     let subname = "";
     if (typeof namespace == "string") {
@@ -922,72 +921,72 @@ AppDelegate.prototype.assign = function (namespace, cb) {
         namespace = args.dir;
 
     }
-    // NSLog.log('log',"assign::namespace:", namespace);
+
+    let clusterName = namespace;
+    let group = this.clusters[clusterName];
+    if ((typeof group == "undefined")) {
+        clusterName = subname;
+        group = this.clusters[clusterName];
+    }
+    if (typeof group == "undefined") {
+        clusterName = this.findAssignRules({namespace: clusterName, subname});
+        group = this.clusters[clusterName];
+    }
+
+    if (!group || typeof group == 'undefined') {
+        // console.error('Error not found Cluster server');
+        NSLog.log('error','leastconn not found Cluster server');
+        if (cb) cb(undefined);
+        return;
+    }
+
     // url_param
     if (cfg.balance === "url_param") {
 
-    }
-    else if (cfg.balance === "roundrobin") {
-        let isExist = (typeof this.clusters[namespace] !== 'undefined');
-        if (isExist == false) namespace = subname;
-        if(typeof this.clusters[namespace] == 'undefined') {
-            if (cb) cb(undefined);
-            return;
-        }
-
-        cluster = this.clusters[namespace][this.roundrobinNum[namespace]++];
-
-        if (this.roundrobinNum[namespace] >= this.clusters[namespace].length) this.roundrobinNum[namespace] = 0;
-
-        if (cb) cb(cluster);
-
-    }
-    else if (cfg.balance === "leastconn") { //Each server with the lowest number of connections
-        var clusterName = namespace;
-        var group = this.clusters[clusterName];
-        if ((typeof group == "undefined")) {
-            clusterName = subname;
-            group = this.clusters[clusterName];
-        }
-        if (typeof group == "undefined") {
-
-            for (var more in this.clusters) {
-                var chk_assign = more.split(",").indexOf(namespace);
-                // console.log(more,chk_assign);
-                if (chk_assign != -1) {
-                    clusterName = more;
-                    break;
-                }
-            }
-            group = this.clusters[clusterName];
-        }
-
-        if (!group || typeof group == 'undefined') {
-            // console.error('Error not found Cluster server');
-            NSLog.log('error','leastconn not found Cluster server');
-            if (cb) cb(undefined);
-            return;
-        }
-        var stremNum = group.length;
-
-        cluster = group[0];
-
-        for (var n = 0; n < stremNum; n++) {
-            //檢查最小連線數
-            var _nextCluster = this.clusters[clusterName][n].nodeInfo.connections;
-            var priority     = cluster.nodeInfo.connections > _nextCluster;
-            // var isRefusing   = _nextCluster._dontDisconnect;
-            if (priority){
-                cluster = this.clusters[clusterName][n];
-            }
-        }
-        if (cb) cb(cluster);
+    } else if (cfg.balance === "roundrobin") {
+        this.roundrobin({namespace: clusterName, group: group}, cb);
+    } else if (cfg.balance === "leastconn") { //Each server with the lowest number of connections
+        this.leastconn({namespace: clusterName, group: group}, cb);
     } else
     {
         // console.error('Error not found Cluster server');
         NSLog.log('error','Not found Cluster server');
         if (cb) cb(undefined);
     }
+};
+AppDelegate.prototype.asyncAssign = function (namespace) {
+    return new Promise((resolve, reject) => {
+        this.assign(namespace, () => resolve);
+    });
+};
+AppDelegate.prototype.findAssignRules = function ({namespace, subname}) {
+    for (let str in this.clusters) {
+        if (!this.clusters.hasOwnProperty(str)) continue;
+        let assignRules = new Set(str.split(","));
+        if (assignRules.has(namespace) || assignRules.has(subname)) {
+            return str;
+        }
+    }
+    return undefined;
+};
+AppDelegate.prototype.roundrobin = function ({namespace, group}, cb) {
+    let cluster = group[this.roundrobinNum[namespace]++];
+
+    if (this.roundrobinNum[namespace] >= group.length) {
+        this.roundrobinNum[namespace] = 0;
+    }
+    if (cb) cb(cluster);
+};
+AppDelegate.prototype.leastconn = function ({namespace, group}, cb) {
+    let num = group.length;
+    let cluster = group[0];
+    for (let n = 0; n < num; n++) {
+        //檢查最小連線數
+        let { connections } = group[n].nodeInfo.connections;
+        let isPriority = (cluster.nodeInfo.connections > connections);
+        if (isPriority) cluster = group[n];
+    }
+    if (cb) cb(cluster);
 };
 AppDelegate.prototype.createTelegramBot = function (opt, proxy) {
     this.tgBot = TelegramBot.getInstance();
@@ -1077,8 +1076,10 @@ AppDelegate.prototype.__defineSetter__("lockState", function (state) {
  * //not implement//
  */
 AppDelegate.prototype.management = function () {
-    this.mgmtSrv = new mgmt(this, cfg, cfg.managePort || 8100);
+    // this.mgmtSrv = new mgmt(this, cfg, cfg.managePort || 8100);
     NSLog.log('debug', '** Setup management service port:%s **', cfg.managePort);
+    const IManager = require('./smanager/IManager.js');
+    this.mgmtSrv = IManager.createManager(this);
 
 };
 AppDelegate.prototype.reLoadManagement = function () {
