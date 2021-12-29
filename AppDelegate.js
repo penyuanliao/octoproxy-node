@@ -929,7 +929,7 @@ AppDelegate.prototype.assign = function (namespace, cb) {
         group = this.clusters[clusterName];
     }
     if (typeof group == "undefined") {
-        clusterName = this.findAssignRules({namespace: clusterName, subname});
+        clusterName = this.findAssignRules({namespace, subname});
         group = this.clusters[clusterName];
     }
 
