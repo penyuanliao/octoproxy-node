@@ -4,7 +4,6 @@ const util          = require("util");
 const fs            = require("fs");
 const editor        = require('../lib/AssignEdittor.js');
 const AMFConfigPath = "../configuration/AMFConfig.json";
-const {daemon}      = require('fxNetSocket');
 const NSLog         = require('fxNetSocket').logger.getInstance();
 
 const GAME_LB_NAME_ASSIGN = "casino_game_rule";
@@ -13,7 +12,6 @@ const GAME_LB_NAME = "loadBalance";
 const ManagerEvents2 = new Set([
     "mutexServiceLock",
     "setRecordEnabled",
-    "readBlockIPs",
     "updatePodDevInfo",
     "applyJoin",
 ]);
@@ -123,7 +121,7 @@ IHandler.prototype.setLogLevel2 = function (params, client, callback) {
     }
 }
 /**
- *
+ * 增加子程序
  * @param params
  * @param client
  * @param callback
@@ -135,118 +133,37 @@ IHandler.prototype.addCluster = function (params, client, callback) {
         mxoss,
         options
     } = params;
-    let option = {
-        lookout: (options.lookout || true),
-        gc: (options.gc || false),
-        compact: (options.compact || false),
-        inspect: (options.inspect || false),
-        v8Flags: options.v8Flags,
-        cmd: options.cmd,
-        file: file,
-        args: options.args,
-        clone: (options.clone || false)
-    };
-    const name = assign;
+    options.file = file;
+    options.assign = assign;
+    options.mxoss = mxoss;
+    let {clone} = options;
+    const endpoint = this.delegate.delegate;
+    let index = endpoint.clusterNum++;
+
+    const child = endpoint.createChild(endpoint, {index, params: options});
+
+    const {name} = child;
+
     const group = this.delegate.getClusters(name);
-    let env = process.env;
-    let pkg = false;
-    let lookout = true;
-    let cmd = false;
-    let opt = option;
-    let clone = option.clone;
-    let args = opt.args;
-    if (!IHandler._verifyArgs(file, "string") || !IHandler._verifyArgs(name, "string")) {
-        if (callback) callback({result: false});
-        return false;
-    }
-    if (isNaN(parseInt(mxoss))) mxoss = 2048;
-    if (file.indexOf(".js") == -1) pkg = true;
-    let execArgv = ["--nouse-idle-notification", "--max-old-space-size=" + mxoss];
-    let cmdLine = [name];
-    if (typeof opt != "undefined") {
-        if (opt.gc == true) execArgv.push("--expose-gc");
-        if (opt.compact == true) execArgv.push("--always-compact");
-        if (opt.inspect == true) execArgv.push("--inspect");
-        if (typeof opt["v8Flags"] != "undefined") {
-            const flags = opt["v8Flags"];
-            if (Array.isArray(flags)) {
-                for (var f = 0; f < flags.length; f++) {
-                    execArgv.push(flags[f]);
-                }
-            } else if (typeof flags == "string") {
-                execArgv.push(flags);
-            }
-        }
-        if (opt.lookout == false) lookout = false;
-        if (opt.cmd != false) cmd = opt.cmd;
-        if (opt.file.indexOf(".js") == -1) pkg = true;
-        if (pkg) execArgv = []; // octoProxy pkg versions
-        if (typeof opt.args == "string") {
-            args = opt.args.replace(/\s+/g, "");
-            cmdLine = cmdLine.concat(args.split(","));
-        } else if (Array.isArray(opt.args) && opt.args.length > 0) {
-            args = opt.args.join(",").replace(/\s+/g, "");
-            cmdLine = cmdLine.concat(args.split(","));
-        }
-    } else {
-        opt = {};
-        execArgv.push("--always-compact");
-    }
-    const daemonOptions = {
-        env: env,
-        silent: false,
-        execArgv: execArgv,
-        //心跳系統
-        lookoutEnabled: lookout,
-        pkgFile: pkg,
-        cmd: cmd
-    };
-    let server = this.delegate;
-    env.NODE_CDID = String(++server.clusterNum);
-    if (opt.env) IHandler.setEnvironmentVariables(env, opt.env);
-    if (Boolean(process.env.pkg_compiler) == true) daemonOptions.execArgv = []; // octoProxy pkg versions
-    const cluster = new daemon(file, cmdLine, daemonOptions);
-    cluster.name = name;
-    cluster.mxoss = mxoss;
-    cluster.ats = (typeof opt.ats == "boolean") ? opt.ats : false;
-    cluster.optConf = opt;
+
     if (!group) {
-        this.delegate.setCluster(name, cluster);
+        this.delegate.setCluster(name, child);
     }
-    cluster.init();
-
-
-
-    cluster.emitter.on('warp_handle', function (message, handle) {
-        server.duringWarp(message, handle);
-    });
-
-    cluster.emitter.on("onIpcMessage", function (message) {
-        this.delegate.onIpcMessage(message);
-    }.bind(this));
-
-    cluster.emitter.on('restart', function () {
-        this.delegate.refreshClusterParams(cluster);
-    }.bind(this));
 
     if (this.syncAssignFile && clone != true) {
-        this.updateAssign({
-            file,
-            assign: assign,
-            mxoss: parseInt(mxoss),
-            args: args,
-            cmd: cmd,
-            lookout: lookout,
-            ats: cluster.ats,
-            recycleExpired: parseInt(options.recycleExpired || 0)
-        });
+        this.updateAssign(child.optConf);
     }
 
     if (callback) callback({
         result: true
     });
 };
-
+/**
+ * 刪除子程序
+ * @param params
+ * @param client
+ * @param callback
+ */
 IHandler.prototype.killCluster = function (params, client, callback) {
     const clusters = this.delegate.getClusters();
     const pid = parseInt(params.pid);
@@ -278,10 +195,15 @@ IHandler.prototype.killCluster = function (params, client, callback) {
     }
     if (callback) callback({result});
 };
-
+/**
+ * 修改子程序
+ * @param params
+ * @param client
+ * @param callback
+ */
 IHandler.prototype.editCluster = function (params, client, callback) {
     let {oldName, newName, mxoss, options} = params;
-    const oGroup = this.delegate.getClusters(oldName);
+    const oGroup = this.delegate.getClusters(oldName) || [];
     if (!oGroup) {
         if (callback) callback({result: false});
         return false;
@@ -299,8 +221,7 @@ IHandler.prototype.editCluster = function (params, client, callback) {
     } else {
         nGroup = oGroup;
     }
-
-    while (oGroup.length > 0){
+    while (oGroup.length > 0) {
         var cluster = oGroup.shift();
         cluster.name = newName;
         if (typeof mxoss == "undefined") mxoss = cluster.mxoss;
@@ -570,12 +491,19 @@ IHandler.prototype.reloadMgmt = function ({pid}, client, callback) {
         return true;
     }
 };
+/**
+ * income使用者IPAddress紀錄
+ * @param enabled 開關
+ * @param client
+ * @param callback
+ */
 IHandler.prototype.setRecordEnabled = function ({enabled}, client, callback) {
     if (typeof enabled == "undefined") enabled = false;
     if (typeof this.delegate != "undefined") {
         if (this.delegate) {
-            if (this.delegate.delegate) {
-                this.delegate.recordEnabled = enabled;
+            const endpoint = this.delegate.delegate;
+            if (endpoint) {
+                endpoint.recordEnabled = enabled;
                 if (callback) callback({result: true});
             }
         }
@@ -750,7 +678,7 @@ IHandler.prototype.saveFileContents = function ({filename, data}, client, callba
         }
     }
 
-}
+};
 IHandler.prototype.readFile = function (filepath, defObj) {
     let data;
     try {

@@ -8,8 +8,6 @@
  */
 const version       = Number(process.versions.node.split(".")[0]);
 const util          = require('util');
-const debug         = require('debug')('rtmp:LiveMaster');
-debug.log           = console.log.bind(console); //file log 需要下這行
 const fxNetSocket   = require('fxNetSocket');
 const parser        = fxNetSocket.parser;
 const pheaders      = parser.headers;
@@ -32,10 +30,11 @@ const tls           = require('tls');
 const evt           = require('events');
 const cfg           = require('./config.js');
 const gLBSrv        = require('./lib/gameLBSrv.js');
-var   mgmt          = require('./lib/mgmt.js');
 const Dashboard     = require("./lib/Dashboard.js");
 const TelegramBot   = require("./lib/FxTelegramBot.js");
 const hostname      = require('os').hostname();
+const IHandler      = require('./smanager/IHandler.js');
+
 NSLog.configure({
     logFileEnabled:true,
     consoleEnabled:true,
@@ -350,6 +349,8 @@ AppDelegate.prototype.createServer = function (opt) {
             cluster = cluster[0];
             cluster.send({'evt':'c_init2',data:source, mode: (mAppid ? 'http': 'ws')}, handle,{keepOpen:false});
             setTimeout(function () {
+                handle.getSockInfos.path  = `${cluster.name}`;
+                handle.getSockInfos.mode  = (mAppid ? 'http': 'ws');
                 self.rejectClientException(handle, "CON_VERIFIED");
                 handle.close(close_callback);
                 handleRelease(handle);
@@ -801,101 +802,167 @@ AppDelegate.prototype.reboot = function () {
  */
 AppDelegate.prototype.setupCluster = function (opt) {
     if (typeof opt === 'undefined') {
-        opt = { 'cluster': [0] };
+        opt = { 'cluster': [] };
     }
-    const self = this;
     const num = Number(opt.cluster.length);
-    let env = process.env;
-    let assign, mxoss, execArgv, args;
-    let lookout = true;
-    let heartbeat = true;
-    let pkg = false;
-    let cmd = false;
-    if (num != 0) { //
-        for (var i = 0; i < num; i++) {
-            env = JSON.parse(JSON.stringify(process.env));
-            lookout = true;
-            heartbeat = true;
-            pkg = false;
-            // file , fork.settings, args
-            mxoss = opt.cluster[i].mxoss || 2048;
-            assign = utilities.trimAny(opt.cluster[i].assign);
-            env.NODE_CDID = i;
-            if (Array.isArray(opt.cluster[i].env)) {
-               mgmt.setEnvironmentVariables(env, opt.cluster[i].env);
-            }
-            execArgv = ["--nouse-idle-notification", "--max-old-space-size=" + mxoss];
-            if (opt.cluster[i].gc == true) execArgv.push("--expose-gc");
-            if (opt.cluster[i].compact == true) execArgv.push("--always-compact");
-            if (opt.cluster[i].inspect == true) execArgv.push("--inspect");
-            if (typeof opt.cluster[i].v8Flags != "undefined") {
-                const flags = opt.cluster[i].v8Flags;
-                if (Array.isArray(flags)) {
-                    for (var f = 0; f < flags.length; f++) {
-                        execArgv.push(flags[f]);
-                    }
-                } else if (typeof flags == "string") {
-                    execArgv.push(flags);
-                }
-            }
-            if (opt.cluster[i].lookout == false) lookout = false;
-            if (opt.cluster[i].heartbeat == false) heartbeat = false;
-            if (opt.cluster[i].cmd != false) cmd = opt.cluster[i].cmd;
-            if (opt.cluster[i].file.indexOf(".js") == -1) pkg = true;
-            if (pkg) execArgv = []; // octoProxy pkg versions
-            //var cluster = proc.fork(opt.cluster,{silent:false}, {env:env});
-            var cmdLine = [assign];
-            if (typeof opt.cluster[i].args == "string") {
-                args = utilities.trimAny(opt.cluster[i].args);
-                cmdLine = cmdLine.concat(args.split(","));
-            } else if (Array.isArray(opt.cluster[i].args) && opt.cluster[i].args.length > 0) {
-                args = utilities.trimAny(opt.cluster[i].args.join(","));
-                cmdLine = cmdLine.concat(args.split(","));
-            }
-            const daemonOptions = {
-                env: env,
-                silent: false,
-                execArgv: execArgv,
-                //心跳系統
-                lookoutEnabled: lookout,
-                heartbeatEnabled: heartbeat,
-                pkgFile: pkg,
-                cmd: cmd
-            };
-            const cluster = new daemon(opt.cluster[i].file, cmdLine, daemonOptions);
-            cluster.name = assign;
-            cluster.mxoss = mxoss;
-            cluster.ats = (typeof opt.cluster[i].ats == "boolean") ? opt.cluster[i].ats : false;
-            cluster.optConf = opt.cluster[i];
-            if (!this.clusters[cluster.name]) {
-                this.clusters[cluster.name] = [];
-                this.roundrobinNum[cluster.name] = 0;
-            }
-            cluster.init();
-
-            this.clusters[cluster.name].push(cluster);
-
-            cluster.emitter.on('warp_handle', function (message, handle) {
-                self.duringWarp(message, handle);
-            });
-            cluster.emitter.on("onIpcMessage", function (message) {
-                self.mgmtSrv.onIpcMessage(message);
-            });
-            cluster.emitter.on('status', function (message) {
-                NSLog.log('warning', message);
-            });
-            cluster.emitter.on('unexpected', function (err) {
-                NSLog.log('warning', "unexpected:", err.name);
-                self.tgBotTemplate("-1001314121392", "shutdown", [err.name]);
-            });
-            cluster.emitter.on('restart', function () {
-
-                self.mgmtSrv.refreshClusterParams(cluster);
-            });
+    if (num != 0) {
+        let child;
+        let params;
+        for (var index = 0; index < num; index++) {
+            params = opt.cluster[index];
+            child = this.createChild(this, {index, params});
+            this.addChild(child);
         }
         NSLog.log('info',"Cluster active number:", num);
         this.clusterNum = num;
     }
+};
+AppDelegate.prototype.addChild = function (child) {
+    const {name} = child;
+    if (!this.clusters[name]) {
+        this.clusters[name] = [];
+        this.roundrobinNum[name] = 0;
+    }
+    this.clusters[name].push(child);
+};
+/**
+ * @typedef {Object} ChildProperties 參數
+ * @property {String} file 服務程序檔案
+ * @property {String} assign 服務程序名稱
+ * @property {Number} mxoss 記憶體使用量
+ * @property {Array} [args] commands 參數$2,$3 e.g. $file, $assign, $args1, $args2
+ * @property {Boolean} [lookout=true] 子服務檢查是否回應開關
+ * @property {Boolean} [heartbeat=true] 心跳機制(info跟lookout)
+ * @property {Boolean} [ats] 記憶體超過回收機制開關
+ * @property {Number} [recycleExpired] 清除回收後到期時間
+ * @property {Boolean} [pkg] node打包執行檔模式
+ * @property {Boolean} [gc] 手動gc
+ * @property {Boolean} [compact] v8 args
+ * @property {Boolean} [inspect] v8 args
+ * @property {Array} [env] 自訂環境變數
+ * @property {Array|String} [v8Flags] v8Flags
+
+ * @property {String} cmd 執行檔
+ */
+/**
+ *
+ * @param {Object} endpoint
+ * @param {Number} index
+ * @param {Object} params
+ * @return {daemon}
+ */
+AppDelegate.prototype.createChild = function (endpoint, {index, params}) {
+    let options = AppDelegate.createChildProperties(params);
+    let env = JSON.parse(JSON.stringify(process.env)); //環境變數
+    env.NODE_CDID = String(index);
+    if (options.env) IHandler.setEnvironmentVariables(env, options.env);
+    let execArgv = []; // octoProxy pkg versions
+    if (options.pkg != true) {
+        if (options.gc) execArgv.push('--expose-gc');
+        if (options.compact) execArgv.push('--always-compact');
+        if (options.inspect) execArgv.push('--inspect');
+        if (options.inspect) execArgv.push('--expose-gc');
+        if (typeof options.v8Flags != "undefined") {
+            const flags = options.v8Flags;
+            if (Array.isArray(flags)) {
+                execArgv = execArgv.concat(flags);
+            } else if (typeof flags == "string") {
+                execArgv.push(flags);
+            }
+        }
+    }
+    let cmdLine = [options.assign].concat(options.args);
+    let daemonOptions = {
+        env,
+        silent: false,
+        execArgv,
+        //心跳系統
+        lookoutEnabled: options.lookout,
+        heartbeatEnabled: options.heartbeat,
+        pkgFile: options.pkg,
+        cmd: options.cmd
+    };
+    let {file, assign, mxoss, ats} = options;
+    const child = new daemon(file, cmdLine, daemonOptions);
+    child.name = assign;
+    child.mxoss = mxoss;
+    child.ats = ats;
+    child.optConf = options; //複製程序使用
+    child.init();
+    child.emitter.on('warp_handle', (message, handle) => endpoint.duringWarp(message, handle));
+    child.emitter.on('onIpcMessage', (message) => endpoint.mgmtSrv.onIpcMessage(message));
+    child.emitter.on('status', (message) => NSLog.log('warning', message));
+    child.emitter.on('unexpected', function (err) {
+        NSLog.log('warning', "unexpected:", err.name);
+        endpoint.tgBotTemplate("-1001314121392", "shutdown", [err.name]);
+    });
+    child.emitter.on('restart', function () {
+        endpoint.mgmtSrv.refreshClusterParams(child);
+    });
+
+    return child;
+};
+/**
+ * @param {ChildProperties} params;
+ * @return {Object}
+ */
+AppDelegate.createChildProperties = function (params) {
+    const {
+        mxoss,
+        file,
+        assign,
+        args,
+        lookout,
+        ats,
+        recycleExpired,
+        pkg,
+        cmd,
+        heartbeat,
+        env,
+        compact,
+        inspect,
+        v8Flags
+    } = params;
+    /** @typedef {ChildProperties} */
+    let options = {
+        file,
+        pkg: false,
+        ats: false
+    };
+    options.assign    = utilities.trimAny(assign);
+    options.mxoss     = mxoss || 2048;
+    if (typeof lookout == "boolean") {
+        options.lookout = lookout;
+    } else {
+        options.lookout = true;
+    }
+    if (typeof heartbeat == "boolean") {
+        options.heartbeat = heartbeat;
+    }
+    else {
+        options.heartbeat = true;
+    }
+
+    if (file.indexOf(".js") == -1) options.pkg = true;
+    if (typeof pkg == "boolean") options.pkg = pkg;
+    if (typeof args == "string") {
+        options.args = utilities.trimAny(args).split(",");
+    } else if (Array.isArray(args) && args.length > 0) {
+        options.args = args.map((value) => utilities.trimAny(value.toString()));
+    }
+    if (typeof recycleExpired != "undefined") options.recycleExpired = recycleExpired;
+    if (typeof ats == "boolean") options.ats = ats;
+    if (typeof cmd != "undefined") {
+        options.cmd = cmd;
+    } else {
+        options.cmd = false;
+    }
+    if (Array.isArray(env)) options.env = env;
+    if (typeof compact == "boolean") options.compact = compact;
+    if (typeof inspect == "boolean") options.inspect = inspect;
+    if (typeof v8Flags != "undefined") options.v8Flags = v8Flags;
+
+    return options;
 };
 /**
  * 分流處理
@@ -1076,16 +1143,19 @@ AppDelegate.prototype.__defineSetter__("lockState", function (state) {
  * //not implement//
  */
 AppDelegate.prototype.management = function () {
-    // this.mgmtSrv = new mgmt(this, cfg, cfg.managePort || 8100);
     NSLog.log('debug', '** Setup management service port:%s **', cfg.managePort);
     const IManager = require('./smanager/IManager.js');
     this.mgmtSrv = IManager.createManager(this);
+    // this.manager.nodesInfo.on('refresh', (element) => {
+    // console.log('refresh', element.length);
+    // this.manager.coreInfo.getPID(element); //更新系統資訊
+    // })
+    // this.manager.coreInfo.start(); //開始系統資訊
 
 };
 AppDelegate.prototype.reLoadManagement = function () {
     this.mgmtSrv.close();
-    delete require.cache[require.resolve('./lib/mgmt.js')];
-    mgmt = require('./lib/mgmt.js');
+    delete require.cache[require.resolve('./smanager/IManager.js')];
     this.management();
 };
 //socket hot reload0

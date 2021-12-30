@@ -47,7 +47,7 @@ IManager.prototype.setupHandler = function () {
     const handler = new IHandler(this);
     handler.on('refresh', () => {
         this.nodesInfo.refresh();
-    })
+    });
     return handler;
 };
 /**
@@ -242,14 +242,18 @@ IManager.prototype.release = function () {
 IManager.prototype.sendIPCMessage = function (cluster, params, callback) {
     if (typeof this.ipcToken != "number") this.ipcToken = 0;
     if (!this.callbackFunc) this.callbackFunc = {};
-    params.id = "/" + this.ipcToken++;
-    cluster.send({'evt':'ipcMessage', params:params});
-    this.callbackFunc[params.id] = {
+    let data = {
+        id: "/" + this.ipcToken++,
+        params: params
+    }
+    console.log(`sendIPCMessage`);
+    cluster.send({'evt':'ipcMessage', params:data});
+    this.callbackFunc[data.id] = {
         cb: callback,
         ts: setTimeout(() => {
             if (callback) callback(false)
-            this.callbackFunc[params.id] = null;
-            delete this.callbackFunc[params.id];
+            this.callbackFunc[data.id] = null;
+            delete this.callbackFunc[data.id];
         }, 10000)
     };
 }
@@ -262,6 +266,11 @@ IManager.prototype.onIpcMessage = function (message) {
         if (cb) cb(true);
     }
 };
+/**
+ * 修改程序參數
+ * @param cluster
+ * @return {boolean}
+ */
 IManager.prototype.refreshClusterParams = function (cluster) {
     if (typeof cluster == "undefined") return false;
     const index = cluster._options.env.NODE_CDID;
@@ -322,7 +331,12 @@ IManager.prototype.outOfRangeMemLimit = function (assign) {
     }
     return false;
 };
-/** 複製一個一樣程序然後另個等待回收 **/
+/**
+ * 複製一個一樣程序然後另個等待回收
+ * @param {string} assign 服務程序名稱
+ * @param {number} pid 服務程序PID
+ * @return {boolean}
+ */
 IManager.prototype.cloneCluster = function ({assign, pid}) {
     const manager = this;
     const group = manager.getClusters(assign);

@@ -124,7 +124,18 @@ class RestManager extends EventEmitter {
             });
             res.send(src);
             return next();
-        })
+        });
+        server.post('/process/user/kickout', async (req, res, next) => {
+            let {pid, trash, params} = req.body || {};
+            let src = await this.delegate.manager.send({
+                method: "kickoutToPID",
+                pid: pid,
+                trash: (trash == true),
+                params: params
+            });
+            res.send(src);
+            return next();
+        });
         return server;
     }
 }
@@ -136,7 +147,7 @@ class RestManager extends EventEmitter {
  * @param authorization.credentials
  */
 RestManager.prototype.verifyAuth = async function (authorization) {
-    console.log(authorization.credentials);
+    console.log(`authorization.credentials: ${authorization.credentials}`);
     console.log("jwtVerify: ",await this.delegate.auth.jwtVerify(authorization.credentials));
     return 0;
 }

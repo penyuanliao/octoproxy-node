@@ -171,6 +171,12 @@ APIServer.prototype.systemMessage = function ({evt, data, mode}, handle) {
             }
         };
         process.send(replyObj);
+    }
+    else if (evt == 'ipcMessage') {
+        NSLog.log("info", "ipcMessage()", arguments[0]);
+        process.send({
+            evt: 'ipcMessage'
+        })
     } else {
         NSLog.log("info",'out of hand. dismiss message [%s]', evt);
     }

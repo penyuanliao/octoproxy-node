@@ -113,11 +113,11 @@ Auth.prototype.jwtVerify = function (token) {
         jwt.verify(token, 'sidonia', (err, decoded) => {
 
             if (err) {
-                console.log(err.message);
+                // console.log(err.message);
                 resolve({result: false, error: err.message});
             }
             else {
-                console.log(decoded);
+                // console.log(decoded);
                 resolve({result: true, data: decoded});
             }
         });
