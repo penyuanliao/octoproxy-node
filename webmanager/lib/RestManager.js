@@ -136,6 +136,30 @@ class RestManager extends EventEmitter {
             res.send(src);
             return next();
         });
+        server.get('/service/dashboard/info', async (req, res, next) => {
+            let src = await this.delegate.manager.send({
+                method: "getDashboardInfo"
+            })
+            if (src.result) {
+                res.send(src);
+            } else {
+                res.send({result: false});
+            }
+            return next();
+        });
+        server.post('/service/lockdown/mode', async (req, res, next) => {
+            let json = req.body || {};
+            let src = await this.delegate.manager.send({
+                method: "lockdownMode",
+                bool: json.bool
+            })
+            if (src.result) {
+                res.send(src);
+            } else {
+                res.send({result: false});
+            }
+            return next();
+        });
         return server;
     }
 }

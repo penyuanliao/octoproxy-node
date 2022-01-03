@@ -84,16 +84,16 @@ function AppDelegate() {
     this.garbageDump     = []; //回收記憶體太大的
     /** [roundrobin] Client go to sub-service index **/
     this.roundrobinNum   = [];
-    /** The lockState not allows user to connect service **/
-    this._lockState      = false;
+    /** The lockdown not allows user to connect service **/
+    this._lockdown       = false;
     /** casino load balance **/
     this.gameLBSrv       = new gLBSrv(cfg.gamSLB, this);
     this.mgmtSrv         = undefined;
     /** record visitor remote address **/
     this.recordDashboard = new Dashboard(Dashboard.loadFile("./historyLog/Dashboard.json"));
     this.recordEnabled   = true;
-
-    NSLog.log('info','LockState:[%s]', this._lockState);
+    this.setupProps();
+    NSLog.log('info','lockdown:[%s]', this._lockdown);
     NSLog.log('debug', "** Initialize octoproxy.js **");
     NSLog.log("debug", " > Frontend support listens for RTMP/TCP requests to enabled: [%s]", cfg.gamSLB.rtmpFrontendEnabled);
     this.init();
@@ -102,7 +102,6 @@ function AppDelegate() {
  * 初始化
  * **/
 AppDelegate.prototype.init = function () {
-
     utilities.autoReleaseGC(); //** 手動 1 sec gc
     NSLog.log('info' , 'Game server load balance enabled: [%s]', cfg.gamSLB.enabled);
     if (cfg.gamSLB.enabled) {
@@ -110,15 +109,13 @@ AppDelegate.prototype.init = function () {
         this.gameLBSrv.init_daemon();
     }
 
-    this.lockState = cfg["forkOptions"]["lockState"];
-
     // 1. setup child process fork
     this.setupCluster(cfg.forkOptions);
     // 2. create listen 80 port server
 
     var self = this;
     var count = 10;
-    if (cfg["env"] == "development") {
+    if (cfg.env == "development") {
         NSLog.log('info', 'Ready to start create server.');
         self.server = self.createServer(cfg.srvOptions);
     }else {
@@ -179,12 +176,6 @@ AppDelegate.prototype.createServer = function (opt) {
             // user address, port
             var out = {};
             handle.getSockInfos = out;
-
-            if (self._lockState === true) {
-                self.rejectClientException(handle ,"CON_LOCK_CONNECT");
-                handle.close(close_callback);
-                return;
-            }
 
             if (err) {
                 NSLog.log('error', util._errnoException(err, 'accept'));
@@ -295,7 +286,7 @@ AppDelegate.prototype.createServer = function (opt) {
         if (typeof headers["x-forwarded-for"] != "undefined") handle.getSockInfos.xff = headers["x-forwarded-for"];
         else handle.getSockInfos.xff = null;
         const host = (typeof handle.getSockInfos.xff != "undefined" && handle.getSockInfos.xff != null) ? handle.getSockInfos.xff: handle.getSockInfos.address;
-        if (self.mgmtSrv.blockIPsEnabled && self.mgmtSrv.checkedIPDeny(host)) {
+        if (self.mgmtSrv.checkedIPDeny(host)) {
             self.rejectClientException(handle, "CON_DENY_CONNECT");
             handle.close(close_callback);
             handleRelease(handle);
@@ -387,6 +378,11 @@ AppDelegate.prototype.createServer = function (opt) {
             handle.getSockInfos.mode  = mode;
         }
 
+        if (self._lockdown === true) {
+            self.rejectClientException(handle ,"CON_LOCK_CONNECT");
+            handle.close(close_callback);
+            return;
+        }
         /** TODO 2016/08/09 -- URL regex argument **/
         namespace = namespace.replace(/\/\w+\//i,'/'); //filter F5 load balance Rule
         const originPath = namespace;
@@ -685,7 +681,7 @@ AppDelegate.prototype.createServer = function (opt) {
                 message = "Reject the currently connecting client.";
             }
 
-            if (self.recordEnabled && self._lockState === false) self.recordDashboard.record(this.getSockInfos);
+            if (self.recordEnabled && self._lockdown === false) self.recordDashboard.record(this.getSockInfos);
 
             if (TRACE_SOCKET_IO) {
                 var now = new Date();
@@ -863,8 +859,11 @@ AppDelegate.prototype.createChild = function (endpoint, {index, params}) {
         if (options.inspect) execArgv.push('--inspect');
         if (options.inspect) execArgv.push('--expose-gc');
         if (typeof options.v8Flags != "undefined") {
-            const flags = options.v8Flags;
+            let flags = options.v8Flags;
             if (Array.isArray(flags)) {
+                flags = flags.filter((value) => {
+                    return (typeof value != "undefined" && value != "" && value != null);
+                });
                 execArgv = execArgv.concat(flags);
             } else if (typeof flags == "string") {
                 execArgv.push(flags);
@@ -1129,14 +1128,28 @@ AppDelegate.prototype.BindingProcEvent = function () {
 };
 AppDelegate.prototype.__defineSetter__("lockState", function (state) {
    if (typeof state == "undefined") {
-        this._lockState = false;
+        this._lockdown = false;
    } else if (typeof state == "boolean") {
-       this._lockState = state;
+       this._lockdown = state;
    } else {
-        this._lockState = false;
+        this._lockdown = false;
    }
 });
-
+AppDelegate.prototype.setupProps = function () {
+    Object.defineProperty(this, "lockdown", {
+        get() {
+            return this._lockdown;
+        },
+        set(bool) {
+            console.log(`app.lockdown: ${bool}`);
+            if (typeof bool === "boolean") {
+                this._lockdown = bool;
+            }
+        },
+        enumerable:false,
+        configurable:false
+    })
+}
 /**
  * clusters attribute
  * + clusters[key][0]

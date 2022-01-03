@@ -87,8 +87,26 @@ APIServer.prototype.release = function () {
 APIServer.prototype.setupIPCBridge = function () {
     NSLog.log("debug"," - Setup IPC bridge connection.");
     process.on("SIGQUIT", () => {
-        NSLog.log("debug", "IPC channel exit -1");
+        NSLog.log("debug", "SIGQUIT");
         process.exit(-1);
+    });
+    process.on('SIGINT', async () => {
+        NSLog.log("debug", "SIGINT - Gracefully Shutdown start");
+        const todo = await new Promise((resolve, reject) => {
+            this.emit("gracefully-shutdown", resolve, reject);
+            setTimeout(() => {
+                reject({result: false, error: "timeout"});
+            }, 60000);
+        }).catch((failure) => {
+            console.log(failure);
+        });
+        if (todo) {
+            if (todo.result === true) {
+                process.exit(2);
+            }
+        } else {
+            console.log(todo);
+        }
     });
     process.on("disconnect", () => {
         NSLog.log("debug", "sends a QUIT signal (SIGQUIT)");
@@ -128,6 +146,7 @@ APIServer.prototype.makeSureComplete = function () {
  * octo系統事件
  * @param {String} evt octo系統事件
  * @param {String} action 管理服務事件
+ * @param {String} id
  * @param {Object} data 事件參數
  * @param {String} [data.data] 數據
  * @param {Object} [data.params] 系統參數
@@ -135,7 +154,7 @@ APIServer.prototype.makeSureComplete = function () {
  * @param {('http'|'ws')} mode
  * @param {*} handle
  */
-APIServer.prototype.systemMessage = function ({evt, data, mode}, handle) {
+APIServer.prototype.systemMessage = function ({evt, id, data, mode}, handle) {
 
     let server;
     if (mode === 'http') {
@@ -174,18 +193,35 @@ APIServer.prototype.systemMessage = function ({evt, data, mode}, handle) {
     }
     else if (evt == 'ipcMessage') {
         NSLog.log("info", "ipcMessage()", arguments[0]);
+
+        process.kill(process.pid, "SIGINT");
+
         process.send({
-            evt: 'ipcMessage'
-        })
+            evt: 'onIpcMessage',
+            id: id,
+            result: true
+        });
+
     } else {
         NSLog.log("info",'out of hand. dismiss message [%s]', evt);
     }
 };
 /**
- * mgt服務事件
- * @param data
+ * 自訂服務事件
+ * @param {String} evt 事件
+ * @param {Object} params 參數
  */
-APIServer.prototype.serviceMessage = function (data) {
+APIServer.prototype.serviceMessage = function ({evt, params}) {
 
-}
+};
+/**
+ * 重啟服務程序
+ * @param {Function} done
+ * @param {Function} reject
+ * @return {Promise}
+ */
+APIServer.prototype.shutdown = async function (done, reject) {
+    NSLog.log("info",`shutdown`);
+    done({result: true})
+};
 module.exports = exports = APIServer;

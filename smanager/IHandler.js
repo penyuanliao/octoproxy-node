@@ -4,13 +4,13 @@ const util          = require("util");
 const fs            = require("fs");
 const editor        = require('../lib/AssignEdittor.js');
 const AMFConfigPath = "../configuration/AMFConfig.json";
+const DashboardPath = "./historyLog/Dashboard.json";
 const NSLog         = require('fxNetSocket').logger.getInstance();
 
 const GAME_LB_NAME_ASSIGN = "casino_game_rule";
 const GAME_LB_NAME = "loadBalance";
 
 const ManagerEvents2 = new Set([
-    "mutexServiceLock",
     "setRecordEnabled",
     "updatePodDevInfo",
     "applyJoin",
@@ -37,7 +37,9 @@ const ManagerEvents = new Set([
     "readConfigFile",
     "readFileContents",
     "saveFileContents",
-    "readBlockIPs"
+    "readBlockIPs",
+    "getDashboardInfo",
+    "lockdownMode"
 ]);
 /**
  *
@@ -257,7 +259,7 @@ IHandler.prototype.editCluster = function (params, client, callback) {
  * @return {boolean}
  */
 IHandler.prototype.restartCluster = function (params, client, callback) {
-    console.log('restartCluster', params);
+    NSLog.log("info",'restartCluster', params);
     if (params.name == GAME_LB_NAME_ASSIGN) {
         return this.restartBalancer(params, client, callback);
     }
@@ -534,7 +536,61 @@ IHandler.prototype.setIPFilter = function ({ip, state, endTime, count, log}, cli
 IHandler.prototype.getIPFilter = function (params, client, callback) {
     const data = editor.getIPFilter.apply(this);
     if (callback) callback({result: true, data});
-}
+};
+/**
+ * 讀取dashboard資訊
+ * @param params
+ * @param client
+ * @param callback
+ * @return {Promise<void>}
+ */
+IHandler.prototype.getDashboardInfo = async function (params, client, callback) {
+    const pathname = this.delegate.getPath(DashboardPath);
+    NSLog.log("debug", "getDashboardInfo()", pathname);
+    let data = await this.readFile(pathname, {});
+    if (callback) {
+        callback({data, result: true});
+    }
+};
+/**
+ * 關閉服務模式
+ * @param params
+ * @param client
+ * @param callback
+ * @return {Promise<void>}
+ */
+IHandler.prototype.lockdownMode = async function (params, client, callback) {
+    let bool = params.bool;
+    let result = true;
+    const endpoint = this.delegate.delegate;
+    console.log(`bool`, params);
+    if (!bool) {
+        result = false;
+    } else {
+
+        if (endpoint.lockdown && bool === false) {
+            endpoint.lockdown = false;
+        } else if (endpoint.lockdown === false && bool === true) {
+            endpoint.lockdown = true;
+        } else {
+            result = false;
+        }
+    }
+    NSLog.log("info", `lockdownMode() result: ${result} lockdown: ${endpoint.lockdown}`);
+    if (callback) {
+        callback({result});
+    }
+};
+/**
+ * 緊急模式
+ * @param params
+ * @param client
+ * @param callback
+ */
+IHandler.prototype.emergencyMode = function (params, client, callback) {
+    
+};
+
 /**
  * 讀取 Load Balancer 設定檔案
  * @return {Object}
@@ -643,7 +699,12 @@ IHandler.prototype.ipcMessage = function ({params, pid}, client, callback) {
         if (callback) callback({result: false});
     }
 };
-
+/**
+ * 讀檔案
+ * @param {String} filename
+ * @param {Object} client
+ * @param {Function} callback
+ */
 IHandler.prototype.readFileContents = function ({filename}, client, callback) {
     const filepath = util.format("../configuration/%s", filename);
     let res = false;

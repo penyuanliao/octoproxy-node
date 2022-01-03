@@ -8,15 +8,16 @@ const sqlite3      = require('sqlite3').verbose();
  * @constructor
  */
 class ManagerDB extends EventEmitter {
-    constructor() {
+    constructor(filepath) {
         super();
         this.syntax = new Syntax();
-        this.db = this.setup();
+        this.db = this.setup(filepath);
     }
 }
 
-ManagerDB.prototype.setup = function () {
-    const db = new sqlite3.Database('./manager.db');
+ManagerDB.prototype.setup = function (filepath) {
+    if (!filepath) filepath = ".";
+    const db = new sqlite3.Database(`${filepath}/manager.db`);
     db.serialize(() => {
         db.run(this.syntax.createTableAccount());
     });

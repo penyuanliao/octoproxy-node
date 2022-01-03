@@ -6,7 +6,12 @@
  */
 function config() {
 }
+
+/** @type {{}} */
 config.appConfig = appParames();
+/**
+ * @property {Object} env
+ */
 config.env = process.env.NODE_ENV;
 config.pkg_compiler = (typeof process.versions.pkg != "undefined" && typeof process.pkg != "undefined");
 process.env.pkg_compiler = config.pkg_compiler;

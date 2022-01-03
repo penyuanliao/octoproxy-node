@@ -126,8 +126,33 @@ APIClient.prototype.getSysInfo = async function (json) {
     };
     this.write(respond);
 }
-APIClient.prototype.getSysLog = async function (json) {
-
+APIClient.prototype.getDashboardInfo = async function (json) {
+    const manager = this.manager;
+    let params = {
+        method: "getDashboardInfo"
+    };
+    const {result, data} = await manager.send(params);
+    let respond = {
+        tokenId: json.tokenId,
+        event: "getDashboardInfo",
+        result,
+        data: data
+    };
+    this.write(respond);
+};
+APIClient.prototype.lockdownMode = async function (json) {
+    const manager = this.manager;
+    let params = {
+        method: "lockdownMode",
+        bool: json.bool
+    };
+    const {result} = await manager.send(params);
+    let respond = {
+        tokenId: json.tokenId,
+        event: "lockdownMode",
+        result
+    };
+    this.write(respond);
 };
 APIClient.prototype.liveLog = async function (json) {
     console.log(json);

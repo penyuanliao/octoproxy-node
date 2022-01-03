@@ -17,6 +17,8 @@ NSLog.configure({
     maximumFileSize: 1024 * 1024 * 100});
 
 (function main() {
+    NSLog.log("info",`main start()`);
     const APIServer = require('./lib/APIServer.js');
-    this.app = new APIServer();
+    const app = new APIServer();
+    app.on('gracefully-shutdown', (done, reject) => app.shutdown(done, reject));
 })();

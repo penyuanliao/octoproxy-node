@@ -1,4 +1,5 @@
 "use strict";
+const xPath         = require("path");
 const net           = require("net");
 const util          = require("util");
 const fs            = require("fs");
@@ -203,6 +204,7 @@ IManager.prototype.getCPU = function (pid) {
 }
 IManager.prototype.setup = function () {
     Object.defineProperties(this, {
+        /** 阻擋IP */
         blockIPsEnabled: {
             get:function () {
                 if (typeof this.blockIPs != "undefined" && typeof this.blockIPs.enabled == "boolean") {
@@ -243,11 +245,12 @@ IManager.prototype.sendIPCMessage = function (cluster, params, callback) {
     if (typeof this.ipcToken != "number") this.ipcToken = 0;
     if (!this.callbackFunc) this.callbackFunc = {};
     let data = {
+        evt: 'ipcMessage',
         id: "/" + this.ipcToken++,
-        params: params
+        data: params
     }
     console.log(`sendIPCMessage`);
-    cluster.send({'evt':'ipcMessage', params:data});
+    cluster.send(data);
     this.callbackFunc[data.id] = {
         cb: callback,
         ts: setTimeout(() => {
@@ -258,6 +261,7 @@ IManager.prototype.sendIPCMessage = function (cluster, params, callback) {
     };
 }
 IManager.prototype.onIpcMessage = function (message) {
+    console.log(`onIpcMessage`, message);
     if (!this.callbackFunc) this.callbackFunc = {};
     if (typeof this.callbackFunc[message.id] != "undefined") {
         const cb = this.callbackFunc[message.id].cb;
@@ -379,6 +383,7 @@ IManager.prototype.cloneCluster = function ({assign, pid}) {
 };
 /** 統計ip **/
 IManager.prototype.checkedIPDeny = function (ip) {
+    if (!this.blockIPsEnabled) return true;
     //Denying the connection.
     if (typeof ip != "string") return false;
     // console.log(this.blockIPs["deny"]);
@@ -447,5 +452,7 @@ IManager.createManager = function (delegate) {
     // this.manager.coreInfo.start(); //開始系統資訊
     return manager;
 };
-
+IManager.prototype.getPath = function (pathname) {
+    return xPath.resolve(process.cwd(), pathname);
+};
 module.exports = exports = IManager;
