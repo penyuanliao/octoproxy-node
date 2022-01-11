@@ -10,11 +10,6 @@ const NSLog         = require('fxNetSocket').logger.getInstance();
 const GAME_LB_NAME_ASSIGN = "casino_game_rule";
 const GAME_LB_NAME = "loadBalance";
 
-const ManagerEvents2 = new Set([
-    "setRecordEnabled",
-    "updatePodDevInfo",
-    "applyJoin",
-]);
 const ManagerEvents = new Set([
     "test",
     "getAMFConfig",
@@ -50,6 +45,11 @@ class IHandler extends events {
         super();
         this.delegate = delegate;
         this.syncAssignFile = true;
+    }
+    get endpoint() {
+        if (!this.delegate) return false;
+        if (!this.delegate.delegate) return false;
+        return this.delegate.delegate;
     }
 }
 
@@ -562,19 +562,11 @@ IHandler.prototype.getDashboardInfo = async function (params, client, callback) 
 IHandler.prototype.lockdownMode = async function (params, client, callback) {
     let bool = params.bool;
     let result = true;
-    const endpoint = this.delegate.delegate;
-    console.log(`bool`, params);
-    if (!bool) {
+    const endpoint = this.endpoint;
+    if (typeof bool != "boolean" || endpoint == false) {
         result = false;
     } else {
-
-        if (endpoint.lockdown && bool === false) {
-            endpoint.lockdown = false;
-        } else if (endpoint.lockdown === false && bool === true) {
-            endpoint.lockdown = true;
-        } else {
-            result = false;
-        }
+        endpoint.lockdown = bool;
     }
     NSLog.log("info", `lockdownMode() result: ${result} lockdown: ${endpoint.lockdown}`);
     if (callback) {

@@ -387,10 +387,15 @@ AppDelegate.prototype.createServer = function (opt) {
         namespace = namespace.replace(/\/\w+\//i,'/'); //filter F5 load balance Rule
         const originPath = namespace;
         var args = utilities.parseUrl(namespace); //url arguments
+        /**
+         * @typedef {Object} url_args
+         * @property {String} [gametype]
+         * @property {String} [stream]
+         */
+        var url_args = {};
         if (args) {
             namespace = args[0];
             var ns_len = args.length;
-            var url_args = {};
             for (var i = 1; i < ns_len; i++) {
                 var str = args[i].toString().replace(/(\?|\&)+/g,"");
                 var keyValue = str.split("=");
@@ -421,7 +426,7 @@ AppDelegate.prototype.createServer = function (opt) {
                 const params = {f5: general[1], host: host};
                 NSLog.log('debug','socket is http connection', params);
 
-                if (url_args.gametype || url_args.stream) {
+                if (url_args && (url_args.gametype || url_args.stream)) {
                     const tokencode = self.gameLBSrv.getLoadBalancePath(url_args, params, function (action, json) {
                         namespace = json.path;
                         clusterEndpoint(namespace, source, originPath, mode);

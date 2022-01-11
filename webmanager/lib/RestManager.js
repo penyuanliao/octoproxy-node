@@ -125,7 +125,7 @@ class RestManager extends EventEmitter {
             res.send(src);
             return next();
         });
-        server.post('/process/user/kickout', async (req, res, next) => {
+        server.del('/process/user/kickout', async (req, res, next) => {
             let {pid, trash, params} = req.body || {};
             let src = await this.delegate.manager.send({
                 method: "kickoutToPID",

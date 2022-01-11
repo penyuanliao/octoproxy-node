@@ -17,21 +17,22 @@ class APIServer extends EventEmitter {
     constructor() {
         super();
         // this.createHTTPServer({listen:false, port: 8000});
-        this.auth = new Auth();
-        this.wsServer = this.createTCPServer({port: 8002});
-        this.restManager = this.createRestServer({listen: true, port:8001});
-        this.manager = new RemoteClient(); //連線到服務窗口
-        this.logServer = this.createLiveLogServer(10080);
+        this.isWorker = (process.send instanceof Function);
         this.setup();
-        this.setupIPCBridge();
-        this.makeSureComplete();
     }
 }
 
 APIServer.prototype.setup = function () {
+    this.auth = new Auth();
+    this.wsServer = this.createTCPServer({listen: !this.isWorker, port: 8002});
+    this.restManager = this.createRestServer({listen: !this.isWorker, port:8001});
+    this.manager = new RemoteClient(); //連線到服務窗口
+    this.logServer = this.createLiveLogServer(10080);
+    if (this.isWorker) this.setupIPCBridge();
+    this.makeSureComplete();
 };
 
-APIServer.prototype.createTCPServer = function ({port}) {
+APIServer.prototype.createTCPServer = function ({port, listen}) {
 
     const server = net.createServer();
     server.on("connection", this.onConnection.bind(this));
@@ -45,7 +46,7 @@ APIServer.prototype.createTCPServer = function ({port}) {
     server.on('error', function (err) {
         console.log("error",'Error occurred:', err.message);
     });
-    server.listen(port);
+    if (listen) server.listen(port);
     return server;
 };
 APIServer.prototype.createHTTPServer = function ({listen, port}) {

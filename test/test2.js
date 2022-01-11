@@ -10,7 +10,7 @@ const NSLog   = fxNetSocket.logger.getInstance();
 
 NSLog.configure({
     /* File for record */
-    logFileEnabled:true,
+    logFileEnabled:false,
     /* console log */
     consoleEnabled:true,
     /* quiet, error, warning, info, debug, trace, log */
@@ -56,6 +56,9 @@ function create() {
     return server;
 }
 var srv = create();
+setInterval((element) => {
+
+}, 1000)
 process.on('message', function (data, handle) {
 
     var json = data;
