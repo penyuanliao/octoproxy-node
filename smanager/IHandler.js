@@ -260,7 +260,8 @@ IHandler.prototype.editCluster = function (params, client, callback) {
  */
 IHandler.prototype.restartCluster = function (params, client, callback) {
     NSLog.log("info",'restartCluster', params);
-    if (params.name == GAME_LB_NAME_ASSIGN) {
+    const {name, gracefully} = params;
+    if (name == GAME_LB_NAME_ASSIGN) {
         return this.restartBalancer(params, client, callback);
     }
     let data = [];
@@ -268,16 +269,29 @@ IHandler.prototype.restartCluster = function (params, client, callback) {
     if (typeof pid == "number") {
         let cluster = this.delegate.findCluster(pid, params.name);
         if (cluster) {
-            cluster.restart();
+            //gracefully
+            if (gracefully) {
+                NSLog.log('info', "Admin User do restartCluster(gracefully);", pid);
+                process.kill(pid, 'SIGINT');
+            } else {
+                cluster.restart();
+                NSLog.log('info', "Admin User do restartCluster(kill);", pid);
+            }
+
             data.push(pid);
-            NSLog.log('info', "Admin User do restartCluster();", pid);
+
         }
     } else {
         let group = this.delegate.getClusters(params.name);
         if (Array.isArray(group)) {
             for (let cluster of group) {
-                NSLog.log('info', "*** Admin User do restartCluster();", cluster._cpfpid);
-                cluster.restart();
+                if (gracefully) {
+                    NSLog.log('info', "*** Admin User do restartCluster(gracefully);", cluster._cpfpid);
+                    process.kill(cluster._cpfpid, 'SIGINT');
+                } else {
+                    NSLog.log('info', "*** Admin User do restartCluster();", cluster._cpfpid);
+                    cluster.restart();
+                }
             }
         }
     }

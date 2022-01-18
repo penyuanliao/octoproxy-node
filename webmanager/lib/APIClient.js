@@ -247,7 +247,8 @@ APIClient.prototype.restartCluster = async function (json) {
     let params = {
         method: "restartCluster",
         pid: data.pid,
-        name: data.name
+        name: data.name,
+        gracefully: data.gracefully
     };
     const {result} = await manager.send(params);
     let respond = {

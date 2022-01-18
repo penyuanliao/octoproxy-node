@@ -334,11 +334,10 @@ AppDelegate.prototype.createServer = function (opt) {
         }
         let mAppid = false;
         /** TODO 2016/10/06 -- ADMIN DEMO **/
-        if (headers["sec-websocket-protocol"] == "admin" ||
+        if (headers["sec-websocket-protocol"] == "admin" || headers["sec-websocket-protocol"] == "log" ||
             ((self.mgmtSrv["getSignature"] instanceof Function) && (mAppid = self.mgmtSrv["getSignature"](headers["appid"])))) {
-            var cluster = self.clusters["inind"] || self.clusters["administrator"];
-            cluster = cluster[0];
-            cluster.send({'evt':'c_init2',data:source, mode: (mAppid ? 'http': 'ws')}, handle,{keepOpen:false});
+            const [cluster] = (self.clusters["inind"] || self.clusters["administrator"] || []);
+            if (cluster) cluster.send({'evt':'c_init2',data:source, mode: (mAppid ? 'http': 'ws')}, handle,{keepOpen:false});
             setTimeout(function () {
                 handle.getSockInfos.path  = `${cluster.name}`;
                 handle.getSockInfos.mode  = (mAppid ? 'http': 'ws');
