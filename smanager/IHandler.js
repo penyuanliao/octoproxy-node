@@ -37,7 +37,7 @@ const ManagerEvents = new Set([
     "lockdownMode"
 ]);
 /**
- *
+ * 控制端事件
  * @constructor
  */
 class IHandler extends events {
@@ -148,7 +148,7 @@ IHandler.prototype.addCluster = function (params, client, callback) {
 
     const group = this.delegate.getClusters(name);
 
-    if (!group) {
+    if (group) {
         this.delegate.setCluster(name, child);
     }
 
@@ -156,9 +156,7 @@ IHandler.prototype.addCluster = function (params, client, callback) {
         this.updateAssign(child.optConf);
     }
 
-    if (callback) callback({
-        result: true
-    });
+    if (callback) callback({result: true});
 };
 /**
  * 刪除子程序
