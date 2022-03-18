@@ -80,7 +80,8 @@ function AppDelegate() {
     this.server          = undefined;
     this.clusterNum      = 0;
     this.clusters        = {};
-    this.clustersDialog  = {};
+    this.clusterMap      = new WeakMap();
+    this.ruleTable       = new Map();
     this.garbageDump     = []; //回收記憶體太大的
     /** [roundrobin] Client go to sub-service index **/
     this.roundrobinNum   = [];
@@ -524,7 +525,6 @@ AppDelegate.prototype.createServer = function (opt) {
             function clusterEndpoint(lastnamspace, chgSource, originPath, mode) {
 
                 self.assign(lastnamspace, function (worker) {
-
                     if (typeof chgSource != 'undefined') {
                         source = chgSource;
                     }
@@ -538,7 +538,7 @@ AppDelegate.prototype.createServer = function (opt) {
                             NSLog.log('trace','!!!! close();');
                             handle = null;
 
-                        }else{
+                        } else {
                             NSLog.log('trace','1. Socket goto %s(*)', lastnamspace);
                             worker[0].send({'evt':'c_init',data:source, namespace:lastnamspace, originPath:originPath, mode}, handle,{keepOpen:false});
                             setTimeout(function () {
@@ -549,8 +549,8 @@ AppDelegate.prototype.createServer = function (opt) {
                             }, sendWaitClose);
                         }
 
-                    }else{
-
+                    } else {
+                        handle.getSockInfos.lbPath = `octo_bl(${worker.name})`;
                         // don't disconnect
                         if (worker._dontDisconnect == true) {
                             self.rejectClientException(handle, "CON_DONT_CONNECT");
@@ -559,8 +559,7 @@ AppDelegate.prototype.createServer = function (opt) {
                             handle = null;
                             return;
                         }
-
-                        NSLog.log('trace','2. Socket goto %s', lastnamspace);
+                        NSLog.log("trace", `OctoBalancer ${lastnamspace} -> ${worker.name}`);
                         setTimeout(function () {
                             self.rejectClientException(handle, "CON_VERIFIED");
                             handle.close(close_callback);
@@ -817,6 +816,10 @@ AppDelegate.prototype.setupCluster = function (opt) {
         this.clusterNum = num;
     }
 };
+/**
+ * 新增子程序
+ * @param child
+ */
 AppDelegate.prototype.addChild = function (child) {
     const {name} = child;
     if (!this.clusters[name]) {
@@ -824,6 +827,32 @@ AppDelegate.prototype.addChild = function (child) {
         this.roundrobinNum[name] = 0;
     }
     this.clusters[name].push(child);
+    const rules = new Set([...name.split(","), ...child.rules]);
+    if (this.clusterMap.has(child)) {
+        this.rmRuleTable(child, this.clusterMap.get(child));
+    }
+    for (let namespace of rules.values()) {
+        this.ruleTable.set(namespace, child);
+    }
+    this.clusterMap.set(child, rules);
+};
+/**
+ * 移除規則
+ * @param child
+ * @param rules
+ */
+AppDelegate.prototype.rmRuleTable = function (child, rules) {
+    for (let namespace of rules.values()) {
+        this.ruleTable.delete(namespace);
+    }
+};
+/**
+ * 取得子程序
+ * @param name
+ * @return {*}
+ */
+AppDelegate.prototype.getChild = function (name) {
+    return this.clusters[name];
 };
 /**
  * @typedef {Object} ChildProperties 參數
@@ -874,7 +903,6 @@ AppDelegate.prototype.createChild = function (endpoint, {index, params}) {
             }
         }
     }
-    let cmdLine = [options.assign].concat(options.args);
     let daemonOptions = {
         env,
         silent: false,
@@ -885,9 +913,12 @@ AppDelegate.prototype.createChild = function (endpoint, {index, params}) {
         pkgFile: options.pkg,
         cmd: options.cmd
     };
-    let {file, assign, mxoss, ats} = options;
+    let {file, assign, mxoss, ats, args, rules} = options;
+    let cmdLine = (assign) ? [assign].concat(args) : args;
+
     const child = new daemon(file, cmdLine, daemonOptions);
     child.name = assign;
+    child.rules = rules;
     child.mxoss = mxoss;
     child.ats = ats;
     child.optConf = options; //複製程序使用
@@ -895,14 +926,11 @@ AppDelegate.prototype.createChild = function (endpoint, {index, params}) {
     child.emitter.on('warp_handle', (message, handle) => endpoint.duringWarp(message, handle));
     child.emitter.on('onIpcMessage', (message) => endpoint.mgmtSrv.onIpcMessage(message));
     child.emitter.on('status', (message) => NSLog.log('warning', message));
-    child.emitter.on('unexpected', function (err) {
+    child.emitter.on('unexpected', (err) => {
         NSLog.log('warning', "unexpected:", err.name);
         endpoint.tgBotTemplate("-1001314121392", "shutdown", [err.name]);
     });
-    child.emitter.on('restart', function () {
-        endpoint.mgmtSrv.refreshClusterParams(child);
-    });
-
+    child.emitter.on('restart', () => endpoint.mgmtSrv.refreshClusterParams(child));
     return child;
 };
 /**
@@ -924,13 +952,15 @@ AppDelegate.createChildProperties = function (params) {
         env,
         compact,
         inspect,
-        v8Flags
+        v8Flags,
+        rules
     } = params;
     /** @typedef {ChildProperties} */
     let options = {
         file,
         pkg: false,
-        ats: false
+        ats: false,
+        rules: []
     };
     options.assign    = utilities.trimAny(assign);
     options.mxoss     = mxoss || 2048;
@@ -964,6 +994,7 @@ AppDelegate.createChildProperties = function (params) {
     if (typeof compact == "boolean") options.compact = compact;
     if (typeof inspect == "boolean") options.inspect = inspect;
     if (typeof v8Flags != "undefined") options.v8Flags = v8Flags;
+    if (Array.isArray(rules)) options.rules = rules; //自訂
 
     return options;
 };
@@ -993,14 +1024,14 @@ AppDelegate.prototype.assign = function (namespace, cb) {
     }
 
     let clusterName = namespace;
-    let group = this.clusters[clusterName];
+    let group = this.getChild(clusterName);
     if ((typeof group == "undefined")) {
         clusterName = subname;
-        group = this.clusters[clusterName];
+        group = this.getChild(clusterName);
     }
     if (typeof group == "undefined") {
         clusterName = this.findAssignRules({namespace, subname});
-        group = this.clusters[clusterName];
+        group = this.getChild(clusterName);
     }
 
     if (!group || typeof group == 'undefined') {
@@ -1030,15 +1061,20 @@ AppDelegate.prototype.asyncAssign = function (namespace) {
     });
 };
 AppDelegate.prototype.findAssignRules = function ({namespace, subname}) {
-    for (let str in this.clusters) {
-        if (!this.clusters.hasOwnProperty(str)) continue;
-        let assignRules = new Set(str.split(","));
-        if (assignRules.has(namespace) || assignRules.has(subname)) {
-            return str;
-        }
+    let {ruleTable} = this;
+    if (ruleTable.has(namespace)) {
+        return ruleTable.get(namespace).name;
+    } else if (ruleTable.has(subname)) {
+        return ruleTable.get(subname).name;
     }
     return undefined;
 };
+/**
+ * 循環法
+ * @param {string} namespace
+ * @param {Array} group
+ * @param {Function} cb
+ */
 AppDelegate.prototype.roundrobin = function ({namespace, group}, cb) {
     let cluster = group[this.roundrobinNum[namespace]++];
 
@@ -1047,12 +1083,18 @@ AppDelegate.prototype.roundrobin = function ({namespace, group}, cb) {
     }
     if (cb) cb(cluster);
 };
+/**
+ * 最少連線排程法
+ * @param {string} namespace
+ * @param {Array} group
+ * @param {Function} cb
+ */
 AppDelegate.prototype.leastconn = function ({namespace, group}, cb) {
     let num = group.length;
     let cluster = group[0];
     for (let n = 0; n < num; n++) {
         //檢查最小連線數
-        let { connections } = group[n].nodeInfo.connections;
+        let { connections } = group[n].nodeInfo;
         let isPriority = (cluster.nodeInfo.connections > connections);
         if (isPriority) cluster = group[n];
     }
