@@ -34,7 +34,7 @@ APIClient.prototype.setup = function (socket) {
     });
     ws.on('message', this.handle.bind(this));
     ws.once("close", () => {
-        console.log('close');
+        console.log('client closed');
     });
     ws.once("error", (err) => {
         console.log('err');
@@ -51,12 +51,12 @@ APIClient.prototype.handle = function (data) {
     if (!this.signin && action === "login") {
         this[action](data);
     } else if (this.signin && this[action] instanceof Function) {
-        console.log(`action: ${action}`);
+        console.log(`[APIClient] action: ${action}`);
         this[action](data);
     } else if (this.handle_v1(data)) {
 
     } else {
-        console.log('Not Found %s', action, data);
+        console.log('[APIClient] Not Found %s', action, data);
     }
 };
 APIClient.prototype.handle_v1 = function (data) {

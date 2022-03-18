@@ -31,20 +31,25 @@ APIServer.prototype.setup = function () {
     if (this.isWorker) this.setupIPCBridge();
     this.makeSureComplete();
 };
-
+/**
+ * socket server
+ * @param port
+ * @param listen
+ * @return {Server}
+ */
 APIServer.prototype.createTCPServer = function ({port, listen}) {
 
     const server = net.createServer();
     server.on("connection", this.onConnection.bind(this));
 
     server.on('listening', function () {
-        console.log("info",'Server is listening on port', port);
+        NSLog.log("info",'Server is listening on port', port);
     });
     server.on('close', function () {
-        console.log("error",'Server is now closed');
+        NSLog.log("error",'Server is now closed');
     });
     server.on('error', function (err) {
-        console.log("error",'Error occurred:', err.message);
+        NSLog.log("error",'Error occurred:', err.message);
     });
     if (listen) server.listen(port);
     return server;
@@ -52,10 +57,10 @@ APIServer.prototype.createTCPServer = function ({port, listen}) {
 APIServer.prototype.createHTTPServer = function ({listen, port}) {
     const web = http.createServer((req, res) => {});
     web.on('upgrade', (request, socket, head) => {
-        console.log(request.url, request.method, request.upgrade, request.client);
+        NSLog.log(request.url, request.method, request.upgrade, request.client);
     });
     if (listen) web.listen(port, () => {
-        console.log("info",'Web Service start listening port %s.', port);
+        NSLog.log("info",'Web Service start listening port %s.', port);
     });
 
 };
