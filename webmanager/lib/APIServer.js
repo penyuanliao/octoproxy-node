@@ -54,6 +54,11 @@ APIServer.prototype.createTCPServer = function ({port, listen}) {
     if (listen) server.listen(port);
     return server;
 };
+/**
+ * HTTP SERVER
+ * @param listen
+ * @param port
+ */
 APIServer.prototype.createHTTPServer = function ({listen, port}) {
     const web = http.createServer((req, res) => {});
     web.on('upgrade', (request, socket, head) => {
@@ -64,6 +69,12 @@ APIServer.prototype.createHTTPServer = function ({listen, port}) {
     });
 
 };
+/**
+ * HTTP WEB API
+ * @param listen
+ * @param port
+ * @return {RestManager}
+ */
 APIServer.prototype.createRestServer = function ({listen, port}) {
     const manager = new RestManager(this);
     if (listen) manager.start({port: port});
@@ -104,7 +115,7 @@ APIServer.prototype.setupIPCBridge = function () {
                 reject({result: false, error: "timeout"});
             }, 60000);
         }).catch((failure) => {
-            console.log(failure);
+            NSLog.log('SIGINT: failure -> ', failure);
         });
         if (todo) {
             if (todo.result === true) {
