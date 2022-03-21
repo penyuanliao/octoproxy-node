@@ -102,6 +102,12 @@ IHandler.prototype.getServiceInfo = function (params, client, callback) {
         })
     }
 };
+/**
+ * 系統資訊
+ * @param params
+ * @param client
+ * @param callback
+ */
 IHandler.prototype.getSysInfo = function (params, client, callback) {
     let data = {};
     if (this.delegate) {
@@ -114,6 +120,12 @@ IHandler.prototype.getSysInfo = function (params, client, callback) {
         });
     }
 };
+/**
+ *
+ * @param params
+ * @param client
+ * @param callback
+ */
 IHandler.prototype.setLogLevel2 = function (params, client, callback) {
     try {
         this.setLogLevel2(params, client, callback);
@@ -121,7 +133,7 @@ IHandler.prototype.setLogLevel2 = function (params, client, callback) {
     {
         console.log(e);
     }
-}
+};
 /**
  * 增加子程序
  * @param params

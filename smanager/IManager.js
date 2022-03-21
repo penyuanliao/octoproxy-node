@@ -156,12 +156,12 @@ IHandler.prototype.changeCluster = function ({assign, index, cluster}) {
  * @return {[]|*|boolean}
  */
 IManager.prototype.getClusters = function (name) {
-    const proxy = this.delegate;
-    if (!proxy) return false;
+    const {delegate} = this;
+    if (!delegate) return false;
     if (name) {
-        return proxy.clusters[name];
+        return delegate.clusters[name];
     } else {
-        return proxy.clusters;
+        return delegate.clusters;
     }
 };
 /**
@@ -569,7 +569,7 @@ IManager.prototype.writeFile = function (namepath, data) {
  */
 IManager.prototype.close = function () {
     this.server.close(() => {
-        NSLog.log("warning", "STOP Bound Port '%s'", IConfig.server.passive.port);
+        NSLog.log("warning", "STOP Bound Port '%s'", this.server.address());
     });
 }
 /** http規則 */
