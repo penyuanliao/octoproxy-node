@@ -201,12 +201,14 @@ APIClient.prototype.editCluster = async function (json) {
     let {
         oAssign,
         nAssign,
+        pid,
         options
     } = (json.data || json);
     let params = {
         method: "editCluster",
         oldName: oAssign,
         newName: nAssign,
+        pid,
         options: options
     };
     const {result} = await manager.send(params);
@@ -294,6 +296,11 @@ APIClient.prototype.reloadToPID = async function (json) {
     };
     this.write(respond);
 };
+/**
+ * 熱更新
+ * @param json
+ * @return {Promise<void>}
+ */
 APIClient.prototype.hotReload = async function (json) {
     const manager = this.manager;
     let data = json.data || json;
@@ -310,6 +317,11 @@ APIClient.prototype.hotReload = async function (json) {
     };
     this.write(respond);
 };
+/**
+ * 排程清單
+ * @param json
+ * @return {Promise<void>}
+ */
 APIClient.prototype.getSchedule = async function (json) {
     const {manager} = this;
     let params = {
