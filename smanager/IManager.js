@@ -138,7 +138,7 @@ IManager.prototype.setCluster = function (rule, cluster) {
  * @param cluster
  * @return {boolean}
  */
-IHandler.prototype.changeCluster = function ({assign, index, cluster}) {
+IManager.prototype.changeCluster = function ({assign, index, cluster}) {
     const proxy = this.delegate;
     if (!proxy) return false;
     if (Array.isArray(proxy.clusters[assign]) == false) {

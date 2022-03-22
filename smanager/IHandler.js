@@ -234,37 +234,41 @@ IHandler.prototype.killCluster = function (params, client, callback) {
  * @param callback
  */
 IHandler.prototype.editCluster = function (params, client, callback) {
-    let {oldName, newName, mxoss, options} = params;
-    const oGroup = this.delegate.getClusters(oldName) || [];
+    let {oldName, newName, mxoss, pid, options} = params;
+    console.log(`edit-cluster pid: ${pid}`);
+    const {delegate} = this;
+    const oGroup = delegate.getClusters(oldName) || [];
     if (!oGroup) {
         if (callback) callback({result: false});
         return false;
     } else if (!IHandler._verifyArgs(oldName, "string") || !IHandler._verifyArgs(newName, "string")) {
         if (callback) callback({result: false});
         return false;
+    } else if (oldName == newName) {
+        if (callback) callback({result: false});
+        return false;
     }
-    let nGroup;
     let file;
-    if (typeof options == "undefined") options = {};
-    const clusters = this.delegate.getClusters(newName);
-
-    if (!clusters) {
-        nGroup = this.delegate.setCluster(newName);
-    } else {
-        nGroup = oGroup;
-    }
-    while (oGroup.length > 0) {
-        var cluster = oGroup.shift();
-        cluster.name = newName;
-        if (typeof mxoss == "undefined") mxoss = cluster.mxoss;
-        if (typeof mxoss != "number") mxoss = 2048;
-        file  = cluster._modulePath;
-        if (typeof options.ats == "boolean") {
-            cluster.ats = options.ats;
+    let len = oGroup.length;
+    let modify = false;
+    while (--len >= 0) {
+        let cluster = oGroup[len];
+        if (cluster._cpfpid == pid) {
+            cluster.name = newName;
+            if (typeof mxoss == "undefined") mxoss = cluster.mxoss;
+            if (typeof mxoss != "number") mxoss = 2048;
+            file  = cluster._modulePath;
+            if (typeof options.ats == "boolean") {
+                cluster.ats = options.ats;
+            }
+            oGroup.splice(len, 1);
+            delegate.setCluster(newName, cluster);
+            modify = true;
+            break;
         }
-        nGroup.push(cluster);
+
     }
-    if (this.syncAssignFile) {
+    if (this.syncAssignFile && modify) {
         let args = {
             oAssign: oldName,
             obj: {
@@ -276,7 +280,10 @@ IHandler.prototype.editCluster = function (params, client, callback) {
         };
         this.editAssign(args);
     }
-    this.delegate.rmCluster(oldName);
+    if (oGroup.length === 0) {
+        delegate.rmCluster(oldName);
+    }
+
     if (callback) callback({result: true});
 };
 /**
