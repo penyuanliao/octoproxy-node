@@ -310,6 +310,20 @@ APIClient.prototype.hotReload = async function (json) {
     };
     this.write(respond);
 };
+APIClient.prototype.getSchedule = async function (json) {
+    const {manager} = this;
+    let params = {
+        method: "getSchedule"
+    };
+    const {result, data} = await manager.send(params);
+    let respond = {
+        tokenId: json.tokenId,
+        event: "getSchedule",
+        data,
+        result
+    };
+    this.write(respond);
+};
 /** 踢除某子程序使用者接口 **/
 APIClient.prototype.kickoutToPID = async function (json) {
     const manager = this.manager;
@@ -467,6 +481,21 @@ APIClient.prototype.setAMFConfig = async function (json) {
     let respond = {
         tokenId: json.tokenId,
         event: "setAMFConfig",
+        result
+    }
+    this.write(respond);
+};
+/**
+ * 新增:排程
+ * @param json
+ * @return {Promise<void>}
+ */
+APIClient.prototype.addSchedule = async function (json) {
+    const manager = this.manager;
+    const {result} = await manager.send({method: "addSchedule", data: json.data});
+    let respond = {
+        tokenId: json.tokenId,
+        event: "addSchedule",
         result
     }
     this.write(respond);

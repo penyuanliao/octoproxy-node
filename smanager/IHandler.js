@@ -3,6 +3,7 @@ const events        = require("events");
 const util          = require("util");
 const fs            = require("fs");
 const editor        = require('../lib/AssignEdittor.js');
+const Scheduler     = require('./Scheduler.js');
 const AMFConfigPath = "../configuration/AMFConfig.json";
 const DashboardPath = "./historyLog/Dashboard.json";
 const NSLog         = require('fxNetSocket').logger.getInstance();
@@ -34,7 +35,9 @@ const ManagerEvents = new Set([
     "saveFileContents",
     "readBlockIPs",
     "getDashboardInfo",
-    "lockdownMode"
+    "lockdownMode",
+    "getSchedule",
+    "addSchedule"
 ]);
 /**
  * 控制端事件
@@ -44,6 +47,7 @@ class IHandler extends events {
     constructor(delegate) {
         super();
         this.delegate = delegate;
+        this.scheduler = new Scheduler(this);
         this.syncAssignFile = true;
     }
     get endpoint() {
@@ -168,7 +172,23 @@ IHandler.prototype.addCluster = function (params, client, callback) {
         this.updateAssign(child.optConf);
     }
 
-    if (callback) callback({result: true});
+    if (callback) callback({result: true, pid: child._cpfpid});
+
+    return child;
+};
+IHandler.prototype.addClusterAsync = async function (params, client) {
+    return new Promise((resolve) => {
+        let bool = false;
+        let child = this.addCluster(params, client);
+        child.emitter.once('completed', () => {
+            resolve({result: true, pid: child._cpfpid});
+            bool = true;
+        });
+        this.waiting(5000);
+        if (!bool) {
+            resolve({result: true, pid: child._cpfpid});
+        }
+    });
 };
 /**
  * 刪除子程序
@@ -292,7 +312,7 @@ IHandler.prototype.restartCluster = function (params, client, callback) {
 
         }
     } else {
-        let group = this.delegate.getClusters(params.name);
+        let group = this.delegate.getClusters(name);
         if (Array.isArray(group)) {
             for (let cluster of group) {
                 if (gracefully) {
@@ -605,6 +625,18 @@ IHandler.prototype.lockdownMode = async function (params, client, callback) {
  */
 IHandler.prototype.emergencyMode = function (params, client, callback) {
     
+};
+IHandler.prototype.getSchedule = function (params, client, callback) {
+    let {scheduler} = this;
+    let data = scheduler.getSchedule();
+    if (callback) {
+        callback({result: true, data});
+    }
+};
+IHandler.prototype.addSchedule = function (params, client, callback) {
+    let {scheduler} = this;
+    let result = scheduler.job(params.data);
+    if (callback) callback({result});
 };
 
 /**

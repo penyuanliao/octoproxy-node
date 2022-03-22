@@ -439,7 +439,7 @@ IManager.prototype.outOfRangeMemLimit = function (assign) {
                 NSLog.log("info", `OutOfMemory => usage:${memory_m}(${maxMemory}) tun:${(bool ? "on": "off")} score: ${cluster.score}`);
                 if (cluster.score++ > 2) {
                     cluster.score = 0;
-                    return this.cloneCluster({assign, pid: cluster._cpfpid});
+                    return (this.cloneCluster({assign, pid: cluster._cpfpid}) != false);
                 }
             } else {
                 cluster.score = 0;
@@ -452,15 +452,15 @@ IManager.prototype.outOfRangeMemLimit = function (assign) {
  * 複製一個一樣程序然後另個等待回收
  * @param {string} assign 服務程序名稱
  * @param {number} pid 服務程序PID
- * @return {boolean}
+ * @return {boolean|| number}
  */
-IManager.prototype.cloneCluster = function ({assign, pid}) {
+IManager.prototype.cloneCluster = async function ({assign, pid}) {
     const manager = this;
     const group = manager.getClusters(assign);
     if (!group) {
         return false;
     }
-    console.log(`clone:${assign}, ${pid}`);
+    NSLog.info(`clone-cluster :${assign}, ${pid}`);
 
     let index = 0;
     let cluster = group[0];
@@ -477,7 +477,7 @@ IManager.prototype.cloneCluster = function ({assign, pid}) {
     let file  = cluster._modulePath;
     let options = Object.assign({}, cluster.optConf);
     options.clone = true;
-    this.iHandler.addCluster({
+    let res = await this.iHandler.addClusterAsync({
         file,
         assign,
         mxoss,
@@ -489,7 +489,7 @@ IManager.prototype.cloneCluster = function ({assign, pid}) {
     garbageDump.push(trash);
     NSLog.log("warning","cloneCluster(%s)", assign, group.length, garbageDump.length);
     manager.awaitRecycle();
-    return true;
+    return res.pid;
 };
 /** 統計ip **/
 IManager.prototype.checkedIPDeny = function (ip) {

@@ -7,13 +7,18 @@ util.inherits(Scheduler, EventEmitter);
 
 const BehaviorDefine = Object.freeze({
     "Reboot": "Reboot",
-    "BlueGreen": "Blue-green"
+    "BlueGreen": "Blue-Green"
 });
 
+/**
+ * 排程管理服務
+ * @param delegate
+ * @constructor
+ */
 function Scheduler(delegate) {
     EventEmitter.call(this);
-    this.schedules = [];
-    this.schedulesInfo = {};
+    this.schedules = []; //清單
+    this.schedulesInfo = new Map();
     this.scheduleId = 0;
     this.delegate = delegate;
 }
@@ -21,7 +26,7 @@ Scheduler.prototype.getSchedule = function () {
     return this.schedules;
 };
 Scheduler.prototype.job = function (params) {
-    const {time, name, behavior} = params;
+    const {time, name, behavior, pid} = params;
 
     if (Array.isArray(time) == false) {
         return false;
@@ -37,7 +42,8 @@ Scheduler.prototype.job = function (params) {
     // console.log(parseInt(year), parseInt(month) - 1, parseInt(date), parseInt(hours), parseInt(min), parseInt(sec));
     let task = {
         id: id,
-        name: name,
+        name,
+        pid,
         job: "",
         repeating: (params.repeating ? params.repeating.toLowerCase() : false),
         dateAdded: new Date().getTime(),
@@ -67,92 +73,86 @@ Scheduler.prototype.job = function (params) {
         task.job = Schedule.scheduleJob(task.executeTime, this.onTrigger.bind(this, name, id));
     }
     console.log(task);
-    this.schedulesInfo[id] = task;
+    this.schedulesInfo.set(id, task);
 
     this.refresh();
     return true;
 };
-Scheduler.prototype.createRuleJob = function (params) {
-    const {time, name, behavior} = params;
+Scheduler.prototype.createRuleJob = function ({time, name, behavior, pid, repeating}) {
     const id = "task-" + this.scheduleId++;
     let task = {
         id: id,
-        name: name,
+        name,
+        pid,
         job: "",
         repeating: false,
         dateAdded: new Date().getTime(),
         behavior: behavior || BehaviorDefine.Reboot,
         executeTime: time
     };
-    task.job = Schedule.scheduleJob(task.executeTime, this.onTrigger.bind(this, name, id));
-    this.schedulesInfo[id] = task;
+    task.job = Schedule.scheduleJob(task.executeTime, () => this.onTrigger(name, id, pid));
+    this.schedulesInfo.set(id, task);
     this.refresh();
     return true;
 };
-Scheduler.prototype.onTrigger = function (name, id) {
+Scheduler.prototype.onTrigger = async function (name, id, pid) {
+    let currPID;
     let out = (typeof this.delegate == "undefined");
-
     if (out == false) {
-        const {behavior} = this.schedulesInfo[id];
+        const {behavior, repeating} = this.schedulesInfo.get(id);
+        console.log(`onTrigger ${name}, id:${id}, pid: ${pid} behavior: ${behavior}`);
         switch (behavior) {
             case BehaviorDefine.Reboot:
-                this.systemReboot(name, id);
+                this.systemReboot(name, pid);
                 break;
             case BehaviorDefine.BlueGreen:
-                this.deploymentBlueGreen(name);
+                currPID = await this.deploymentBlueGreen(name, id, pid);
                 break;
             default:
         }
-    }
-    if (this.schedulesInfo[id].repeating == false) {
-        this.schedulesInfo[id] = undefined;
-        delete this.schedulesInfo[id];
-    }
-    this.refresh();
-};
-Scheduler.prototype.systemReboot = function (name, id) {
-    if (name == "casino_game_rule") {
-        this.delegate.restartGLoadBalance();
-    } else {
-        const group = this.delegate.delegate.clusters;
-        const clusters = group[name];
-        if (Array.isArray(clusters)) {
-            for (let i = 0; i < clusters.length; i++) {
-                let cluster = clusters[i];
-                NSLog.log("debug", "Schedule[%s]Daemon has waiting restart.", name);
-                cluster.restart();
+        if (repeating == false) {
+            this.schedulesInfo.delete(id);
+        } else {
+            if (currPID) {
+                this.schedulesInfo.get(id).pid = currPID;
+                console.log(`>>`, this.schedulesInfo.get(id));
             }
         }
     }
+
+    this.refresh();
 };
-Scheduler.prototype.deploymentBlueGreen = function (assign) {
-    const group = this.delegate.delegate.clusters[assign];
-    if (typeof group == "undefined") return false;
-    let cluster;
-    for (let i = 0; i < group.length; i++) {
-        cluster = group[i];
-        this.delegate.delegate.cloneCluster(assign);
-        NSLog.log("info", "Using blue-green deployment. %s to Green...OK", assign);
-    }
+Scheduler.prototype.systemReboot = function (name, pid) {
+    this.delegate.restartCluster({
+        name,
+        gracefully: false,
+        pid
+    });
+    NSLog.log("debug", "Scheduler[%s]Daemon has waiting restart.", name);
+};
+Scheduler.prototype.deploymentBlueGreen = async function (assign, id, pid) {
+    NSLog.log("info", `Using blue-green deployment. ${assign}-${pid} to Blue...Start`);
+    const manager = this.delegate.delegate;
+    let nPid = await manager.cloneCluster({assign, pid});
+    NSLog.log("info", `Using blue-green deployment. ${assign}-${nPid} to Green...OK`);
+    return nPid;
 };
 Scheduler.prototype.cancel = function (params) {
     let result = false;
     const {id} = params;
-    if (this.schedulesInfo[id].job) {
-        this.schedulesInfo[id].job.cancel();
+    if (this.schedulesInfo.get(id).job) {
+        this.schedulesInfo.get(id).job.cancel();
         result = true;
     }
-    this.schedulesInfo[id] = undefined;
-    delete this.schedulesInfo[id];
+    this.schedulesInfo.delete(id);
     this.refresh();
     return result;
 };
 Scheduler.prototype.refresh = function () {
-    const keys = Object.keys(this.schedulesInfo);
     let list = [];
     let item;
-    for (let i = 0; i < keys.length; i++) {
-        let {id, name, dateAdded, executeTime, behavior, repeating, customize} = this.schedulesInfo[keys[i]];
+    for (let item of this.schedulesInfo.values()) {
+        let {id, name, dateAdded, executeTime, behavior, repeating, customize} = item;
         let task = {
             id: id,
             name: name,
@@ -178,8 +178,8 @@ Scheduler.prototype.refresh = function () {
                     time.setMonth(time.getMonth() + 1);
                 }
 
-                this.schedulesInfo[keys[i]].executeTime = time;
-                task.executeTime = this.schedulesInfo[keys[i]].executeTime.getTime();
+                item.executeTime = time;
+                task.executeTime = item.executeTime.getTime();
 
             } else {
                 task.executeTime = executeTime.getTime();
@@ -190,6 +190,7 @@ Scheduler.prototype.refresh = function () {
         if (task.countDown < 0) task.countDown = 0;
         list.push(task);
     }
+
     this.schedules = list;
 };
 
