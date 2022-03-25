@@ -25,6 +25,11 @@ function Scheduler(delegate) {
 Scheduler.prototype.getSchedule = function () {
     return this.schedules;
 };
+/**
+ * 新增排程
+ * @param params
+ * @return {boolean}
+ */
 Scheduler.prototype.job = function (params) {
     const {time, name, behavior, pid} = params;
 

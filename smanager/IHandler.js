@@ -37,7 +37,8 @@ const ManagerEvents = new Set([
     "getDashboardInfo",
     "lockdownMode",
     "getSchedule",
-    "addSchedule"
+    "addSchedule",
+    "cancelSchedule"
 ]);
 /**
  * 控制端事件
@@ -253,7 +254,7 @@ IHandler.prototype.editCluster = function (params, client, callback) {
     let modify = false;
     while (--len >= 0) {
         let cluster = oGroup[len];
-        if (cluster._cpfpid == pid) {
+        if (cluster._cpfpid == pid || pid == 0) {
             cluster.name = newName;
             if (typeof mxoss == "undefined") mxoss = cluster.mxoss;
             if (typeof mxoss != "number") mxoss = 2048;
@@ -264,7 +265,7 @@ IHandler.prototype.editCluster = function (params, client, callback) {
             oGroup.splice(len, 1);
             delegate.setCluster(newName, cluster);
             modify = true;
-            break;
+            if (!(pid == 0)) break;
         }
 
     }
@@ -633,6 +634,12 @@ IHandler.prototype.lockdownMode = async function (params, client, callback) {
 IHandler.prototype.emergencyMode = function (params, client, callback) {
     
 };
+/**
+ * 取得系統排程
+ * @param params
+ * @param client
+ * @param callback
+ */
 IHandler.prototype.getSchedule = function (params, client, callback) {
     let {scheduler} = this;
     let data = scheduler.getSchedule();
@@ -640,12 +647,28 @@ IHandler.prototype.getSchedule = function (params, client, callback) {
         callback({result: true, data});
     }
 };
+/**
+ * 新增系統排程
+ * @param params
+ * @param client
+ * @param callback
+ */
 IHandler.prototype.addSchedule = function (params, client, callback) {
     let {scheduler} = this;
     let result = scheduler.job(params.data);
     if (callback) callback({result});
 };
-
+/**
+ * 取消系統排程
+ * @param params
+ * @param client
+ * @param callback
+ */
+IHandler.prototype.cancelSchedule = function (params, client, callback) {
+    let {scheduler} = this;
+    let result = scheduler.cancel(params);
+    if (callback) callback({result});
+};
 /**
  * 讀取 Load Balancer 設定檔案
  * @return {Object}
@@ -653,6 +676,10 @@ IHandler.prototype.addSchedule = function (params, client, callback) {
 IHandler.prototype.getAssign = function () {
     return editor.getAssign.apply(this, arguments);
 };
+/**
+ * 存擋 Load Balancer 設定檔案
+ * @param conf
+ */
 IHandler.prototype.saveAssign = function (conf) {
     return editor.saveAssign.apply(this, arguments);
 };
