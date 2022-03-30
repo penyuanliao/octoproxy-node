@@ -195,7 +195,11 @@ APIClient.prototype.addCluster = async function (json) {
     };
     this.write(respond);
 };
-/** 編輯指定名單規則 **/
+/**
+ * 編輯指定名單規則
+ * @param json
+ * @return {Promise<void>}
+ */
 APIClient.prototype.editCluster = async function (json) {
     const manager = this.manager;
     let {
@@ -313,25 +317,6 @@ APIClient.prototype.hotReload = async function (json) {
     let respond = {
         tokenId: json.tokenId,
         event: "hotReload",
-        result
-    };
-    this.write(respond);
-};
-/**
- * 排程清單
- * @param json
- * @return {Promise<void>}
- */
-APIClient.prototype.getSchedule = async function (json) {
-    const {manager} = this;
-    let params = {
-        method: "getSchedule"
-    };
-    const {result, data} = await manager.send(params);
-    let respond = {
-        tokenId: json.tokenId,
-        event: "getSchedule",
-        data,
         result
     };
     this.write(respond);
@@ -510,6 +495,47 @@ APIClient.prototype.addSchedule = async function (json) {
         event: "addSchedule",
         result
     }
+    this.write(respond);
+};
+/**
+ * 取得:排程清單
+ * @param json
+ * @return {Promise<void>}
+ */
+APIClient.prototype.getSchedule = async function (json) {
+    const {manager} = this;
+    let params = {
+        method: "getSchedule"
+    };
+    const {result, data} = await manager.send(params);
+    let respond = {
+        tokenId: json.tokenId,
+        event: "getSchedule",
+        data,
+        result
+    };
+    this.write(respond);
+};
+/**
+ * 取消:排程
+ * @param tokenId
+ * @param id
+ * @return {Promise<void>}
+ * @version 2.0.0
+ */
+APIClient.prototype.cancelSchedule = async function ({tokenId, id}) {
+    const {manager} = this;
+    let params = {
+        method: "cancelSchedule",
+        id
+    };
+    const {result, data} = await manager.send(params);
+    let respond = {
+        tokenId,
+        event: "cancelSchedule",
+        data,
+        result
+    };
     this.write(respond);
 };
 /** process溝通通道 **/

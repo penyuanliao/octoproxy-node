@@ -68,7 +68,7 @@ class RestManager extends EventEmitter {
                 });
             }
             return next();
-        })
+        });
         server.get('/amf/config', async (req, res, next) => {
 
             let src = await this.delegate.manager.send({
@@ -134,6 +134,29 @@ class RestManager extends EventEmitter {
                 params: params
             });
             res.send(src);
+            return next();
+        });
+        server.put('/process/info', async (req, res, next) => {
+            let {oAssign, nAssign, pid, options} = req.body || {};
+            if (pid == 'all') {
+                pid = 0;
+            }
+            else if (Number.isNaN(Number(pid))) {
+                pid = undefined;
+            }
+            if (!oAssign || !nAssign) {
+                res.send({result: false , error: "invalid argument"});
+            } else {
+                let src = await this.delegate.manager.send({
+                    method: "editCluster",
+                    oldName: oAssign,
+                    newName: nAssign,
+                    pid,
+                    options: options
+                });
+                res.send(src);
+            }
+
             return next();
         });
         server.get('/service/dashboard/info', async (req, res, next) => {
