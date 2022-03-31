@@ -890,7 +890,6 @@ AppDelegate.prototype.createChild = function (endpoint, {index, params}) {
         if (options.gc) execArgv.push('--expose-gc');
         if (options.compact) execArgv.push('--always-compact');
         if (options.inspect) execArgv.push('--inspect');
-        if (options.inspect) execArgv.push('--expose-gc');
         if (typeof options.v8Flags != "undefined") {
             let flags = options.v8Flags;
             if (Array.isArray(flags)) {
@@ -982,6 +981,8 @@ AppDelegate.createChildProperties = function (params) {
         options.args = utilities.trimAny(args).split(",");
     } else if (Array.isArray(args) && args.length > 0) {
         options.args = args.map((value) => utilities.trimAny(value.toString()));
+    } else {
+        options.args = [];
     }
     if (typeof recycleExpired != "undefined") options.recycleExpired = recycleExpired;
     if (typeof ats == "boolean") options.ats = ats;
