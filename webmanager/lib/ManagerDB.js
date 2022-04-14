@@ -17,7 +17,8 @@ class ManagerDB extends EventEmitter {
 
 ManagerDB.prototype.setup = function (filepath) {
     if (!filepath) filepath = ".";
-    const db = new sqlite3.Database(`${filepath}/manager.db`);
+    let src = `${filepath}/manager.db`;
+    const db = new sqlite3.Database(src);
     db.serialize(() => {
         db.run(this.syntax.createTableAccount());
     });
@@ -43,6 +44,12 @@ ManagerDB.prototype.getUser = async function (username) {
     } else {
         return data[0];
     }
+};
+ManagerDB.prototype.updateSecret = async function (username, otp) {
+    return await this.asyncRun(this.syntax.updateSecret({username, otp}));
+};
+ManagerDB.prototype.getSecret = async function (username) {
+    return await this.asyncGet(this.syntax.secret({username}));
 };
 
 ManagerDB.prototype.asyncRun = function (sql) {
@@ -74,6 +81,16 @@ ManagerDB.prototype.asyncEach = function (sql, {key, value}) {
             }
         });
     })
+};
+ManagerDB.prototype.asyncGet = function (sql) {
+    return new Promise((resolve, reject) => {
+        this.db.get(sql, (err, res) => {
+            if (err) reject(err);
+            else {
+                resolve(res);
+            }
+        });
+    })
 }
 ManagerDB.prototype.clean = function () {
 
@@ -90,17 +107,24 @@ class Syntax {
             id       INTEGER        NOT NULL PRIMARY KEY,
             username varchar(50)    NOT NULL UNIQUE,
             password TEXT           NOT NULL,
-            token    TEXT
+            token    TEXT           NULL,
+            otp      TEXT           DEFAULT ''
         )`;
     };
     insertAccount({username, password}) {
-        return `INSERT INTO accounts VALUES (NULL, '${username}', '${password}', NULL)`;
+        return `INSERT INTO accounts VALUES (NULL, '${username}', '${password}', NULL, '' )`;
     };
     updateAccount({password, username}) {
         return `UPDATE accounts SET password='${password}' WHERE username='${username}'`;
     };
     updateToken({username, token}) {
         return `UPDATE accounts SET token='${token}' WHERE username='${username}'`;
+    };
+    updateSecret({username, otp}) {
+        return `UPDATE accounts SET otp='${otp}' WHERE username='${username}'`;
+    };
+    secret({username}) {
+        return `SELECT username, otp FROM accounts WHERE username = '${username}'`;
     };
     selectAccounts(username) {
         if (username) {

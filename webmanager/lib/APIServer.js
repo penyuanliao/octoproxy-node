@@ -8,6 +8,7 @@ const RemoteClient  = require("../../smanager/RemoteClient.js");
 const RestManager   = require('./RestManager.js');
 const LogServer     = require('./LogServer.js');
 const Auth          = require("./Auth.js");
+const OTP           = require("./OTP.js");
 
 /**
  * 客端Server服務
@@ -24,6 +25,7 @@ class APIServer extends EventEmitter {
 
 APIServer.prototype.setup = function () {
     this.auth = new Auth();
+    this.otp  = new OTP();
     this.wsServer = this.createTCPServer({listen: !this.isWorker, port: 8002});
     this.restManager = this.createRestServer({listen: !this.isWorker, port:8001});
     this.manager = new RemoteClient(); //連線到服務窗口
@@ -180,6 +182,7 @@ APIServer.prototype.systemMessage = function ({evt, id, data, mode}, handle) {
         server = this.wsServer;
     }
     if (evt === 'c_init2') {
+        console.log(`mode`, mode);
         let socket = new net.Socket({
             handle:handle,
             allowHalfOpen: server.allowHalfOpen
@@ -190,6 +193,7 @@ APIServer.prototype.systemMessage = function ({evt, id, data, mode}, handle) {
         socket.emit("connect");
         socket.emit('data', Buffer.from(data));
         socket.resume();
+        process.send({ evt, id });
     }
     else if (evt === 'setLogLevel') {
         this.LOG_LEVEL = data.params.lv;

@@ -93,6 +93,7 @@ function AppDelegate() {
     /** record visitor remote address **/
     this.recordDashboard = new Dashboard(Dashboard.loadFile("./historyLog/Dashboard.json"));
     this.recordEnabled   = true;
+    this.tokenId = 0;
     this.setupProps();
     NSLog.log('info','lockdown:[%s]', this._lockdown);
     NSLog.log('debug', "** Initialize octoproxy.js **");
@@ -298,15 +299,6 @@ AppDelegate.prototype.createServer = function (opt) {
             mode = general[0].match('HTTP/') != null ? "http" : mode;
             mode = headers.iswebsocket  ? "ws" : mode;
             namespace = general[1];
-
-            if (general[2] == "OPTIONS") {
-                tcp_write(handle, self.corsOptions(headers));
-                handle.close(close_callback);
-                handleRelease(handle);
-                handle = null;
-                return;
-            }
-
         } else
         {
             mode = "socket";
@@ -333,43 +325,43 @@ AppDelegate.prototype.createServer = function (opt) {
             }
 
         }
-        let mAppid = false;
         /** TODO 2016/10/06 -- ADMIN DEMO **/
-        if (headers["sec-websocket-protocol"] == "admin" || headers["sec-websocket-protocol"] == "log" ||
-            ((self.mgmtSrv["getSignature"] instanceof Function) && (mAppid = self.mgmtSrv["getSignature"](headers["appid"])))) {
+        let corsMode = false;
+        let appid = false;
+        const swp = headers["sec-websocket-protocol"];
+        const {getSignature} = self.mgmtSrv;
+        if (mode == 'http' && headers['sec-fetch-mode'] == 'cors' && general[2] === 'OPTIONS') {
+            corsMode = (headers["access-control-request-headers"].indexOf('appid') != -1);
+        } else {
+            appid = ((self.mgmtSrv.getSignature instanceof Function) && getSignature(headers["appid"]));
+        }
+        if (swp == "admin" || swp == "log" || corsMode || appid) {
             const [cluster] = (self.clusters["inind"] || self.clusters["administrator"] || []);
-            if (cluster) cluster.send({'evt':'c_init2',data:source, mode: (mAppid ? 'http': 'ws')}, handle,{keepOpen:false});
-            setTimeout(function () {
-                handle.getSockInfos.path  = `${cluster.name}`;
-                handle.getSockInfos.mode  = (mAppid ? 'http': 'ws');
-                self.rejectClientException(handle, "CON_VERIFIED");
+            if (cluster) {
+                cluster.send({'evt':'c_init2', data:source, mode: mode, id: self.getTokenId()}, handle,{keepOpen:false}, (json) => {
+                    if (!json.event) return false;
+                    clearTimeout(socket_timer);
+                    admin_free();
+                });
+            }
+            function admin_free() {
+                handle.getSockInfos.path = `${(cluster ? cluster.name : null)}`;
+                handle.getSockInfos.mode = mode;
+                self.rejectClientException(handle, (corsMode ? "HTTP_CROSS_POLICY" : "CON_VERIFIED"));
                 handle.close(close_callback);
                 handleRelease(handle);
-            }, sendWaitClose);
-            return;
-        }
-        if ((namespace || "").indexOf(cfg["heartbeat_namespace"]) != -1) {
-            let heartbeatRes = "";
-            if (mode === "socket" ) {
-                heartbeatRes = JSON.stringify({status: "ok" , hostname: hostname});
-
-            } else if (mode == "http") {
-                heartbeatRes = [
-                    "HTTP/1.1 200 OK",
-                    "Connection: close",
-                    "Content-Type: text/plain",
-                    "",
-                    "200 ok"
-                ].join("\r\n");
-            } else {
-
             }
-            tcp_write(handle, heartbeatRes);
+            let socket_timer = setTimeout(admin_free, sendWaitClose);
+            return true;
+        }
+        let echo = self.echo({namespace, mode});
+        if (echo != false) {
+            tcp_write(handle, echo);
             self.rejectClientException(handle, "CON_MOD_HTTP");
             handle.close(close_callback);
             handleRelease(handle);
             handle = null;
-            return;
+            return true;
         }
         /** TODO 2016/08/17 -- Log Info **/
         if (handle.getSockInfos && TRACE_SOCKET_IO) {
@@ -539,14 +531,15 @@ AppDelegate.prototype.createServer = function (opt) {
                             handle = null;
 
                         } else {
-                            NSLog.log('trace','1. Socket goto %s(*)', lastnamspace);
-                            worker[0].send({'evt':'c_init',data:source, namespace:lastnamspace, originPath:originPath, mode}, handle,{keepOpen:false});
-                            setTimeout(function () {
+                            NSLog.log('warning','1. Socket goto %s(*)', lastnamspace);
+                            worker[0].send({'evt':'c_init', data:source, namespace:lastnamspace, originPath:originPath, mode}, handle, {keepOpen:false});
+                            function time1Free() {
                                 self.rejectClientException(handle, "CON_VERIFIED");
                                 handle.close(close_callback);
                                 handleRelease(handle);
                                 handle = null;
-                            }, sendWaitClose);
+                            }
+                            let timer1 = setTimeout(time1Free, sendWaitClose);
                         }
 
                     } else {
@@ -557,16 +550,18 @@ AppDelegate.prototype.createServer = function (opt) {
                             handle.close(close_callback);
                             handleRelease(handle);
                             handle = null;
-                            return;
+                            return false;
                         }
                         NSLog.log("trace", `OctoBalancer ${lastnamspace} -> ${worker.name}`);
-                        setTimeout(function () {
+                        worker.send({'evt':'c_init',data:source, namespace:lastnamspace, originPath:originPath, mode}, handle,{keepOpen:false}); //KeepOpen = KeepAlive
+                        function time2Free() {
                             self.rejectClientException(handle, "CON_VERIFIED");
                             handle.close(close_callback);
                             handleRelease(handle);
                             handle = null;
-                        }, sendWaitClose);
-                        worker.send({'evt':'c_init',data:source, namespace:lastnamspace, originPath:originPath, mode}, handle,{keepOpen:false}); //KeepOpen = KeepAlive
+                        }
+                        let timer2 = setTimeout(time2Free, sendWaitClose);
+
                     }
 
                     //noinspection JSUnresolvedFunction
@@ -636,14 +631,15 @@ AppDelegate.prototype.createServer = function (opt) {
                     mc.socket.destroy();
                     return;
                 }
-                worker.send({'evt':'c_init',data: (Buffer.isBuffer(packet[0]) ? Buffer.concat(packet) : Buffer.alloc(0)), namespace: dir, originPath: dir, mode}, handle,{keepOpen:false});
-                setTimeout(function () {
-
+                let rtmp_data = (Buffer.isBuffer(packet[0]) ? Buffer.concat(packet) : Buffer.alloc(0));
+                worker.send({evt:'c_init', data: rtmp_data, namespace: dir, originPath: dir, mode}, handle, {keepOpen:false});
+                function timer3Free() {
                     NSLog.log("debug", "onread_rtmp_param setTimeout", )
                     self.rejectClientException(handle, "CON_VERIFIED");
                     mc.socket.destroy();
                     // mc.socket._handle = null;
-                }, sendWaitClose);
+                }
+                let timer3 = setTimeout(timer3Free, sendWaitClose);
             }.bind(this));
         }.bind(this));
         mc.on("close", function () {
@@ -1240,17 +1236,52 @@ AppDelegate.prototype.duringWarp = function (message, handle) {
 AppDelegate.prototype.addClusterDialog = function (cluster) {
     console.log(cluster.name, cluster._modulePath, cluster.uptime);
 };
-AppDelegate.prototype.corsOptions = function (headers) {
+/**
+ * cross 規則
+ * @param headers
+ * @return {string}
+ */
+AppDelegate.prototype.crossOptions = function (headers) {
     let corsPolicy = [
         'HTTP/1.1 200 OK',
         'Access-Control-Allow-Origin: *',
         'Access-Control-Allow-Credentials: true',
         'Access-Control-Allow-Method: ' + headers['access-control-request-method'],
-        'Access-Control-Allow-Headers: ' + headers['access-control-request-headers'],
-        'Connection: Close'
+        'Access-Control-Allow-Headers: ' + headers['access-control-request-headers']
     ].join("\r\n");
     corsPolicy += '\r\n\r\n';
     return corsPolicy;
+};
+AppDelegate.prototype.getTokenId = function () {
+    if (this.tokenId >= 100000) this.tokenId = 0;
+    return `/${this.tokenId++}`;
+};
+/**
+ * 回傳響應事件
+ * @param namespace
+ * @param mode
+ * @return {string|boolean}
+ */
+AppDelegate.prototype.echo = function ({namespace, mode}) {
+    const {heartbeat_namespace} = cfg;
+    if (!namespace) return false;
+    if (namespace.indexOf(heartbeat_namespace) != -1) {
+        let heartbeatRes = "";
+        if (mode === "socket" ) {
+            heartbeatRes = JSON.stringify({status: "ok" , hostname: hostname});
+
+        } else if (mode == "http") {
+            heartbeatRes = [
+                "HTTP/1.1 200 OK",
+                "Connection: close",
+                "Content-Type: text/plain",
+                "",
+                "200 ok"
+            ].join("\r\n");
+        }
+        return heartbeatRes;
+    }
+    return false;
 };
 
 module.exports = exports = AppDelegate;

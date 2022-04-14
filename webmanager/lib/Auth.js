@@ -31,7 +31,8 @@ Auth.prototype.test = async function () {
         password: "password1"
     });
     console.log('token', token);
-}
+};
+
 Auth.prototype.register = async function ({username, password}) {
     return await this.db.insertAccount({
         username: username,
@@ -49,12 +50,14 @@ Auth.prototype.register = async function ({username, password}) {
  */
 Auth.prototype.login = async function ({username, password}) {
 
-    let {valid, user} = await this.verify({username, password});
+    let {valid, user, twoFactor} = await this.verify({username, password});
 
     if (valid) {
         const payload = {
             username,
-            exp: Math.floor(Date.now() / 1000) + (60 * 60) // 1hour
+            exp: Math.floor(Date.now() / 1000) + (60 * 60), // 1hour
+            twoFactor,
+            otpauth: false
         };
         const options = {};
         let token = jwt.sign(payload, 'sidonia', options);
@@ -62,6 +65,14 @@ Auth.prototype.login = async function ({username, password}) {
         return token;
     }
     return false;
+};
+Auth.prototype.otpAuth = async function (payload) {
+    const {username} = payload;
+    payload.otpauth = true;
+    const options = {};
+    let token = jwt.sign(payload, 'sidonia', options);
+    await this.db.flushToken({token, username}); //刷新
+    return token;
 };
 Auth.prototype.logout = async function ({username}) {
     await this.db.flushToken({
@@ -73,11 +84,14 @@ Auth.prototype.logout = async function ({username}) {
 Auth.prototype.verify = async function ({username, password}) {
     let user = await this.db.getUser(username);
     let valid = false;
+    let twoFactor = false;
     if (user) {
         valid = await bcrypt.compare(password, user.password);
+        twoFactor = (user.otp != '');
     }
-    NSLog.log("info",` - user ${username} valid:${valid}`);
-    return {user, valid};
+
+    NSLog.log("info",` - user ${username} valid:${valid} twoFactor:${twoFactor}`);
+    return {user, valid, twoFactor};
 };
 /**
  * 驗證jwt token
@@ -130,7 +144,13 @@ Auth.prototype.hash = function (pwd) {
             else resole(hash);
         });
     });
-}
+};
+Auth.prototype.registerOTP = async function (username, secret) {
+    return await this.db.updateSecret(username, secret);
+};
+Auth.prototype.getSecret = async function (username) {
+    return await this.db.getSecret(username);
+};
 module.exports = exports = Auth;
 if (process.env.NODE_ENV == 'test') {
     const auth = new Auth();

@@ -6,7 +6,7 @@ const EventEmitter  = require("events");
 const NSLog         = require('fxNetSocket').logger.getInstance();
 const restify       = require('restify');
 const errors        = require('restify-errors');
-
+const corsMiddleware = require('restify-cors-middleware2');
 /**
  * 管理介面
  * @constructor
@@ -15,6 +15,10 @@ class RestManager extends EventEmitter {
     constructor(delegate) {
         super();
         this.delegate = delegate;
+        this.visitorAPI = new Set([
+            '/user/login',
+            '/user/2fa'
+        ])
         this.server = this.createAPIServer();
     }
     createAPIServer() {
@@ -22,16 +26,28 @@ class RestManager extends EventEmitter {
             name: 'manager.api',
             version: '1.0.0'
         });
-
+        const cors = corsMiddleware({
+            preflightMaxAge: 5, //Optional
+            origins: ['*'],
+            allowHeaders: ['appid'],
+            exposeHeaders: ['appid']
+        });
+        server.pre(cors.preflight);
+        server.use(cors.actual);
         server.use(restify.plugins.acceptParser(server.acceptable));
         server.use(restify.plugins.queryParser());
         server.use(restify.plugins.bodyParser());
         server.use(restify.plugins.authorizationParser()); // header authorization parser
         server.use(async (req,res, next) => {
             res.setHeader('Access-Control-Allow-Origin', "*")
-            if (res.url === '/user/login') return next();
-            const valid = await this.verifyAuth(req.authorization);
-            console.log('valid', valid, req.url);
+            if (this.visitorAPI.has(req.url)) return next();
+            const {data} = await this.verifyAuth(req.authorization);
+            const {twoFactor, otpauth} = data;
+            let valid = 0;
+            if (twoFactor && otpauth) {
+
+            }
+            console.log(`${req.url} valid: ${valid} twoFactor:${twoFactor}, otpauth:${otpauth}`);
 
             if (valid == 1) {
                 //未通過驗證
@@ -49,9 +65,9 @@ class RestManager extends EventEmitter {
             res.send(req.params);
             return next();
         });
+        //登入驗證
         server.post('/user/login', async (req, res, next) => {
             let {username, password} = req.body;
-            console.log(typeof req.body);
             let login = await this.delegate.auth.login({
                 username, password
             })
@@ -66,6 +82,31 @@ class RestManager extends EventEmitter {
                         token: login
                     }
                 });
+            }
+            return next();
+        });
+        //二次驗證
+        server.post('/user/2fa', async (req, res, next) => {
+            const {otp, auth} = this.delegate;
+            const {authorization} = req;
+            let {result, data} = await auth.jwtVerify(authorization.credentials);
+            const {token} = req.body;
+            if (result) {
+                const {username} = data;
+                const db = await auth.getSecret(username);
+                let secret = '';
+                if (db) {
+                    secret = db.otp;
+                }
+                let result = otp.verify({secret, token});
+                if (result) {
+                    res.send({
+                        result,
+                        token: await auth.otpAuth(data)
+                    })
+                } else {
+                    res.send({result})
+                }
             }
             return next();
         });
@@ -183,7 +224,46 @@ class RestManager extends EventEmitter {
             }
             return next();
         });
+        server.get('/user/otp/qrcode', async (req, res, next) => {
+            const {otp} = this.delegate;
+            const img = await otp.test();
+            res.setHeader('Content-Type', 'image/png');
+            res.end(img);
+            return next();
+        });
+        server.get('/user/login/gen/otp', async (req, res, next) => {
+            const {otp, auth} = this.delegate;
+
+            const {authorization} = req;
+            const {result, data} = await auth.jwtVerify(authorization.credentials);
+
+            if (result) {
+                const {username} = data;
+                const db = await auth.getSecret(username)
+                let secret;
+                if (db) {
+                    secret = db.otp;
+                } else {
+                    secret = otp.generateSecret(32);
+                    await auth.registerOTP(username, secret);
+                }
+
+                let url = otp.generateURL({
+                    issuer: "octoMan",
+                    username,
+                    secret
+                });
+                console.log(`url: ${url}`);
+                const img = await otp.create_qrcode(url, 'buffer');
+                res.setHeader('Content-Type', 'image/png');
+                res.end(img);
+            } else {
+                res.send({result: false});
+            }
+            return next();
+        });
         return server;
+
     }
 }
 
@@ -194,16 +274,15 @@ class RestManager extends EventEmitter {
  * @param authorization.credentials
  */
 RestManager.prototype.verifyAuth = async function (authorization) {
-    console.log(`authorization.credentials: ${authorization.credentials}`);
-    console.log("jwtVerify: ",await this.delegate.auth.jwtVerify(authorization.credentials));
-    return 0;
+    // console.log(`authorization.credentials: ${authorization.credentials}`);
+    return await this.delegate.auth.jwtVerify(authorization.credentials);
 }
 RestManager.prototype.setup = function () {
     console.log('create');
 };
 RestManager.prototype.getServer = function () {
     return this.server.server;
-}
+};
 RestManager.prototype.start = function (port) {
     const server = this.server
 
