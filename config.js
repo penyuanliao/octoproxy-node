@@ -62,7 +62,9 @@ config.telegram = {
     proxyMode: {host: "", port: 0},
     enabled: false
 };
-
+config.crossPolicy = Object.freeze({
+    'Access-Control-Allow-Origin': []
+});
 /** 開發環境設定 **/
 if (config.env == 'development') {
     config.bFMSHost = require('fxNetSocket').getConfiguration("OctoProxy-Dev");

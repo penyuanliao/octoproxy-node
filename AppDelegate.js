@@ -238,10 +238,7 @@ AppDelegate.prototype.createServer = function (opt) {
             buffer = arguments[1];
         }
 
-        var handle = this;
-        // var srv = self.server;
-
-        // nread > 0 read success
+        let handle = this;
         if (nread < 0) {
             if (nread == uv.UV_ECONNRESET) {
                 NSLog.log('debug','connection reset by peer.');
@@ -338,7 +335,7 @@ AppDelegate.prototype.createServer = function (opt) {
         if (swp == "admin" || swp == "log" || corsMode || appid) {
             const [cluster] = (self.clusters["inind"] || self.clusters["administrator"] || []);
             if (cluster) {
-                cluster.send({'evt':'c_init2', data:source, mode: mode, id: self.getTokenId()}, handle,{keepOpen:false}, (json) => {
+                cluster.send({'evt':'c_init2', data:source, mode, id: self.getTokenId()}, handle, {keepOpen:false}, (json) => {
                     if (!json.event) return false;
                     clearTimeout(socket_timer);
                     admin_free();
@@ -354,6 +351,7 @@ AppDelegate.prototype.createServer = function (opt) {
             let socket_timer = setTimeout(admin_free, sendWaitClose);
             return true;
         }
+        /** 回應heartbeat **/
         let echo = self.echo({namespace, mode});
         if (echo != false) {
             tcp_write(handle, echo);
