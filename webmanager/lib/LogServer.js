@@ -50,7 +50,7 @@ LogServer.prototype.setup = function (port) {
                 this.emit("update", output); //方法2
                 this.onData(obj.name, output); //方法3
             });
-            console.log(`Remote log ${obj.name} connected.`);
+            //console.log(`Remote log ${obj.name} connected.`);
         });
     });
 

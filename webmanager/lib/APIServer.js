@@ -22,12 +22,15 @@ class APIServer extends EventEmitter {
         this.setup();
     }
 }
-
+/**
+ * 初始化
+ */
 APIServer.prototype.setup = function () {
+    const listen = !this.isWorker;
     this.auth = new Auth();
     this.otp  = new OTP();
-    this.wsServer = this.createTCPServer({listen: !this.isWorker, port: 8002});
-    this.restManager = this.createRestServer({listen: !this.isWorker, port:8001});
+    this.wsServer = this.createTCPServer({listen, port: 8002});
+    this.restManager = this.createRestServer({listen, port:8001});
     this.manager = new RemoteClient(); //連線到服務窗口
     this.logServer = this.createLiveLogServer(10080);
     if (this.isWorker) this.setupIPCBridge();

@@ -15,22 +15,18 @@ const NSLog         = require("fxNetSocket").logger.getInstance();
 class Auth extends EventEmitter {
     constructor() {
         super();
-        this.db = new ManagerDB();
-        // this.test();
+        this.db = new ManagerDB(process.cwd());
+        this.test();
 
     }
 }
 Auth.prototype.test = async function () {
-    const data = await this.register({
-        username: "newflash@mail.chungyo.net",
-        password: "password1"
-    });
-    console.log('data->', data);
-    const token = await this.login({
-        username: "newflash@mail.chungyo.net",
-        password: "password1"
-    });
-    console.log('token', token);
+    const username = "newflash@mail.chungyo.net";
+    const password = "nanhvw8Y";
+    let user = await this.db.getUser(username);
+    if (!user) {
+        await this.register({ username, password });
+    }
 };
 
 Auth.prototype.register = async function ({username, password}) {

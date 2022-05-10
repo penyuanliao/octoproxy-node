@@ -33,10 +33,12 @@ class webServer extends events.EventEmitter {
                     socket.server = null;
                     server.emit("connection", socket);
                     socket.emit("connect");
-                    socket.emit('data',new Buffer(data.data));
+                    socket.emit('data',Buffer.from(data.data));
                     socket.resume();
-                }else if(data.evt == "processInfo") {
+                } else if(data.evt == "processInfo") {
                     process.send({"evt":"processInfo", "data" : {"memoryUsage":process.memoryUsage(),"connections": 0, "lv": 0}})
+                }  else if(data.evt == "kickUsersOut") {
+                    process.kill(process.pid, `SIGTERM`);
                 }
             }
         });
@@ -44,6 +46,7 @@ class webServer extends events.EventEmitter {
             process.send({"action":"creationComplete"});
             process.send({evt:"processConf", data: {lv:0, f2db:undefined}});
         }
+        process.on('SIGINT', () => process.exit(2));
     }
 
     /**

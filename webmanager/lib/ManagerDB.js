@@ -2,7 +2,8 @@
 const net           = require("net");
 const util          = require("util");
 const EventEmitter  = require("events");
-const sqlite3      = require('sqlite3').verbose();
+const sqlite3       = require('sqlite3').verbose();
+const NSLog         = require('fxNetSocket').Logger.getInstance();
 /**
  *
  * @constructor
@@ -18,6 +19,8 @@ class ManagerDB extends EventEmitter {
 ManagerDB.prototype.setup = function (filepath) {
     if (!filepath) filepath = ".";
     let src = `${filepath}/manager.db`;
+
+    NSLog.info(`ManagerDB src: ${src}`);
     const db = new sqlite3.Database(src);
     db.serialize(() => {
         db.run(this.syntax.createTableAccount());

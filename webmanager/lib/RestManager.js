@@ -42,13 +42,11 @@ class RestManager extends EventEmitter {
             res.setHeader('Access-Control-Allow-Origin', "*")
             if (this.visitorAPI.has(req.url)) return next();
             const {data} = await this.verifyAuth(req.authorization);
-            const {twoFactor, otpauth} = data;
             let valid = 0;
-            if (twoFactor && otpauth) {
-
+            if (data) {
+                const {twoFactor, otpauth} = data;
+                console.log(`${req.url} valid: ${valid} twoFactor:${twoFactor}, otpauth:${otpauth}`);
             }
-            console.log(`${req.url} valid: ${valid} twoFactor:${twoFactor}, otpauth:${otpauth}`);
-
             if (valid == 1) {
                 //未通過驗證
                 next(new errors['UnauthorizedError']('Access is denied due to invalid credentials.'));
@@ -262,8 +260,55 @@ class RestManager extends EventEmitter {
             }
             return next();
         });
-        return server;
+        server.get('/dir', async (req, res, next) => {
+            let src = await this.delegate.manager.send({
+                method: "readFiles"
+            });
+            res.send(src);
+            return next();
+        });
+        server.get('/dir/:filename', async (req, res, next) => {
+            let filename = this.getFilename(req.params.filename);
+            let src = await this.delegate.manager.send({
+                method: "readFileContents",
+                filename
+            });
+            res.send(src);
+            return next();
+        });
+        server.post('/dir/:filename', async (req, res, next) => {
+            let filename = this.getFilename(req.params.filename);
+            if (!filename) {
+                res.send({
+                    result: false,
+                    error: 'This is not a valid file name'
+                });
+                return next();
+            }
+            let {
+                data,
+                reload
+            } = req.body || {};
+            let src = await this.delegate.manager.send({
+                method: "saveFileContents",
+                filename,
+                data
+            });
 
+            if (Array.isArray(reload)) {
+                for (let i = 0; i < reload.length; i++) {
+                    let item = reload[i];
+                    await this.delegate.manager.send({
+                        method: 'ipcMessage',
+                        pid: item.pid,
+                        params: (item.params)
+                    });
+                }
+            }
+            res.send(src);
+            return next();
+        });
+        return server;
     }
 }
 
@@ -289,8 +334,16 @@ RestManager.prototype.start = function (port) {
     server.listen(port, function () {
         console.log('RestManager %s listening at %s', server.name, server.url);
     });
-}
+};
 
+RestManager.prototype.getFilename = function (filename) {
+    let match = filename.match(/[\w]+.json/g);
+    if (!match) {
+        return false;
+    } else {
+        return match[0];
+    }
+};
 
 RestManager.prototype.clean = function () {
 
