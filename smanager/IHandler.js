@@ -1,6 +1,7 @@
 "use strict";
 const events        = require("events");
 const util          = require("util");
+const xPath         = require("path");
 const fs            = require("fs");
 const editor        = require('../lib/AssignEdittor.js');
 const Scheduler     = require('./Scheduler.js');
@@ -38,7 +39,8 @@ const ManagerEvents = new Set([
     "lockdownMode",
     "getSchedule",
     "addSchedule",
-    "cancelSchedule"
+    "cancelSchedule",
+    "readFiles"
 ]);
 /**
  * 控制端事件
@@ -133,7 +135,7 @@ IHandler.prototype.getSysInfo = function (params, client, callback) {
  */
 IHandler.prototype.setLogLevel2 = function (params, client, callback) {
     try {
-        this.setLogLevel2(params, client, callback);
+        // this.setLogLevel2(params, client, callback);
     } catch (e)
     {
         console.log(e);
@@ -788,12 +790,44 @@ IHandler.prototype.ipcMessage = function ({params, pid}, client, callback) {
  * @param {Function} callback
  */
 IHandler.prototype.readFileContents = function ({filename}, client, callback) {
-    const filepath = util.format("../configuration/%s", filename);
+    const filepath = xPath.resolve(process.cwd(), '../appsettings', filename);
     let res = false;
     let str, data;
+
+    if (!fs.existsSync(filepath)) fs.mkdirSync(filepath);
+
+    console.log(`readFileContents: `, filepath);
+
     try {
         str = fs.readFileSync(filepath);
         data = JSON.parse(str.toString());
+        res = true;
+    } catch (e) {
+        data = str.toString();
+        res = true;
+    }
+
+    if (callback) {
+        callback({data, result: res});
+    }
+};
+/**
+ * 讀取資料夾檔案清單
+ * @param client
+ * @param callback
+ */
+IHandler.prototype.readFiles = function ({}, client, callback) {
+    const filepath = util.format("../appsettings/");
+
+    if (!fs.existsSync(filepath)) fs.mkdirSync(filepath);
+
+    let res = false;
+    let data = [];
+    try {
+
+        fs.readdirSync(filepath).forEach(file => {
+            data.push(file);
+        })
         res = true;
     } catch (e) {
     }
@@ -802,8 +836,18 @@ IHandler.prototype.readFileContents = function ({filename}, client, callback) {
         callback({data, result: res});
     }
 }
+/**
+ * 寫入檔案
+ * @param filename
+ * @param data
+ * @param client
+ * @param callback
+ */
 IHandler.prototype.saveFileContents = function ({filename, data}, client, callback) {
-    const filepath = util.format("../configuration/%s", filename);
+    const filepath = xPath.resolve(process.cwd(), '../appsettings', filename);
+
+    if (!fs.existsSync(filepath)) fs.mkdirSync(filepath);
+
     let respond = {
         result: false
     }
@@ -822,6 +866,12 @@ IHandler.prototype.saveFileContents = function ({filename, data}, client, callba
     }
 
 };
+/**
+ * 讀取檔案
+ * @param filepath
+ * @param defObj
+ * @return {any}
+ */
 IHandler.prototype.readFile = function (filepath, defObj) {
     let data;
     try {
