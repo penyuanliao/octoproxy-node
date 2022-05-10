@@ -112,6 +112,7 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
     }
 
     obj.bitrates = cluster.nodeInfo.bitrates;
+    if (obj.monitor) obj.monitor = cluster.nodeInfo.monitor;
     obj.file = cluster._modulePath;
     return obj;
 };
