@@ -185,7 +185,6 @@ APIServer.prototype.systemMessage = function ({evt, id, data, mode}, handle) {
         server = this.wsServer;
     }
     if (evt === 'c_init2') {
-        console.log(`mode`, mode);
         let socket = new net.Socket({
             handle:handle,
             allowHalfOpen: server.allowHalfOpen
@@ -196,7 +195,7 @@ APIServer.prototype.systemMessage = function ({evt, id, data, mode}, handle) {
         socket.emit("connect");
         socket.emit('data', Buffer.from(data));
         socket.resume();
-        process.send({ evt, id });
+        if (id) process.send({ evt, id });
     }
     else if (evt === 'setLogLevel') {
         this.LOG_LEVEL = data.params.lv;
