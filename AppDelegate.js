@@ -255,7 +255,7 @@ AppDelegate.prototype.createServer = function (opt) {
             }
 
             if (nread === 0) {
-                NSLog.log('debug','not any data, keep waiting.');
+                // NSLog.log('debug','End of File.');
             }
 
             return;
@@ -774,7 +774,7 @@ AppDelegate.prototype.onTlsIncoming = function (tlsSocket) {
 };
 AppDelegate.prototype.readTCPParser = function (socket, buffer) {
     const headers = pheaders.onReadTCPParser(buffer);
-    console.log(headers);
+    // console.log(headers);
 };
 AppDelegate.prototype.rejectClientException = function(handle, name) {
     if (typeof handle != "undefined" && TRACE_SOCKET_IO) {
