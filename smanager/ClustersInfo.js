@@ -6,7 +6,7 @@ const GAME_LB_NAME_ASSIGN = "casino_game_rule";
 const GAME_LB_NAME = "loadBalance";
 
 /**
- * 
+ * 服務資訊
  * @constructor
  */
 class ClustersInfo extends EventEmitter {
@@ -87,33 +87,41 @@ ClustersInfo.prototype.getProcessInfo = function () {
 };
 ClustersInfo.prototype.unifyData = function (cluster, obj) {
     if (!obj) obj = {};
-    obj.pid   = cluster._cpfpid;
-    obj.name  = cluster.name;
-    obj.count = cluster.nodeInfo.connections;
-    obj.lock  = cluster._dontDisconnect;
-    obj.complete = cluster.creationComplete;
-    obj.uptime = cluster.uptime;
-    obj.ats   = cluster.ats;
-    obj.lookout = cluster._lookoutEnabled;
-    obj.args = cluster._args.slice(1);
-    obj.cpu  = this.delegate.getCPU(cluster._cpfpid);
-    if (typeof cluster.nodeInfo.memoryUsage != "undefined") {
-        obj.memoryUsage = (cluster.nodeInfo.memoryUsage);
-    }
-    if (typeof cluster.nodeConf != "undefined") {
-        obj.lv   = cluster.nodeConf.lv;
-        obj.f2db = (cluster.nodeConf.f2db);
-        obj.amf = (cluster.nodeConf.amf);
-    }
-    if (Array.isArray(cluster.nodeInfo.params)) {
-        obj.params.forEach((item) => {
-            obj[item[0]] = item[1];
-        });
-    }
 
-    obj.bitrates = cluster.nodeInfo.bitrates;
-    if (obj.monitor) obj.monitor = cluster.nodeInfo.monitor;
-    obj.file = cluster._modulePath;
+    if (!cluster) return obj;
+
+    const {
+        _cpfpid, name, nodeInfo,
+        _dontDisconnect, creationComplete, uptime,
+        ats, _lookoutEnabled, _args,
+        nodeConf, _modulePath
+    } = cluster;
+    const { connections, memoryUsage } = nodeInfo;
+
+    obj.pid   = _cpfpid;
+    obj.name  = name;
+    obj.count = connections;
+    obj.lock  = _dontDisconnect;
+    obj.complete = creationComplete;
+    obj.uptime = uptime;
+    obj.ats   = ats;
+    obj.lookout = _lookoutEnabled;
+    obj.args = _args.slice(1);
+    obj.cpu  = this.delegate.getCPU(_cpfpid);
+    if (typeof memoryUsage != "undefined") {
+        obj.memoryUsage = (memoryUsage);
+    }
+    if (typeof nodeConf != "undefined") {
+        obj.lv   = nodeConf.lv;
+        obj.f2db = (nodeConf.f2db);
+        obj.amf = (nodeConf.amf);
+    }
+    if (Array.isArray(nodeInfo.params)) {
+        obj.params.forEach((item) => obj[item[0]] = item[1]);
+    }
+    obj.bitrates = nodeInfo.bitrates;
+    if (obj.monitor) obj.monitor = nodeInfo.monitor;
+    obj.file = _modulePath;
     return obj;
 };
 ClustersInfo.prototype.getTrashInfo = function () {

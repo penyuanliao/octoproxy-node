@@ -127,7 +127,7 @@ APIServer.prototype.setupIPCBridge = function () {
                 process.exit(2);
             }
         } else {
-            console.log(todo);
+            console.log(`todo -> `, todo);
         }
     });
     process.on("disconnect", () => {

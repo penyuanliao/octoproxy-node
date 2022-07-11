@@ -46,7 +46,7 @@ class RemoteClient {
             port,
             delimiter:'\r\n'
         }
-        console.log(options);
+        // console.log(options);
         const ctrl = new Client(this, options);
         ctrl.on("connect", function () {
             console.log(' - Active mode, the client connect to server port.');

@@ -77,7 +77,7 @@ Scheduler.prototype.job = function (params) {
     } else {
         task.job = Schedule.scheduleJob(task.executeTime, this.onTrigger.bind(this, name, id));
     }
-    console.log(task);
+    console.log(`task -> `, task);
     this.schedulesInfo.set(id, task);
 
     this.refresh();

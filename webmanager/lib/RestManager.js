@@ -29,8 +29,8 @@ class RestManager extends EventEmitter {
         const cors = corsMiddleware({
             preflightMaxAge: 5, //Optional
             origins: ['*'],
-            allowHeaders: ['appid'],
-            exposeHeaders: ['appid']
+            allowHeaders: ['appid', 'authorization'],
+            exposeHeaders: ['appid', 'authorization']
         });
         server.pre(cors.preflight);
         server.use(cors.actual);
@@ -41,19 +41,21 @@ class RestManager extends EventEmitter {
         server.use(async (req,res, next) => {
             res.setHeader('Access-Control-Allow-Origin', "*")
             if (this.visitorAPI.has(req.url)) return next();
-            const {data} = await this.verifyAuth(req.authorization);
-            let valid = 0;
-            if (data) {
-                const {twoFactor, otpauth} = data;
-                console.log(`${req.url} valid: ${valid} twoFactor:${twoFactor}, otpauth:${otpauth}`);
-            }
-            if (valid == 1) {
-                //未通過驗證
-                next(new errors['UnauthorizedError']('Access is denied due to invalid credentials.'));
-            } if (valid == 2) {
+            let auth = await this.verifyAuth(req.authorization);
+            if (auth == 1) {
                 //未授權
                 next(new errors['NotAuthorizedError']("You are not authorized to access this api. You must sign-in using your credentials for authorization."));
+            }
+            else if (auth == 2) {
+                //未通過驗證
+                next(new errors['UnauthorizedError']('Access is denied due to invalid credentials.'));
             } else {
+                let { data } = auth;
+                console.log(auth);
+                if (data) {
+                    const {twoFactor, otpauth} = data;
+                    console.log(`${req.url} twoFactor:${twoFactor}, otpauth:${otpauth}`);
+                }
                 next();
             }
         });
@@ -83,6 +85,7 @@ class RestManager extends EventEmitter {
             }
             return next();
         });
+        server.post('/user/password', (req, res, next) => this.password(req, res, next));
         //二次驗證
         server.post('/user/2fa', async (req, res, next) => {
             const {otp, auth} = this.delegate;
@@ -109,10 +112,7 @@ class RestManager extends EventEmitter {
             return next();
         });
         server.get('/amf/config', async (req, res, next) => {
-
-            let src = await this.delegate.manager.send({
-                method: "getAMFConfig"
-            })
+            let src = await this.delegate.manager.send({ method: "getAMFConfig" })
             res.send(src);
             return next();
         });
@@ -281,7 +281,8 @@ class RestManager extends EventEmitter {
             if (!filename) {
                 res.send({
                     result: false,
-                    error: 'This is not a valid file name'
+                    code: 'InvalidName',
+                    message: 'This is not a valid file name'
                 });
                 return next();
             }
@@ -310,6 +311,24 @@ class RestManager extends EventEmitter {
         });
         return server;
     }
+
+    /**
+     * @api {post} /user/password change user password
+     * @apiName ChangePassword
+     * @group User
+     * @param req
+     * @param res
+     * @param next
+     * @return {Promise<Object>}
+     */
+    async password (req, res, next) {
+        const { delegate } = this;
+        let { password, newPassword } = req.body;
+        let { authorization } = req;
+        let result = await delegate.auth.changePassword({ password, newPassword, authorization });
+        res.send({ result });
+        return next();
+    }
 }
 
 /**
@@ -320,7 +339,16 @@ class RestManager extends EventEmitter {
  */
 RestManager.prototype.verifyAuth = async function (authorization) {
     // console.log(`authorization.credentials: ${authorization.credentials}`);
-    return await this.delegate.auth.jwtVerify(authorization.credentials);
+
+    const { credentials } = authorization;
+
+    // if (!credentials) return 2;
+
+    let auth = await this.delegate.auth.jwtVerify(credentials);
+
+    // if (!auth.result) return 1;
+
+    return auth;
 }
 RestManager.prototype.setup = function () {
     console.log('create');

@@ -39,6 +39,33 @@ Auth.prototype.register = async function ({username, password}) {
     });
 };
 /**
+ * 更換密碼
+ * @param {String} username
+ * @param {String} password
+ * @param {String} newPassword
+ * @param {Object} authorization
+ * @return {Promise<*|boolean>}
+ */
+Auth.prototype.changePassword = async function ({password, newPassword, authorization}) {
+
+    let {result, data} = await this.jwtVerify(authorization);
+    if (!result || newPassword.length < 8) return false;
+    let { username } = data;
+    let {valid, user, twoFactor} = this.verify({username, password})
+    if (valid) {
+        return await this.db.updateAccount({
+            username: username,
+            password: await this.hash(newPassword)
+        }).catch((err) => {
+            NSLog.log("error", "User '%s' Change Password failed. err: %s", username, err);
+            return false;
+        });
+    } else {
+        return false;
+    }
+
+};
+/**
  * 登入系統
  * @param username
  * @param password
@@ -77,6 +104,12 @@ Auth.prototype.logout = async function ({username}) {
     });
     return true;
 };
+/**
+ * 驗證使用者
+ * @param username
+ * @param password
+ * @return {Promise<{valid: boolean, twoFactor: boolean, user: (boolean|*)}>}
+ */
 Auth.prototype.verify = async function ({username, password}) {
     let user = await this.db.getUser(username);
     let valid = false;

@@ -32,6 +32,11 @@ ManagerDB.prototype.insertAccount = async function (json) {
 
     return await this.asyncRun(this.syntax.insertAccount(json));
 };
+
+ManagerDB.prototype.updateAccount = async function (json) {
+    return await this.asyncRun(this.syntax.updateAccount(json));
+};
+
 ManagerDB.prototype.flushToken = async function (json) {
     return await this.asyncRun(this.syntax.updateToken(json));
 }

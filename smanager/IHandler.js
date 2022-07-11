@@ -138,7 +138,7 @@ IHandler.prototype.setLogLevel2 = function (params, client, callback) {
         // this.setLogLevel2(params, client, callback);
     } catch (e)
     {
-        console.log(e);
+        console.log('setLogLevel2 error',e);
     }
 };
 /**

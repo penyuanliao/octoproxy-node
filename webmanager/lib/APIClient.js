@@ -4,6 +4,7 @@ const util          = require("util");
 const EventEmitter  = require("events");
 const WSClient      = require("fxNetSocket").WSClient;
 const {UDPManager}  = require("../../lib/UDP.js");
+const NSLog         = require('fxNetSocket').logger.getInstance();
 /**
  *
  * @constructor
@@ -35,6 +36,7 @@ APIClient.prototype.setup = function (socket) {
     ws.on('message', this.handle.bind(this));
     ws.once("close", () => {
         console.log('client closed');
+        this.release();
     });
     ws.once("error", (err) => {
         console.log('err');
@@ -557,11 +559,16 @@ APIClient.prototype.ipcMessage = async function (json) {
 };
 /** [UDP only] 建立udp **/
 APIClient.prototype.createUDPManager = async function (json) {
-    const udp = new UDPManager(this, 8081);
+    let udp;
+    if (!this.udp) {
+        udp = new UDPManager(this, 8080);
+        this.udp = udp;
+    } else {
+        udp = this.udp
+    }
     const group = await udp.ready()
-    // NSLog.log("debug", "address ready: ", group);
+    NSLog.log("debug", "UDP address ready: ", group);
     udp.group = group;
-    this.udp = udp;
     udp.on('log', (json) => {
         this.write({
             event: "udplog",
@@ -577,7 +584,16 @@ APIClient.prototype.createUDPManager = async function (json) {
     };
     this.write(respond);
 };
-/** [UDP only]更換視訊ip source **/
+/**
+ * [UDP only]更換視訊ip source
+ * @param json
+ * @param json.tokenId
+ * @param json.list 多筆
+ * @param json.address 單筆
+ * @param json.host
+ * @param json.port
+ * @return {Promise<Object>}
+ */
 APIClient.prototype.handoffMediaData = async function (json) {
     let respond = {
         event: 'handoffMediaData',
@@ -585,20 +601,31 @@ APIClient.prototype.handoffMediaData = async function (json) {
         result: false
     }
     if (this.udp) {
-        // NSLog.log("info", 'handoffMediaData params', params);
-        let res = await this.udp.startHandoff({
-            address: json.address,
-            port: json.port,
-            host: json.port,
-        });
-        respond.result = res.res;
+        let {list, address, host, port} = json;
+
+        let group = Array.isArray(list) ? list : [];
+
+        if (typeof address == "string") group.push(address);
+
+        NSLog.log("info", `HandoffMediaData:
+        > broadcast: ${group.toString()}
+        > switch to ${host}:${port}`);
+        let result = new Map();
+        let adrs;
+        for (let i = 0; i < group.length; i++) {
+            adrs = group[i];
+            let {res} = await this.udp.startHandoff({ address, host, port });
+            result.set(adrs, res);
+        }
+        respond.list = [ ...result ];
+        respond.result = true;
     } else {
         respond.error = "not a available";
     }
     this.write(respond);
 };
 /** [UDP only] **/
-APIClient.getWorkServices = function (json) {
+APIClient.prototype.getWorkServices = function (json) {
     let respond = {
         event: 'getWorkServices',
         tokenId: json.tokenId,
@@ -612,6 +639,50 @@ APIClient.getWorkServices = function (json) {
     }
     this.write(respond);
 };
+APIClient.prototype.mediaSaveFile = async function (json) {
+    let respond = {
+        event: 'mediaSaveFile',
+        tokenId: json.tokenId,
+        result: false
+    }
+    const { udp } = this;
+    if (!this.udpEstablish(json)) return false;
+    let { filename, data, list } = json;
+
+    NSLog.log("info", `mediaSaveFile:
+        > broadcast: ${list.toString()}`);
+
+    let result = new Map();
+    let address;
+    for (let i = 0; i < list.length; i++) {
+        address = list[i];
+        let {res} = await udp.saveFile({ address, filename, data });
+        result.set(address, res);
+    }
+    respond.list = [ ...result ];
+    respond.result = true;
+    this.write(respond);
+};
+/**
+ * 檢查manager服務是否建立
+ * @param json
+ * @return {boolean}
+ */
+APIClient.prototype.udpEstablish = function (json) {
+    let respond = {
+        event: json.action,
+        tokenId: json.tokenId,
+        result: false
+    }
+    const { udp } = this;
+    if (udp) {
+        return true;
+    } else {
+        respond.error = "not a available";
+    }
+    this.write(respond);
+    return false;
+};
 
 
 APIClient.prototype.setManager = function (manager) {
@@ -621,6 +692,9 @@ APIClient.prototype.write = function (data) {
     if (this.cmode == 0) {
         this.ws.write(data);
     }
+};
+APIClient.prototype.release = function () {
+    if (this.udp) this.udp.release();
 };
 
 module.exports = exports = APIClient;
