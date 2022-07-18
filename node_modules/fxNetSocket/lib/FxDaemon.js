@@ -324,8 +324,9 @@ Fxdaemon.prototype = /** @lends Fxdaemon */ {
                 else if (message.evt === "c_init2" || message.evt === "c_init") {
                     let {blocking} = context;
                     if (blocking.has(message.id)) {
-                        blocking.get(message.id)(message);
-                        blocking.delete(message.id);
+                        let {cb, timeout} = blocking.get(message.id);
+                        clearTimeout(timeout);
+                        cb(message);
                     }
                 }
                 else if (message.evt === "onIpcMessage") {
@@ -522,7 +523,10 @@ Fxdaemon.prototype = /** @lends Fxdaemon */ {
 
         if (_cpf && !_killed) {
             _cpf.send(message, handle, options, () => {
-                if (cb) this.blocking.set(message.id, cb);
+                if (cb) this.blocking.set(message.id, {cb, timeout: setTimeout(() => {
+                        cb({event: false, error:'timeout'});
+                        this.blocking.delete(message.id);
+                    }, 5000)});
             });
 
         } else {
