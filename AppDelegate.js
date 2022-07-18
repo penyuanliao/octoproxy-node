@@ -1071,11 +1071,14 @@ AppDelegate.prototype.findAssignRules = function ({namespace, subname}) {
  * @param {Function} cb
  */
 AppDelegate.prototype.roundrobin = function ({namespace, group}, cb) {
-    let cluster = group[this.roundrobinNum[namespace]++];
-
-    if (this.roundrobinNum[namespace] >= group.length) {
-        this.roundrobinNum[namespace] = 0;
-    }
+    let cluster;
+    do {
+        cluster = group[this.roundrobinNum[namespace]++];
+        if (this.roundrobinNum[namespace] >= group.length) {
+            this.roundrobinNum[namespace] = 0;
+            if (cb) cb(undefined);
+        }
+    } while (cluster.creationComplete != 1)
     if (cb) cb(cluster);
 };
 /**
@@ -1089,8 +1092,8 @@ AppDelegate.prototype.leastconn = function ({namespace, group}, cb) {
     let cluster = group[0];
     for (let n = 0; n < num; n++) {
         //檢查最小連線數
-        let { connections } = group[n].nodeInfo;
-        let isPriority = (cluster.nodeInfo.connections > connections);
+        let { connections, creationComplete } = group[n].nodeInfo;
+        let isPriority = (cluster.nodeInfo.connections > connections) && (creationComplete == 1);
         if (isPriority) cluster = group[n];
     }
     if (cb) cb(cluster);

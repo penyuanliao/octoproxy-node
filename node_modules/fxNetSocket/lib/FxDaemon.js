@@ -166,9 +166,9 @@ function Fxdaemon(modulePath/*, args, options*/) {
     this.cmd = options.cmd ? options.cmd : false;
     /**
      * make sure initiallization process send creationComplete
-     * @type {Boolean}
+     * @type {Number}
      */
-    this.creationComplete = false;
+    this.creationComplete = 0;
     /**
      * released source code
      * @type {boolean} isRelease
@@ -335,12 +335,12 @@ Fxdaemon.prototype = /** @lends Fxdaemon */ {
                 else if (message.evt === "streamData") {
                     // context.emit("streamData", message);
                     if (context.custMsgCB){
-                        context.custMsgCB(message.evt,message);
+                        context.custMsgCB(message.evt, message);
                     }
                 }else if (typeof message.action != 'undefined') {
                     context.emitter.emit(message.action, message);
                     if (message.action == "creationComplete") {
-                        context.setMakeSureComplete((typeof message.bool == "boolean") ? message.bool : true);
+                        context.setMakeSureComplete((typeof message.data == "boolean" || typeof message.data == "number") ? message.data : true);
                     }
                 }
 
@@ -519,7 +519,7 @@ Fxdaemon.prototype = /** @lends Fxdaemon */ {
      */
     postMessage: function (message, handle, options, cb) {
         const { creationComplete, _cpf, _killed } = this;
-        if (!creationComplete) return false;
+        if (creationComplete != 1) return false;
 
         if (_cpf && !_killed) {
             _cpf.send(message, handle, options, () => {
@@ -627,17 +627,24 @@ Fxdaemon.prototype = /** @lends Fxdaemon */ {
      * 服務是否建立完成
      * @name Fxdaemon#setMakeSureComplete
      * @function setMakeSureComplete
-     * @param {Boolean} bool
+     * @param {Boolean|number} bool
      * @public
      */
-    setMakeSureComplete: function (bool) {
-        if (typeof bool == "boolean")
-            if (!this.creationComplete && bool) {
-                this.emit('completed');
-                this.creationComplete  = bool;
-            } else {
-                this.creationComplete  = bool;
-            }
+    setMakeSureComplete: function (data) {
+        let value = 0;
+        if (typeof data == "boolean") {
+            value = (data ? 1 : 0);
+        } else if (typeof bool === "number") {
+            value = Number.parseInt(data);
+        }
+        if (value == 1 && this.creationComplete != 1) {
+            this.emit('up');
+        }
+        else if (this.creationComplete == 1 && value == 0) {
+            this.emit('down');
+        }
+        this.creationComplete  = value;
+        return value;
     },
     /**
      * 服務是否還活著
