@@ -130,7 +130,7 @@ FxSender.prototype.createCompress = function () {
     const endpoint = this;
     if (typeof this.inflate == "undefined") {
         this.inflate = zlib.createDeflateRaw({windowBits: zlib.Z_DEFAULT_WINDOWBITS});
-        this.inflate.on("data", this.onCompression.bind(this));
+        this.inflate.on("data", (chunk) => this.onCompression(chunk));
     }
     return this.inflate;
 };
@@ -155,7 +155,7 @@ FxSender.prototype.compressing = function (info, callback) {
     this.pending = true;
     this._comInfo.opcode = info.opcode;
     this.inflate.write(info.data);
-    this.inflate.flush(zlib.Z_SYNC_FLUSH, function onFlushed() {
+    this.inflate.flush(zlib.Z_SYNC_FLUSH, () => {
         this.pending = false;
         if (this.isRelease) return;
         const len = (fin ? (this.chunkLength - 4) : this.chunkLength);
@@ -168,7 +168,7 @@ FxSender.prototype.compressing = function (info, callback) {
             this.compressing.apply(this, next);
         }
         if (callback) callback(packaged);
-    }.bind(this));
+    });
     return true;
 };
 /**

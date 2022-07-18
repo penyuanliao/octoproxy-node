@@ -22,6 +22,7 @@ util.inherits(FxWebSocketClient, events.EventEmitter); // 繼承事件
  * @constructor
  */
 function FxWebSocketClient(socket, option, cb) {
+    events.EventEmitter.call(this);
     /** @property {Boolean} nPingPong 內建 ping pong 機制 */
     this.nPingPong = false;
     this.splitsReceiveLimitCount = 100;

@@ -55,8 +55,8 @@ function FxRevicer(client, mode) {
     };
     /** @property {FxWriterPool} reader 讀取streaming資料 */
     this.reader = new FxWriterPool();
-    this.reader.on("refresh", this.polling.bind(this, this.onHandle.bind(this)));
-    this.reader.on("close", this.release.bind(this));
+    this.reader.on("refresh", () => this.polling((proto) => this.onHandle(proto)));
+    this.reader.on("close", () => this.release());
 }
 /**
  * 設定來源型態
@@ -99,11 +99,11 @@ FxRevicer.prototype.createDecompress = function () {
 
     if (typeof this.stream == "undefined") {
         this.stream = zlib.createInflateRaw({windowBits: zlib.Z_DEFAULT_WINDOWBITS});
-        this.stream.on("data", function (data) {
+        this.stream.on("data", (data) => {
             if (this.isRelease) return;
             this.chunksBuffer.push(data);
             this.chunksLength += data.byteLength;
-        }.bind(this));
+        });
     }
     return this.stream;
 };
@@ -146,7 +146,7 @@ FxRevicer.prototype.onHandle = function (proto) {
         if (typeof stream == "undefined") return false;
         stream.write(payload);
         stream.write(TRAILER);
-        stream.flush(zlib.Z_SYNC_FLUSH, function () {
+        stream.flush(zlib.Z_SYNC_FLUSH, () => {
             if (proto.opcode == 8) {
                 // console.info('onHandle() opcode:', proto.opcode);
                 this.emitDestroy();
@@ -157,7 +157,7 @@ FxRevicer.prototype.onHandle = function (proto) {
             this.chunksLength = 0;
             if (endpoint.pingEnable == true && this.recordPing(endpoint, data) == true) return true;
             this.emitMessage((endpoint.forcedBinary ? data : data.toString()));
-        }.bind(this));
+        });
     } else {
         if (this.isRelease) return false;
         if (proto.opcode == 8) {
