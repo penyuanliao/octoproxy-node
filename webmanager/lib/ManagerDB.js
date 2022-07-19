@@ -5,7 +5,7 @@ const EventEmitter  = require("events");
 const sqlite3       = require('sqlite3').verbose();
 const NSLog         = require('fxNetSocket').Logger.getInstance();
 /**
- *
+ * Sql-lite資料庫
  * @constructor
  */
 class ManagerDB extends EventEmitter {
@@ -15,7 +15,11 @@ class ManagerDB extends EventEmitter {
         this.db = this.setup(filepath);
     }
 }
-
+/**
+ * 初始化設定
+ * @param filepath
+ * @return {*}
+ */
 ManagerDB.prototype.setup = function (filepath) {
     if (!filepath) filepath = ".";
     let src = `${filepath}/manager.db`;
@@ -27,9 +31,12 @@ ManagerDB.prototype.setup = function (filepath) {
     });
     return db;
 };
-
+/**
+ * 插入
+ * @param json
+ * @return {Promise<unknown>}
+ */
 ManagerDB.prototype.insertAccount = async function (json) {
-
     return await this.asyncRun(this.syntax.insertAccount(json));
 };
 

@@ -2,7 +2,7 @@
 const net           = require("net");
 const util          = require("util");
 const EventEmitter  = require("events");
-const WSClient      = require("fxNetSocket").WSClient;
+const {WSClient}    = require("fxNetSocket");
 const {UDPManager}  = require("../../lib/UDP.js");
 const NSLog         = require('fxNetSocket').logger.getInstance();
 /**
@@ -20,6 +20,7 @@ class APIClient extends EventEmitter {
         this.info     = null;
         this.udp      = null; //視訊專用
         this.ws       = this.setup(socket);
+        this.logSkip  = new Set(['getServiceInfo', 'getSysInfo']);
     }
 
 }
@@ -33,9 +34,9 @@ APIClient.prototype.setup = function (socket) {
         console.log('connected');
         this.ready();
     });
-    ws.on('message', this.handle.bind(this));
+    ws.on('message', data => this.handle(data));
     ws.once("close", () => {
-        console.log('client closed');
+        NSLog.info('client closed');
         this.release();
     });
     ws.once("error", (err) => {
@@ -53,12 +54,12 @@ APIClient.prototype.handle = function (data) {
     if (!this.signin && action === "login") {
         this[action](data);
     } else if (this.signin && this[action] instanceof Function) {
-        console.log(`[APIClient] action: ${action}`);
+        if (!this.logSkip.has(action)) NSLog.info(`[APIClient] action: ${action}`);
         this[action](data);
     } else if (this.handle_v1(data)) {
 
     } else {
-        console.log('[APIClient] Not Found %s', action, data);
+        NSLog.warning('[APIClient] Not Found %s', action, data);
     }
 };
 APIClient.prototype.handle_v1 = function (data) {
@@ -266,20 +267,25 @@ APIClient.prototype.restartCluster = async function (json) {
     };
     this.write(respond);
 };
+/**
+ * 多個服務重啟
+ * @param json
+ * @return {Promise<boolean>}
+ */
 APIClient.prototype.restartMultiCluster = async function (json) {
     const manager = this.manager;
     let src = json.data || json;
     let group = src.group.filter((value) => {
-        return (typeof value == "number");
+        return (typeof Number.parseInt(value) == "number");
     });
     let params = {
-        method: "restartCluster",
+        method: "restartMultiCluster",
         group
     };
     const {result, data} = await manager.send(params);
     let respond = {
         tokenId: json.tokenId,
-        event: "restartCluster",
+        event: "restartMultiCluster",
         result,
         data
     };

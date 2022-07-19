@@ -23,16 +23,16 @@ class APIServer extends EventEmitter {
     }
 }
 /**
- * 初始化
+ * 初始化設定
  */
 APIServer.prototype.setup = function () {
     const listen = !this.isWorker;
-    this.auth = new Auth();
-    this.otp  = new OTP();
-    this.wsServer = this.createTCPServer({listen, port: 8002});
+    this.auth        = new Auth();
+    this.otp         = new OTP();
+    this.wsServer    = this.createTCPServer({listen, port: 8002});
     this.restManager = this.createRestServer({listen, port:8001});
-    this.manager = new RemoteClient(); //連線到服務窗口
-    this.logServer = this.createLiveLogServer(10080);
+    this.manager     = new RemoteClient(); //連線到服務窗口
+    this.logServer   = this.createLiveLogServer(10080);
     if (this.isWorker) this.setupIPCBridge();
     this.makeSureComplete();
 };
@@ -45,15 +45,13 @@ APIServer.prototype.setup = function () {
 APIServer.prototype.createTCPServer = function ({port, listen}) {
 
     const server = net.createServer();
-    server.on("connection", this.onConnection.bind(this));
+    server.on("connection", socket => this.onConnection(socket));
 
-    server.on('listening', function () {
-        NSLog.log("info",'Server is listening on port', port);
-    });
-    server.on('close', function () {
-        NSLog.log("error",'Server is now closed');
-    });
-    server.on('error', function (err) {
+    server.on('listening', () =>
+        NSLog.log("info",'Server is listening on port', port));
+    server.on('close', () =>
+        NSLog.log("error",'Server is now closed'));
+    server.on('error',  (err) => {
         NSLog.log("error",'Error occurred:', err.message);
     });
     if (listen) server.listen(port);
@@ -85,27 +83,39 @@ APIServer.prototype.createRestServer = function ({listen, port}) {
     if (listen) manager.start({port: port});
     return manager;
 };
-/***
+/**
  * 處理SOCKET連線
- * @param {net.Socket} socket 連線進來的使用者
+ * @param socket 連線進來的使用者
  */
 APIServer.prototype.onConnection = function (socket) {
     const APIClient = require("./APIClient.js");
     const cli = new APIClient(socket, this);
 };
-/** remote log **/
+/**
+ * remote log
+ * @param {number} port
+ * @return {LogServer}
+ */
 APIServer.prototype.createLiveLogServer = function (port) {
     const server = new LogServer(port);
     server.on("update", (output) => {});
     return server;
 }
-
+/**
+ *
+ */
 APIServer.prototype.clean = function () {
 
 };
+/**
+ *
+ */
 APIServer.prototype.release = function () {
 
 };
+/**
+ * 綁定
+ */
 APIServer.prototype.setupIPCBridge = function () {
     NSLog.log("debug"," - Setup IPC bridge connection.");
     process.on("SIGQUIT", () => {
@@ -139,7 +149,7 @@ APIServer.prototype.setupIPCBridge = function () {
         NSLog.log("quiet", err.stack);
         NSLog.log("quiet","===========================================================");
     });
-    process.on("message", this.ipcReceiveMessage.bind(this));
+    process.on("message", (args, handle) => this.ipcReceiveMessage(args, handle));
 };
 /**
  * ipc事件
@@ -235,7 +245,7 @@ APIServer.prototype.systemMessage = function ({evt, id, data, mode}, handle) {
  * @param {Object} params 參數
  */
 APIServer.prototype.serviceMessage = function ({evt, params}) {
-
+    NSLog.info(`serviceMessage: ${evt} params: ${JSON.stringify(params)}`);
 };
 /**
  * 重啟服務程序

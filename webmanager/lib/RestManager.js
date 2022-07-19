@@ -175,6 +175,37 @@ class RestManager extends EventEmitter {
             res.send(src);
             return next();
         });
+        server.post('/process/info', async (req, res, next) => {
+            let {
+                mxoss,
+                file,
+                assign,
+                args,
+                lookout,
+                ats,
+                recycleExpired,
+                pkg,
+                cmd,
+                heartbeat,
+                env,
+                compact,
+                inspect,
+                v8Flags
+            } = (req.body || {});
+            if (!mxoss) req.bodyul6.mxoss = 1024;
+            if (!file || !assign) {
+                res.send({result: false , error: "invalid argument"});
+            } else {
+                req.body.clone = false;
+                let src = await this.delegate.manager.send({
+                    method: "addCluster",
+                    options: req.body
+                });
+                res.send(src);
+            }
+            return next();
+        });
+
         server.put('/process/info', async (req, res, next) => {
             let {oAssign, nAssign, pid, options} = req.body || {};
             if (pid == 'all') {

@@ -7,7 +7,7 @@ const nanoid = customAlphabet('1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLM
 const {authenticator, totp, hotp, HashAlgorithms} = require('otplib');
 const QRCode = require('qrcode');
 /**
- * 
+ * 帳號驗證
  * @constructor
  */
 class OTP extends events.EventEmitter {

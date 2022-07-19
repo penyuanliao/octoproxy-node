@@ -14,7 +14,7 @@ let options = cmd.opts();
         filePath: GeneralKit.getLogPath("historyLog"),
         fileName: (proxyMode ? "px-manager": "manager")
     });
-    NSLog.log("info",`main start()`, options);
+    NSLog.info(`main start()`, options);
 
     if (proxyMode == 2) {
         const ProxyServer = require('./lib/ProxyServer.js');
