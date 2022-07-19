@@ -434,16 +434,16 @@ AppDelegate.prototype.createServer = function (opt) {
             //const chk_assign = cfg.gamSLB.assign.split(",").indexOf(namespace);
             const chk_assign = (cfg.gamSLB.assign == namespace);
             if (cfg.gamSLB.enabled && chk_assign || (cfg.gamSLB.videoEnabled && typeof url_args != "undefined" && typeof url_args.stream != "undefined")) {
-                var lbtimes;
-                var kickOut = false;
-                var params = {f5: general[1], host: host};
-                var tokencode = self.gameLBSrv.getLoadBalancePath(url_args, params, function (action, json) {
+                let lbtimes;
+                let kickOut = false;
+                let params = {f5: general[1], host: host};
+                let tokencode = self.gameLBSrv.getLoadBalancePath(url_args, params, function (action, json) {
                     NSLog.log('trace','--------------------------');
                     NSLog.log('info', 'action: %s:%s, token code:%s', action, (typeof url_args == "object") ? JSON.stringify(url_args) : url_args, JSON.stringify(json));
                     NSLog.log('trace','--------------------------');
                     var src;
 
-                    if (kickOut) {return;}
+                    if (kickOut) { return; }
 
                     if (json.action == self.gameLBSrv.LBActionEvent.ON_GET_PATH) {
                         if (typeof lbtimes != 'undefined') clearTimeout(lbtimes);
@@ -609,7 +609,7 @@ AppDelegate.prototype.createServer = function (opt) {
         mc.binder.enabled = true;
         mc.binder.mode = "transmit";
 
-        mc.on("connect", function onMediaConnect(cmd, packet) {
+        mc.on("connect", async (cmd, packet) => {
             handle.readStop();
             NSLog.log("debug", "binder:", cmd);
             // NSLog.log("debug", "src:", packet);
@@ -621,25 +621,22 @@ AppDelegate.prototype.createServer = function (opt) {
                 dir = dir.substr(0, dir.length-1);
             }
             NSLog.log("debug", "onread_rtmp_param.dir:", dir);
-            self.assign({
-                dir: dir
-            }, function (worker) {
-                if (typeof worker === 'undefined' || !worker) {
-                    self.rejectClientException(handle, "CON_MOD_NOT_FOUND");
-                    mc.socket.destroy();
-                    return;
-                }
-                let rtmp_data = (Buffer.isBuffer(packet[0]) ? Buffer.concat(packet) : Buffer.alloc(0));
-                worker.send({evt:'c_init', data: rtmp_data, namespace: dir, originPath: dir, mode}, handle, {keepOpen:false});
-                function timer3Free() {
-                    NSLog.log("debug", "onread_rtmp_param setTimeout", )
-                    self.rejectClientException(handle, "CON_VERIFIED");
-                    mc.socket.destroy();
-                    // mc.socket._handle = null;
-                }
-                let timer3 = setTimeout(timer3Free, sendWaitClose);
-            }.bind(this));
-        }.bind(this));
+            let worker = await self.asyncAssign({ dir: dir });
+            if (typeof worker === 'undefined' || !worker) {
+                self.rejectClientException(handle, "CON_MOD_NOT_FOUND");
+                mc.socket.destroy();
+                return;
+            }
+            let rtmp_data = (Buffer.isBuffer(packet[0]) ? Buffer.concat(packet) : Buffer.alloc(0));
+            worker.send({evt:'c_init', data: rtmp_data, namespace: dir, originPath: dir, mode: "rtmp"}, handle, {keepOpen:false});
+
+            let timer3 = setTimeout(() => {
+                NSLog.log("debug", "onread_rtmp_param setTimeout", )
+                self.rejectClientException(handle, "CON_VERIFIED");
+                mc.socket.destroy();
+                // mc.socket._handle = null;
+            }, sendWaitClose);
+        });
         mc.on("close", function () {
             NSLog.log("debug", "FMS parse connect is closed");
             close_callback.apply(handle);
@@ -1052,7 +1049,7 @@ AppDelegate.prototype.assign = function (namespace, cb) {
 };
 AppDelegate.prototype.asyncAssign = function (namespace) {
     return new Promise((resolve, reject) => {
-        this.assign(namespace, () => resolve);
+        this.assign(namespace, resolve);
     });
 };
 AppDelegate.prototype.findAssignRules = function ({namespace, subname}) {
