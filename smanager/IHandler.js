@@ -154,9 +154,9 @@ IHandler.prototype.addCluster = function (params, client, callback) {
         mxoss,
         options
     } = params;
-    options.file = file;
-    options.assign = assign;
-    options.mxoss = mxoss;
+    if (file) options.file = file;
+    if (assign) options.assign = assign;
+    if (mxoss) options.mxoss = mxoss;
     let {clone} = options;
     const endpoint = this.delegate.delegate;
     let index = endpoint.clusterNum++;
@@ -238,9 +238,10 @@ IHandler.prototype.killCluster = function (params, client, callback) {
  */
 IHandler.prototype.editCluster = function (params, client, callback) {
     let {oldName, newName, mxoss, pid, options} = params;
-    console.log(`edit-cluster pid: ${pid}`);
+    NSLog.info(`edit-cluster pid: ${pid}`);
     const {delegate} = this;
     const oGroup = delegate.getClusters(oldName) || [];
+    let exchange = false;
     if (!oGroup) {
         if (callback) callback({result: false});
         return false;
@@ -248,8 +249,7 @@ IHandler.prototype.editCluster = function (params, client, callback) {
         if (callback) callback({result: false});
         return false;
     } else if (oldName == newName) {
-        if (callback) callback({result: false});
-        return false;
+        exchange = false;
     }
     let file;
     let len = oGroup.length;
@@ -264,13 +264,17 @@ IHandler.prototype.editCluster = function (params, client, callback) {
             if (typeof options.ats == "boolean") {
                 cluster.ats = options.ats;
             }
-            oGroup.splice(len, 1);
-            delegate.setCluster(newName, cluster);
+            cluster.tags = options.tags.split(",");
+            if (exchange) {
+                oGroup.splice(len, 1);
+                delegate.setCluster(newName, cluster);
+            }
             modify = true;
             if (!(pid == 0)) break;
         }
 
     }
+    delegate.nodesInfo.clearTags();
     if (this.syncAssignFile && modify) {
         let args = {
             oAssign: oldName,
@@ -340,23 +344,32 @@ IHandler.prototype.restartCluster = function (params, client, callback) {
 /**
  * [重啟]多個服務
  * @param params
+ * @param params.group
  * @param client
  * @param callback
  * @return {boolean}
  */
-IHandler.prototype.restartMultiCluster = function (params, client, callback) {
+IHandler.prototype.restartMultiCluster = async function ({group}, client, callback) {
     if (this.hasMultiReboot) {
-        if (callback) callback({result: false});
+        if (callback) callback({result: false, error: "script is executing."});
         return false;
     }
     this.hasMultiReboot = true;
-    this.multiReboot(params.group, client, callback).then((res) => {
+    NSLog.info(`multiReboot params: ${group}`);
+    this.multiReboot(group).then((res) => {
         this.hasMultiReboot = false;
     }).catch((err) => {
         this.hasMultiReboot = false;
+        if (callback) callback({result: false, data: group});
     });
+    if (callback) callback({result: true, data: group});
 };
-IHandler.prototype.multiReboot = async function (group, client, callback) {
+/**
+ * 重啟排程
+ * @param group
+ * @return {Promise<boolean>}
+ */
+IHandler.prototype.multiReboot = async function (group) {
     const clusters = this.delegate.getClusters();
     const keys = Object.keys(clusters);
     const LBSrv = this.delegate.getBalancerCluster();
@@ -370,12 +383,15 @@ IHandler.prototype.multiReboot = async function (group, client, callback) {
         let clusterGroup = clusters[name];
         if (!Array.isArray(clusterGroup)) continue;
         for (let cluster of clusterGroup) {
+            // console.log(`pid:${cluster._cpfpid}, group: ${group} index: ${group.indexOf(String(cluster._cpfpid))}`);
             index = group.indexOf(String(cluster._cpfpid));
             if (index !== -1) {
+                NSLog.info("Admin User do restartCluster();");
                 cluster.restart();
-                NSLog.log('info', "Admin User do restartCluster();", cluster._cpfpid);
                 group.splice(index, 1);
+                NSLog.info('> wait() 1.0s');
                 const wait = await this.waiting(1000);
+                NSLog.info('> next()');
             }
             if (group.length == 0) return true;
         }
@@ -428,6 +444,7 @@ IHandler.prototype.clusterLockEnabled = function (params, client, callback) {
             if (cluster) {
                 cluster._dontDisconnect = (params.lock == true);
                 NSLog.log('info',' |- Service Lock: %s PID: %s.', cluster._dontDisconnect, pid);
+                cluster.sendMessage({'evt':'refuseUser', data: { enabled: cluster._dontDisconnect }});
                 this.emit('refresh');
             } else {
                 result = false;
