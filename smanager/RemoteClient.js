@@ -1,7 +1,11 @@
 const  net     = require("net");
 const {Client} = require("../lib/RPCSocket.js");
 const IConfig  = require("./IManagerConfig.js");
+const NSLog    = require("fxNetSocket").logger.getInstance();
 
+/**
+ * 與控制端連線服務
+ */
 class RemoteClient {
     constructor() {
         this.mode = IConfig.client.mode;
@@ -17,7 +21,7 @@ class RemoteClient {
         } else if (this.mode === 'active') {
             this.ctrl = this.active();
         }
-        console.log(' |- The connection method in manager is set as "%s mode".', this.mode);
+        NSLog.info(' |- The connection method in manager is set as "%s mode".', this.mode);
     }
     /**
      * 建立被動監聽服務port
@@ -28,10 +32,10 @@ class RemoteClient {
         const server = net.createServer(async (socket) => {
             const ctrl = await this.passive(socket);
             if (!ctrl) return false;
-            console.log(' |- Passive mode, the server connect to client port.');
+            NSLog.info(' |- Passive mode, the server connect to client port.');
         });
         server.listen(port, () => {
-            console.log(' |- client listen port %s', port);
+            NSLog.info(' |- client listen port %s', port);
         });
         return server;
     };
@@ -46,10 +50,9 @@ class RemoteClient {
             port,
             delimiter:'\r\n'
         }
-        // console.log(options);
         const ctrl = new Client(this, options);
         ctrl.on("connect", function () {
-            console.log(' - Active mode, the client connect to server port.');
+            NSLog.info(' - Active mode, the client connect to server port.');
         });
         return ctrl;
     };

@@ -19,13 +19,14 @@ const syncAssignFile = true;
 const saveHeapTime   = (10 * 60 * 1000);
 
 /**
+ * 管理器
  * @constructor
  */
 class IManager extends EventEmitter {
     /**
      * 新版管理層服務
-     * @param delegate
-     * @param options
+     * @param {*} delegate
+     * @param [options]
      */
     constructor(delegate, options) {
         super();
@@ -62,7 +63,11 @@ IManager.prototype.setupHandler = function () {
 };
 /**
  * 建立伺服器
- * @param options
+ * @param {*} options 參數
+ * @param {string} options.host 監聽位址
+ * @param {number} options.port 埠
+ * @param {boolean} options.web 支援http
+ * @param {boolean} options.listen 開啟監聽埠
  */
 IManager.prototype.createTCPServer = function (options) {
     if (!options) options = {
@@ -132,7 +137,7 @@ IManager.prototype.setCluster = function (rule, cluster) {
     return proxy.clusters[rule];
 };
 /**
- *
+ * 更換cluster process
  * @param assign
  * @param index
  * @param cluster
@@ -582,12 +587,12 @@ IManager.prototype.getSignature = function (appID) {
 };
 /**
  * 建立Socket控制端服務
- * @param delegate
+ * @param {*} delegate
  * @return {IManager}
  */
 IManager.createManager = function (delegate) {
     const manager = new IManager(delegate);
-    manager.nodesInfo.on('refresh', (element) => {
+    manager.nodesInfo.on('refresh', () => {
         // console.log('refresh', element);
     });
     // this.manager.coreInfo.start(); //開始系統資訊

@@ -406,7 +406,7 @@ AppDelegate.prototype.createServer = function (opt) {
                 handle.close(close_callback);
                 handleRelease(handle);
                 handle = null;
-                return;
+                return true;
                 // namespace = 'figLeaf';
             }
             if (mode == "http") {
@@ -467,7 +467,7 @@ AppDelegate.prototype.createServer = function (opt) {
                             clusterEndpoint(namespace , src, originPath, mode);
                         }
 
-                    }else if (json.action == self.gameLBSrv.LBActionEvent.ON_BUSY) {
+                    } else if (json.action == self.gameLBSrv.LBActionEvent.ON_BUSY) {
 
                         if (typeof lbtimes != 'undefined') clearTimeout(lbtimes);
                         lbtimes = undefined;
@@ -903,7 +903,7 @@ AppDelegate.prototype.createChild = function (endpoint, {index, params}) {
         pkgFile: options.pkg,
         cmd: options.cmd
     };
-    let {file, assign, mxoss, ats, args, rules} = options;
+    let {file, assign, mxoss, ats, args, rules, tags} = options;
     let cmdLine = (assign) ? [assign].concat(args) : args;
 
     const child = new daemon(file, cmdLine, daemonOptions);
@@ -912,6 +912,7 @@ AppDelegate.prototype.createChild = function (endpoint, {index, params}) {
     child.mxoss = mxoss;
     child.ats = ats;
     child.optConf = options; //複製程序使用
+    child.tags = tags;
     child.init();
     child.emitter.on('warp_handle', (message, handle) => endpoint.duringWarp(message, handle));
     child.emitter.on('onIpcMessage', (message) => endpoint.mgmtSrv.onIpcMessage(message));
@@ -943,7 +944,8 @@ AppDelegate.createChildProperties = function (params) {
         compact,
         inspect,
         v8Flags,
-        rules
+        rules,
+        tags
     } = params;
     /** @typedef {ChildProperties} */
     let options = {
@@ -987,6 +989,7 @@ AppDelegate.createChildProperties = function (params) {
     if (typeof inspect == "boolean") options.inspect = inspect;
     if (typeof v8Flags != "undefined") options.v8Flags = v8Flags;
     if (Array.isArray(rules)) options.rules = rules; //自訂
+    options.tags = (typeof tags == "string") ? tags.split(",") : tags;
 
     return options;
 };
@@ -1344,3 +1347,18 @@ module.exports = exports = AppDelegate;
  * @type {Number}
  * @memberof tcp_wrap.constants
  **/
+/** @function tcp_handle */
+/**
+ * @function
+ * @name tcp_handle.bind6
+ */
+/** @function handle */
+/** @function
+ * @name handle.writeUtf8String
+ */
+/** @function
+ * @name util._errnoException
+ */
+/** @function
+ * @name util._exceptionWithHostPort
+ */

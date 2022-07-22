@@ -22,6 +22,10 @@ function Scheduler(delegate) {
     this.scheduleId = 0;
     this.delegate = delegate;
 }
+/**
+ * 排程清單
+ * @return {[]}
+ */
 Scheduler.prototype.getSchedule = function () {
     return this.schedules;
 };

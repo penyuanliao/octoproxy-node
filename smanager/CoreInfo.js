@@ -5,7 +5,7 @@ const psys          = require('systeminformation');
 const sys           = require('../lib/sysstat.js');
 
 /**
- *
+ * 系統資訊
  * @constructor
  */
 class CoreInfo extends EventEmitter {
@@ -146,7 +146,7 @@ CoreInfo.prototype.refresh = function () {
     delete this.sysstat.devices;
     delete this.sysstat.snmp;
     return data;
-}
+};
 CoreInfo.prototype.clean = function () {
 
 };
