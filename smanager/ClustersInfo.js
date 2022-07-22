@@ -22,6 +22,9 @@ class ClustersInfo extends EventEmitter {
         //記錄所有pid
         this.pids = new Set();
         this.uptime = Date.now();
+        //記錄所有的tags
+        this.tags = new Set();
+        setTimeout(() => this.refresh(), 1000);
     }
 }
 /**
@@ -62,7 +65,8 @@ ClustersInfo.prototype.getProcessInfo = function () {
         "complete": true,
         "lv": "debug",
         "uptime": this.uptime,
-        "cpu": this.delegate.getCPU(process.pid)
+        "cpu": this.delegate.getCPU(process.pid),
+        "tags": [...this.tags]
     }];
     keys.forEach((key) => {
         let j     = 0;
@@ -85,6 +89,12 @@ ClustersInfo.prototype.getProcessInfo = function () {
     this.octoProxyCount += total;
     return list;
 };
+/**
+ * 檢查數據資料
+ * @param cluster
+ * @param obj
+ * @return {{}}
+ */
 ClustersInfo.prototype.unifyData = function (cluster, obj) {
     if (!obj) obj = {};
 
@@ -94,7 +104,8 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
         _cpfpid, name, nodeInfo,
         _dontDisconnect, creationComplete, uptime,
         ats, _lookoutEnabled, _args,
-        nodeConf, _modulePath
+        nodeConf, _modulePath,
+        tags
     } = cluster;
     const { connections, memoryUsage } = nodeInfo;
 
@@ -108,6 +119,10 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
     obj.lookout = _lookoutEnabled;
     obj.args = _args.slice(1);
     obj.cpu  = this.delegate.getCPU(_cpfpid);
+    obj.tags = tags;
+    if (Array.isArray(tags)) {
+        tags.forEach((value) => this.tags.add(value));
+    }
     if (typeof memoryUsage != "undefined") {
         obj.memoryUsage = (memoryUsage);
     }
@@ -124,6 +139,10 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
     obj.file = _modulePath;
     return obj;
 };
+/**
+ * 回收機制資訊
+ * @return {*[]}
+ */
 ClustersInfo.prototype.getTrashInfo = function () {
     let list = [];
     const group = this.delegate.getGarbageDump();
@@ -141,7 +160,7 @@ ClustersInfo.prototype.getTrashInfo = function () {
     return list;
 };
 /**
- *
+ * load balance
  * @return {Object|null}
  */
 ClustersInfo.prototype.getLBAInfo = function () {
@@ -183,7 +202,11 @@ ClustersInfo.prototype.resetBalancerCount = function (list, keys) {
     if (LBSrv) {
         LBSrv.updateServerCount(list, keys);
     }
-}
+};
+
+ClustersInfo.prototype.clearTags = function () {
+    this.tags.clear();
+};
 ClustersInfo.prototype.clean = function () {
     this.octoProxyCount = 0;
     this.procCount = [];
