@@ -87,9 +87,10 @@ APIServer.prototype.createRestServer = function ({listen, port}) {
  * 處理SOCKET連線
  * @param socket 連線進來的使用者
  */
-APIServer.prototype.onConnection = function (socket) {
+APIServer.prototype.onConnection = async function (socket) {
     const APIClient = require("./APIClient.js");
-    const cli = new APIClient(socket, this);
+    const cli = new APIClient(this);
+    await cli.connect(socket);
 };
 /**
  * remote log

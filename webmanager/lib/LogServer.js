@@ -17,7 +17,10 @@ class LogServer extends EventEmitter {
         this.setup(port);
     }
 }
-
+/**
+ * 初始化
+ * @param port
+ */
 LogServer.prototype.setup = function (port) {
     const server = net.createServer((socket) => {
         socket.once("data", (chunk) => {
@@ -116,6 +119,12 @@ LogServer.prototype.setClient = function (name, client) {
     }
     group.set(client, groupMap);
     groupMap.add(client);
+};
+LogServer.prototype.leave = function (name, client) {
+    if (this.clients.has(name)) {
+        this.clients.delete(name);
+        this.clientsMap.delete(name);
+    }
 };
 LogServer.prototype.clean = function () {
 };

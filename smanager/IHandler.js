@@ -374,6 +374,7 @@ IHandler.prototype.multiReboot = async function (group) {
     const keys = Object.keys(clusters);
     const LBSrv = this.delegate.getBalancerCluster();
     let index;
+    if (Array.isArray(group) == false || group.length == 0) return false;
     if ((index = group.indexOf(LBSrv._cpfpid)) != -1) {
         this.restartBalancer();
         group.splice(index, 1);
@@ -617,7 +618,7 @@ IHandler.prototype.getIPFilter = function (params, client, callback) {
  */
 IHandler.prototype.getDashboardInfo = async function (params, client, callback) {
     const pathname = this.delegate.getPath(DashboardPath);
-    NSLog.log("debug", "getDashboardInfo()", pathname);
+    NSLog.log("trace", "getDashboardInfo()", pathname);
     let data = await this.readFile(pathname, {});
     if (callback) {
         callback({data, result: true});
@@ -813,7 +814,7 @@ IHandler.prototype.readFileContents = function ({filename}, client, callback) {
 
     if (!fs.existsSync(filepath)) fs.mkdirSync(filepath);
 
-    console.log(`readFileContents: `, filepath);
+    NSLog.info(`ReadFileContents: `, filepath);
 
     try {
         str = fs.readFileSync(filepath);
@@ -901,6 +902,12 @@ IHandler.prototype.readFile = function (filepath, defObj) {
         return data;
     }
 };
+/**
+ * 寫入資料
+ * @param filepath
+ * @param data
+ * @return {boolean}
+ */
 IHandler.prototype.writeFile = function (filepath, data) {
     try {
         fs.writeFileSync(filepath, JSON.stringify(data, null, "\t"));

@@ -1,52 +1,68 @@
 "use strict";
-const net           = require("net");
-const util          = require("util");
+// const net           = require("net");
+// const util          = require("util");
 const EventEmitter  = require("events");
 const {WSClient}    = require("fxNetSocket");
 const {UDPManager}  = require("../../lib/UDP.js");
 const NSLog         = require('fxNetSocket').logger.getInstance();
 /**
- *
+ * websocket客端
  * @constructor
  */
 class APIClient extends EventEmitter {
-    constructor(socket, delegate) {
+    constructor(delegate) {
         super();
-        this.socket   = socket;
+        this.socket   = null;
         this.manager  = delegate.manager;
         this.delegate = delegate;
         this.cmode    = 0;
         this.signin   = true;
         this.info     = null;
         this.udp      = null; //視訊專用
-        this.ws       = this.setup(socket);
+        this.viewer   = null;
+
         this.logSkip  = new Set(['getServiceInfo', 'getSysInfo']);
     }
-
-}
-APIClient.prototype.setup = function (socket) {
-    const self = this;
-    const ws = new WSClient(socket, {
-        ejection:"socket",
-        baseEvtShow: false,
-        zlibDeflatedEnabled: false
-    }, () => {
-        console.log('connected');
+    /**
+     * 開始連線
+     * @param socket
+     * @return {Promise<void>}
+     */
+    async connect(socket) {
+        this.socket   = socket;
+        this.ws = await this.binding(socket);
+        NSLog.info(`Connected IP address: ${socket.remoteAddress}`);
+        let { ws } = this;
+        ws.on('message', data => this.handle(data));
+        ws.once("close", () => {
+            NSLog.info(`Closed IP address: ${socket.remoteAddress}`);
+            this.release();
+        });
+        ws.once("error", (err) => NSLog.info('err', err));
+        ws.pingEnable = false;
         this.ready();
-    });
-    ws.on('message', data => this.handle(data));
-    ws.once("close", () => {
-        NSLog.info('client closed');
-        this.release();
-    });
-    ws.once("error", (err) => {
-        console.log('err');
-    });
-    ws.pingEnable = false;
-    return ws;
-};
-APIClient.prototype.ready = function () {
-    this.ws.write({event: 'ready', version: require('../package.json').version});
+    };
+    /**
+     * 綁定socket
+     */
+    async binding(socket) {
+        return new Promise((resolve) => {
+            let ws = new WSClient(socket, {
+                ejection:"socket",
+                baseEvtShow: false,
+                zlibDeflatedEnabled: false
+            }, () => resolve(ws));
+        });
+    };
+    /**
+     * 初始化完成
+     */
+    ready() {
+        let { ws } = this;
+        if (ws) {
+            ws.write({event: 'ready', version: require('../package.json').version});
+        }
+    };
 }
 APIClient.prototype.handle = function (data) {
     if (typeof data == "string") data = JSON.parse(data);
@@ -158,17 +174,18 @@ APIClient.prototype.lockdownMode = async function (json) {
     this.write(respond);
 };
 APIClient.prototype.liveLog = async function (json) {
-    console.log(json);
-    const logServer = this.delegate.logServer;
+    const { logServer } = this.delegate;
+    if (this.viewer) logServer.leave(json.name);
     logServer.setClient(json.name, this.ws);
+    this.viewer = json.name;
 };
 APIClient.prototype.leaveLog = async function (json) {
-    console.log(json);
-    const logServer = this.delegate.logServer;
-
+    const { logServer } = this.delegate;
+    logServer.leave(json.name);
+    this.viewer = null;
 };
-/** 新增服務
- *
+/**
+ * 新增服務
  * @param json
  * @param json.tokenId
  * @param json.data.file
@@ -188,7 +205,7 @@ APIClient.prototype.addCluster = async function (json) {
         file,
         assign,
         mxoss: memory,
-        options: options
+        options
     };
     const {result} = await manager.send(params);
     let respond = {
@@ -701,6 +718,10 @@ APIClient.prototype.write = function (data) {
 };
 APIClient.prototype.release = function () {
     if (this.udp) this.udp.release();
+    if (this.viewer) {
+        const { logServer } = this.delegate;
+        logServer.leave(this.viewer);
+    }
 };
 
 module.exports = exports = APIClient;

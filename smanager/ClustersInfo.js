@@ -62,7 +62,7 @@ ClustersInfo.prototype.getProcessInfo = function () {
         "count": 0,
         "lock": this.delegate.getLockState(),
         "memoryUsage": process.memoryUsage(),
-        "complete": true,
+        "complete": 1,
         "lv": "debug",
         "uptime": this.uptime,
         "cpu": this.delegate.getCPU(process.pid),

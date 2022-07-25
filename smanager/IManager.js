@@ -8,7 +8,7 @@ const {Server}      = require("../lib/RPCSocket.js");
 const IHandler      = require("./IHandler.js");
 const ClustersInfo  = require("./ClustersInfo.js");
 const CoreInfo      = require("./CoreInfo.js");
-const editor        = require('../lib/AssignEdittor.js');
+// const editor        = require('../lib/AssignEdittor.js');
 const IConfig       = require("./IManagerConfig.js");
 const {UDPClient}   = require("../lib/UDP.js");
 const NSLog         = require('fxNetSocket').logger.getInstance();
@@ -119,9 +119,7 @@ IManager.prototype.createConnect = function (options) {
         NSLog.log("info", 'Active connect has close.');
         setTimeout(this.createConnect.bind(this), 5000, options);
     });
-    active.on("error", (err) => {
-
-    });
+    active.on("error", (err) => NSLog.error("error:", err));
     active.connect(options.port, options.host);
 };
 /**
