@@ -392,9 +392,9 @@ Fxdaemon.prototype = /** @lends Fxdaemon */ {
             daemon.getInfo((data) => {
                 try {
                     if (typeof data == 'string') {
-                        data = JSON.stringify(data);
+                        data = JSON.parse(data);
                     }
-                    this.nodeInfo = data;
+                    daemon.nodeInfo = data;
                 }
                 catch (e) {
                 }
