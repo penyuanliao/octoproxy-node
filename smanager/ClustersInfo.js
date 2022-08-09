@@ -124,7 +124,7 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
         tags.forEach((value) => this.tags.add(value));
     }
     if (typeof memoryUsage != "undefined") {
-        obj.memoryUsage = (memoryUsage);
+        obj.memoryUsage = memoryUsage;
     }
     if (typeof nodeConf != "undefined") {
         obj.lv   = nodeConf.lv;
