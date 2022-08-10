@@ -62,6 +62,12 @@ config.telegram = {
     proxyMode: {host: "", port: 0},
     enabled: false
 };
+
+config.specificBase = new Set([
+    'ws',
+    'web'
+]);
+
 config.crossPolicy = Object.freeze({
     'Access-Control-Allow-Origin': []
 });
@@ -91,6 +97,7 @@ if (config.env == 'development') {
         videoEnabled:true,
         httpEnabled:true,
         vPrefix: '',
+        //支援RTMP
         rtmpFrontendEnabled: false
     };
 } else {

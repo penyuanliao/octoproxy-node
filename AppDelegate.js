@@ -495,18 +495,26 @@ AppDelegate.prototype.createServer = function (opt) {
                     kickOut = true;
                 }, sendWaitClose);
 
-            }
-            else {
+            } else {
                 if (cfg.gamSLB.videoEnabled) {
-                    var spPath = namespace.split("/");
+                    let layer = namespace.split("/");
                     var offset = 2;
-                    if (spPath.length >= 3) {
-                        if (spPath[1] != "video") offset = 1;
-                        namespace = (cfg.gamSLB.vPrefix + spPath[offset]);
+                    if (cfg.specificBase && cfg.specificBase.has(layer[1])) {
+                        namespace = self.gameLBSrv.urlParse({
+                            path: namespace,
+                            host: host,
+                            vPrefix: cfg.gamSLB.vPrefix,
+                            specificBase: cfg.specificBase
+                        });
                     }
-                    if (url_args.s === "root") {
-                        namespace = {
-                            dir: spPath.splice(1, 2).join("/")
+                    else if (layer.length >= 3) {
+                        if (layer[1] != "video") offset = 1;
+                        namespace = (cfg.gamSLB.vPrefix + layer[offset]);
+
+                        if (url_args.s === "root") {
+                            namespace = {
+                                dir: layer.splice(1, 2).join("/")
+                            }
                         }
                     }
                 }

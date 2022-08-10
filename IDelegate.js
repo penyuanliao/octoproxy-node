@@ -432,7 +432,7 @@ class IDelegate extends events.EventEmitter {
         return true;
     };
     gateway_general({params, url_args, namespace, source, originPath, mode}, handle) {
-        const { assign, enabled, videoEnabled } = cfg.gamSLB;
+        const { assign, enabled, videoEnabled, vPrefix, specificBase } = cfg.gamSLB;
         const chk_assign = (assign == namespace);
         if (enabled && chk_assign || (videoEnabled && typeof url_args != "undefined" && typeof url_args.stream != "undefined")) {
             let lbtimes;
@@ -481,15 +481,24 @@ class IDelegate extends events.EventEmitter {
             });
         } else {
             if (videoEnabled) {
-                let spPath = namespace.split("/");
+                let layer = namespace.split("/");
                 let offset = 2;
-                if (spPath.length >= 3) {
-                    if (spPath[1] != "video") offset = 1;
-                    namespace = (cfg.gamSLB.vPrefix + spPath[offset]);
+                if (specificBase && specificBase.has(layer[1])) {
+                    namespace = self.gameLBSrv.urlParse({
+                        path: namespace,
+                        host: host,
+                        vPrefix: cfg.gamSLB.vPrefix,
+                        specificBase: specificBase
+                    });
                 }
-                if (url_args.s === "root") {
-                    namespace = {
-                        dir: spPath.splice(1, 2).join("/")
+                else if (layer.length >= 3) {
+                    if (layer[1] != "video") offset = 1;
+                    namespace = (vPrefix + layer[offset]); //ex: video/h264 => edge_h264
+
+                    if (url_args.s === "root") {
+                        namespace = {
+                            dir: layer.splice(1, 2).join("/")
+                        }
                     }
                 }
             }
