@@ -495,7 +495,8 @@ AppDelegate.prototype.createServer = function (opt) {
                     kickOut = true;
                 }, sendWaitClose);
 
-            } else {
+            }
+            else {
                 if (cfg.gamSLB.videoEnabled) {
                     var spPath = namespace.split("/");
                     var offset = 2;
