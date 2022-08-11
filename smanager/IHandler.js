@@ -541,7 +541,7 @@ IHandler.prototype.hotReload = function ({pid, params}, client, callback) {
 };
 IHandler.prototype.setLogLevel = function ({pid, params}, client, callback) {
     const _pid = parseInt(pid);
-    console.log(`setLogLevel:`,pid, params);
+    NSLog.info(`SetLogLevel: pid:${pid} params.lv: ${params.lv}`);
     if (!IHandler._verifyArgs(_pid, "number")) {
         if (callback) callback({result: false});
         return false;
