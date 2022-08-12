@@ -227,6 +227,7 @@ module.exports = exports = configure.getInstance();
  * @property bExceptions
  * @property bFMSPort
  * @property gamSLB
+ * @property specificBase
  * @property env
  * @property balance
  * @property managePort

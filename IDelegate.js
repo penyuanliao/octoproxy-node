@@ -425,7 +425,8 @@ class IDelegate extends events.EventEmitter {
             namespace = this.gameLBSrv.urlParse({
                 path: params.f5,
                 host: params.host,
-                vPrefix: cfg.gamSLB.vPrefix
+                vPrefix: cfg.gamSLB.vPrefix,
+                specificBase: cfg.specificBase
             });
             this.clusterEndpoint({namespace, source, originPath, mode}, handle).then(() => {});
         }

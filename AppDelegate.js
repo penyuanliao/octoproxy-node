@@ -425,7 +425,8 @@ AppDelegate.prototype.createServer = function (opt) {
                     namespace = self.gameLBSrv.urlParse({
                         path: general[1],
                         host: host,
-                        vPrefix: cfg.gamSLB.vPrefix
+                        vPrefix: cfg.gamSLB.vPrefix,
+                        specificBase: cfg.specificBase
                     });
                     clusterEndpoint(namespace, source, originPath, mode);
                 }
