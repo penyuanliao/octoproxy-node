@@ -210,7 +210,7 @@ APIServer.prototype.systemMessage = function ({evt, id, data, mode}, handle) {
     }
     else if (evt === 'setLogLevel') {
         this.LOG_LEVEL = data.params.lv;
-        NSLog.configure({level: this.LOG_LEVEL});
+        NSLog.setLevel = this.LOG_LEVEL;
         NSLog.log('quiet', "Server manager change NSLog level: [%s]", this.LOG_LEVEL);
     }
     else if (evt === 'processInfo') {
