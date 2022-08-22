@@ -332,8 +332,8 @@ Fxdaemon.prototype = /** @lends Fxdaemon */ {
                 else if (message.evt === "onIpcMessage") {
                     context.emitter.emit("onIpcMessage", message);
                 }
-                else if (message.evt === "monitor") {
-                    context.monitor = message.data;
+                else if (message.evt === "metadata") {
+                    context.metadata = message.data;
                 }
                 else if (message.evt === "streamData") {
                     // context.emit("streamData", message);
