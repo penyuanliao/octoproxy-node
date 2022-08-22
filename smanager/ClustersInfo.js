@@ -105,7 +105,7 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
         _dontDisconnect, creationComplete, uptime,
         ats, _lookoutEnabled, _args,
         nodeConf, _modulePath,
-        tags
+        tags, monitor
     } = cluster;
     const { connections, memoryUsage } = nodeInfo;
 
@@ -135,7 +135,7 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
         obj.params.forEach((item) => obj[item[0]] = item[1]);
     }
     obj.bitrates = nodeInfo.bitrates;
-    if (obj.monitor) obj.monitor = nodeInfo.monitor;
+    if (obj.monitor) obj.monitor = monitor;
     obj.file = _modulePath;
     return obj;
 };
