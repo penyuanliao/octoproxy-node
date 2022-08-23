@@ -164,6 +164,13 @@ class RestManager extends EventEmitter {
             res.send(src);
             return next();
         });
+        server.get('/process/sys/metadata', async (req, res, next) => {
+            let src = await this.delegate.manager.send({
+                method: "metadata"
+            });
+            res.send(src);
+            return next();
+        });
         server.del('/process/user/kickout', async (req, res, next) => {
             let {pid, trash, params} = req.body || {};
             let src = await this.delegate.manager.send({

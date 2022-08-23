@@ -24,6 +24,7 @@ class ClustersInfo extends EventEmitter {
         this.uptime = Date.now();
         //記錄所有的tags
         this.tags = new Set();
+        this.metadata = [];
         setTimeout(() => this.refresh(), 1000);
     }
 }
@@ -77,6 +78,7 @@ ClustersInfo.prototype.getProcessInfo = function () {
             cluster = group[j];
             obj = {}
             this.unifyData(cluster, obj);
+            this.updateMetadata(cluster);
             list.push(obj);
             procKeys.push(key);
             procCount.push(cluster.nodeInfo.connections);
@@ -119,10 +121,16 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
     obj.lookout = _lookoutEnabled;
     obj.args = _args.slice(1);
     obj.cpu  = this.delegate.getCPU(_cpfpid);
-    obj.tags = tags;
+    let hashtag;
+    if (Array.isArray(tags)) {
+        hashtag = tags.split(",")
+    } else {
+        hashtag = tags;
+    }
     if (Array.isArray(tags)) {
         tags.forEach((value) => this.tags.add(value));
     }
+    obj.hashtag = hashtag;
     if (typeof memoryUsage != "undefined") {
         obj.memoryUsage = memoryUsage;
     }
@@ -135,7 +143,7 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
         obj.params.forEach((item) => obj[item[0]] = item[1]);
     }
     obj.bitrates = nodeInfo.bitrates;
-    if (obj.monitor) obj.monitor = monitor;
+    if (monitor) obj.monitor = monitor;
     obj.file = _modulePath;
     return obj;
 };
@@ -158,6 +166,17 @@ ClustersInfo.prototype.getTrashInfo = function () {
         j++;
     }
     return list;
+};
+ClustersInfo.prototype.updateMetadata = function (cluster) {
+    let data = [];
+    let { metadata, _cpfpid } = cluster;
+    if (metadata) {
+        data.push([_cpfpid, metadata]);
+    }
+    this.metadata = data;
+};
+ClustersInfo.prototype.getMetadata = function () {
+    return Object.assign([], this.metadata);
 };
 /**
  * load balance

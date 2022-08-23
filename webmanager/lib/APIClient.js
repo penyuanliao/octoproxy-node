@@ -580,6 +580,20 @@ APIClient.prototype.ipcMessage = async function (json) {
     };
     this.write(respond);
 };
+APIClient.prototype.getMetadata = async function (json) {
+    const { manager } = this;
+    let params = {
+        method: "metadata"
+    };
+    const {result} = await manager.send(params);
+
+    let respond = {
+        tokenId: json.tokenId,
+        event: "getMetadata",
+        result
+    };
+    this.write(respond);
+};
 /** [UDP only] 建立udp **/
 APIClient.prototype.createUDPManager = async function (json) {
     let udp;

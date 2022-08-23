@@ -40,7 +40,8 @@ const ManagerEvents = new Set([
     "getSchedule",
     "addSchedule",
     "cancelSchedule",
-    "readFiles"
+    "readFiles",
+    "metadata"
 ]);
 /**
  * 控制端事件
@@ -799,6 +800,19 @@ IHandler.prototype.ipcMessage = function ({params, pid}, client, callback) {
         });
     } else {
         if (callback) callback({result: false});
+    }
+};
+/**
+ * 導出元數據
+ * @param params
+ * @param client
+ * @param callback
+ */
+IHandler.prototype.metadata = function (params, client, callback) {
+    const { nodesInfo } = this.delegate;
+    let metadata = nodesInfo.getMetadata();
+    if (callback) {
+        callback({data: metadata, result: true});
     }
 };
 /**

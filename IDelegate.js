@@ -392,7 +392,7 @@ class IDelegate extends events.EventEmitter {
         } else if ((mode === 'ws' && isBrowser) ||
             mode === 'socket' ||
             mode === "flashsocket") {
-            this.gateway_general({params, url_args, namespace, source, originPath, mode}, handle);
+            this.gateway_general({params, url_args, namespace, source, originPath, mode, host}, handle);
 
         } else {
             // destroy()
@@ -432,8 +432,9 @@ class IDelegate extends events.EventEmitter {
         }
         return true;
     };
-    gateway_general({params, url_args, namespace, source, originPath, mode}, handle) {
-        const { assign, enabled, videoEnabled, vPrefix, specificBase } = cfg.gamSLB;
+    gateway_general({params, url_args, namespace, source, originPath, mode, host}, handle) {
+        const { assign, enabled, videoEnabled, vPrefix } = cfg.gamSLB;
+        const { specificBase } = cfg;
         const chk_assign = (assign == namespace);
         if (enabled && chk_assign || (videoEnabled && typeof url_args != "undefined" && typeof url_args.stream != "undefined")) {
             let lbtimes;
@@ -485,10 +486,10 @@ class IDelegate extends events.EventEmitter {
                 let layer = namespace.split("/");
                 let offset = 2;
                 if (specificBase && specificBase.has(layer[1])) {
-                    namespace = self.gameLBSrv.urlParse({
+                    namespace = this.gameLBSrv.urlParse({
                         path: namespace,
                         host: host,
-                        vPrefix: cfg.gamSLB.vPrefix,
+                        vPrefix,
                         specificBase: specificBase
                     });
                 }
