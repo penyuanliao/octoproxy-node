@@ -51,13 +51,15 @@ LogServer.prototype.setup = function (port) {
                 });
                 this.pushThrough(through, output); //方法1
                 this.emit("update", output); //方法2
-                this.onData(obj.name, output); //方法3
+                this.broadcast(obj.name, output); //方法3
             });
             //console.log(`Remote log ${obj.name} connected.`);
         });
     });
 
-    server.listen(port);
+    server.listen(port, () => {
+        console.log(`logServer listen: ${port}`);
+    });
 };
 LogServer.prototype.createPassThrough = function (name) {
     let through;
@@ -91,8 +93,9 @@ LogServer.prototype.unbindThrough = function (name, socket) {
         return false;
     }
 };
-LogServer.prototype.onData = function (name, data) {
+LogServer.prototype.broadcast = function (name, data) {
     //檢查是否有使用者檢視log
+    console.log(`broadcast.name: ${name} has: ${this.clients.has(name)}`);
     if (this.clients.has(name)) {
         let group = this.clients.get(name);//檢查是否存在
         let groupMap = this.clientsMap.get(name);
@@ -105,7 +108,7 @@ LogServer.prototype.onData = function (name, data) {
         }
     }
 };
-LogServer.prototype.setClient = function (name, client) {
+LogServer.prototype.join = function (name, client) {
     let group;
     let groupMap;
     if (this.clients.has(name)) {

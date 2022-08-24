@@ -19,7 +19,7 @@ class APIClient extends EventEmitter {
         this.signin   = true;
         this.info     = null;
         this.udp      = null; //視訊專用
-        this.viewer   = null;
+        this.viewer   = new Set();
 
         this.logSkip  = new Set(['getServiceInfo', 'getSysInfo']);
     }
@@ -175,14 +175,28 @@ APIClient.prototype.lockdownMode = async function (json) {
 };
 APIClient.prototype.liveLog = async function (json) {
     const { logServer } = this.delegate;
-    if (this.viewer) logServer.leave(json.name);
-    logServer.setClient(json.name, this.ws);
-    this.viewer = json.name;
+
+    let {
+        name,
+        bool
+    } = (json.data || json);
+
+    if (!this.viewer.has(name)) {
+        logServer.join(name, this.ws);
+        this.viewer.add(name);
+    }
+    if (bool == false) {
+        logServer.leave(name);
+        this.viewer.delete(name);
+    }
 };
 APIClient.prototype.leaveLog = async function (json) {
     const { logServer } = this.delegate;
-    logServer.leave(json.name);
-    this.viewer = null;
+    let {
+        name
+    } = (json.data || json);
+    logServer.leave(name);
+    this.viewer.delete(name);
 };
 /**
  * 新增服務
@@ -734,7 +748,8 @@ APIClient.prototype.release = function () {
     if (this.udp) this.udp.release();
     if (this.viewer) {
         const { logServer } = this.delegate;
-        logServer.leave(this.viewer);
+        this.viewer.forEach((value) => logServer.leave(value));
+        this.viewer.clear();
     }
 };
 
