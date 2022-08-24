@@ -187,7 +187,7 @@ APIServer.prototype.makeSureComplete = function () {
  * @param {('http'|'ws')} mode
  * @param {*} handle
  */
-APIServer.prototype.systemMessage = function ({evt, id, data, mode}, handle) {
+APIServer.prototype.systemMessage = function ({evt, id, data, mode, params}, handle) {
 
     let server;
     if (mode === 'http') {
@@ -209,9 +209,9 @@ APIServer.prototype.systemMessage = function ({evt, id, data, mode}, handle) {
         if (id) process.send({ evt, id });
     }
     else if (evt === 'setLogLevel') {
-        this.LOG_LEVEL = data.params.lv;
+        this.LOG_LEVEL = params.lv;
         NSLog.setLevel = this.LOG_LEVEL;
-        NSLog.log('quiet', "Server manager change NSLog level: [%s]", this.LOG_LEVEL);
+        NSLog.log('quiet', "Server manager change NSLog level: [%s]", NSLog.level);
     }
     else if (evt === 'processInfo') {
         let replyObj = {
