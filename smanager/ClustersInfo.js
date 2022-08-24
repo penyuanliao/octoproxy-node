@@ -122,8 +122,8 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
     obj.args = _args.slice(1);
     obj.cpu  = this.delegate.getCPU(_cpfpid);
     let hashtag;
-    if (Array.isArray(tags)) {
-        hashtag = tags.split(",")
+    if (!Array.isArray(tags)) {
+        hashtag = (tags || "").split(",")
     } else {
         hashtag = tags;
     }
