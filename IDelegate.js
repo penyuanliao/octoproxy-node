@@ -992,7 +992,9 @@ class IDelegate extends events.EventEmitter {
         env.NODE_CDID = String(index);
         if (options.env) IHandler.setEnvironmentVariables(env, options.env);
         let execArgv = []; // octoProxy pkg versions
+        let {file, assign, mxoss, ats, args, rules, tags} = options;
         if (options.pkg != true) {
+            execArgv = ["--nouse-idle-notification", `--max-old-space-size=${mxoss}`];
             if (options.gc) execArgv.push('--expose-gc');
             if (options.compact) execArgv.push('--always-compact');
             if (options.inspect) execArgv.push('--inspect');
@@ -1018,7 +1020,7 @@ class IDelegate extends events.EventEmitter {
             pkgFile: options.pkg,
             cmd: options.cmd
         };
-        let {file, assign, mxoss, ats, args, rules, tags} = options;
+
         let cmdLine = (assign) ? [assign].concat(args) : args;
 
         const child = new daemon(file, cmdLine, daemonOptions);
