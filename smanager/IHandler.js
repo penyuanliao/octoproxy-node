@@ -240,7 +240,7 @@ IHandler.prototype.editCluster = function (params, client, callback) {
     NSLog.info(`edit-cluster pid: ${pid}`);
     const {delegate} = this;
     const oGroup = delegate.getClusters(oldName) || [];
-    let exchange = false;
+    let exchange = true;
     if (!oGroup) {
         if (callback) callback({result: false});
         return false;
@@ -264,6 +264,7 @@ IHandler.prototype.editCluster = function (params, client, callback) {
                 cluster.ats = options.ats;
             }
             cluster.tags = options.tags.split(",");
+            // console.log(`exchange: ${exchange}`, oldName, newName);
             if (exchange) {
                 oGroup.splice(len, 1);
                 delegate.setCluster(newName, cluster);
