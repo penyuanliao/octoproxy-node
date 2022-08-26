@@ -528,11 +528,12 @@ APIClient.prototype.setAMFConfig = async function (json) {
  */
 APIClient.prototype.addSchedule = async function (json) {
     const manager = this.manager;
-    const {result} = await manager.send({method: "addSchedule", data: json.data});
+    const {result, data} = await manager.send({method: "addSchedule", data: json.data});
     let respond = {
         tokenId: json.tokenId,
         event: "addSchedule",
-        result
+        result,
+        data
     }
     this.write(respond);
 };

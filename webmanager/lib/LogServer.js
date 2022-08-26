@@ -95,7 +95,6 @@ LogServer.prototype.unbindThrough = function (name, socket) {
 };
 LogServer.prototype.broadcast = function (name, data) {
     //檢查是否有使用者檢視log
-    console.log(`broadcast.name: ${name} has: ${this.clients.has(name)}`);
     if (this.clients.has(name)) {
         let group = this.clients.get(name);//檢查是否存在
         let groupMap = this.clientsMap.get(name);
