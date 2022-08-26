@@ -25,7 +25,20 @@ class ClustersInfo extends EventEmitter {
         //記錄所有的tags
         this.tags = new Set();
         this.metadata = [];
+        this._mxoss = -1;
         setTimeout(() => this.refresh(), 1000);
+    }
+    get mxoss() {
+        if (this._mxoss == -1) {
+            this._mxoss = 0;
+            process.argv.forEach((value) => {
+                if (value.indexOf('max-old-space-size') != -1) {
+                    let num = value.split("=")[1];
+                    this._mxoss = Number(num);
+                } else {}
+            });
+        }
+        return this._mxoss;
     }
 }
 /**
@@ -61,15 +74,17 @@ ClustersInfo.prototype.getProcessInfo = function () {
         "file": "Main",
         "name":'octoproxy',
         "count": 0,
+        "mxoss": this.mxoss,
         "lock": this.delegate.getLockState(),
         "memoryUsage": process.memoryUsage(),
         "complete": 1,
         "lv": "debug",
         "uptime": this.uptime,
-        "cpu": this.delegate.getCPU(process.pid),
+        "cpuUsage": this.delegate.getCPU(process.pid),
         "tags": [...this.tags]
     }];
     keys.forEach((key) => {
+
         let j     = 0;
         let group = clusters[key];
         let obj, cluster;
@@ -107,10 +122,11 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
         _dontDisconnect, creationComplete, uptime,
         ats, _lookoutEnabled, _args,
         nodeConf, _modulePath,
-        tags, monitor
+        tags, monitor, mxoss,
+        optConf
     } = cluster;
     const { connections, memoryUsage } = nodeInfo;
-
+    obj.mxoss = mxoss;
     obj.pid   = _cpfpid;
     obj.name  = name;
     obj.count = connections;
@@ -120,7 +136,8 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
     obj.ats   = ats;
     obj.lookout = _lookoutEnabled;
     obj.args = _args.slice(1);
-    obj.cpu  = this.delegate.getCPU(_cpfpid);
+    obj.env  = optConf.env;
+    obj.cpuUsage  = this.delegate.getCPU(_cpfpid);
     let hashtag;
     if (!Array.isArray(tags)) {
         hashtag = (tags || "").split(",")
@@ -130,7 +147,7 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
     if (Array.isArray(tags)) {
         tags.forEach((value) => this.tags.add(value));
     }
-    obj.hashtag = hashtag;
+    obj.tags = hashtag;
     if (typeof memoryUsage != "undefined") {
         obj.memoryUsage = memoryUsage;
     }
@@ -197,7 +214,8 @@ ClustersInfo.prototype.getLBAInfo = function () {
             "complete":LBSrv.creationComplete,
             "uptime":LBSrv.uptime,
             "args": LBSrv._args,
-            "cpu": this.delegate.getCPU(LBSrv._cpfpid)
+            "cpuUsage": this.delegate.getCPU(LBSrv._cpfpid),
+            "mxoss": LBSrv.mxoss
         };
         obj["memoryUsage"] = LBSrv.nodeInfo.memoryUsage;
         if (typeof LBSrv.nodeConf != "undefined") {

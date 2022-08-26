@@ -166,11 +166,9 @@ IHandler.prototype.addCluster = function (params, client, callback) {
 
     const {name} = child;
 
-    const group = this.delegate.getClusters(name);
+    // const group = this.delegate.getClusters(name);
 
-    if (group) {
-        this.delegate.setCluster(name, child);
-    }
+    this.delegate.setCluster(name, child);
 
     if (this.syncAssignFile && clone != true) {
         this.updateAssign(child.optConf);
@@ -446,7 +444,7 @@ IHandler.prototype.clusterLockEnabled = function (params, client, callback) {
             if (cluster) {
                 cluster._dontDisconnect = (params.lock == true);
                 NSLog.log('info',' |- Service Lock: %s PID: %s.', cluster._dontDisconnect, pid);
-                cluster.sendMessage({'evt':'refuseUser', data: { enabled: cluster._dontDisconnect }});
+                cluster.postMessage({'evt':'refuseUser', data: { enabled: cluster._dontDisconnect }});
                 this.emit('refresh');
             } else {
                 result = false;
@@ -677,7 +675,8 @@ IHandler.prototype.getSchedule = function (params, client, callback) {
 IHandler.prototype.addSchedule = function (params, client, callback) {
     let {scheduler} = this;
     let result = scheduler.job(params.data);
-    if (callback) callback({result});
+    let data = scheduler.getSchedule();
+    if (callback) callback({result, data});
 };
 /**
  * 取消系統排程
@@ -688,7 +687,9 @@ IHandler.prototype.addSchedule = function (params, client, callback) {
 IHandler.prototype.cancelSchedule = function (params, client, callback) {
     let {scheduler} = this;
     let result = scheduler.cancel(params);
-    if (callback) callback({result});
+    let data = scheduler.getSchedule();
+
+    if (callback) callback({result, data});
 };
 /**
  * 讀取 Load Balancer 設定檔案

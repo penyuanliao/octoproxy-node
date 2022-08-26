@@ -149,10 +149,13 @@ Scheduler.prototype.deploymentBlueGreen = async function (assign, id, pid) {
 Scheduler.prototype.cancel = function (params) {
     let result = false;
     const {id} = params;
-    if (this.schedulesInfo.get(id).job) {
-        this.schedulesInfo.get(id).job.cancel();
-        result = true;
+    if (this.schedulesInfo.has(id)) {
+        if (this.schedulesInfo.get(id).job) {
+            this.schedulesInfo.get(id).job.cancel();
+            result = true;
+        }
     }
+
     this.schedulesInfo.delete(id);
     this.refresh();
     return result;
