@@ -6,7 +6,7 @@ const crypto = require("crypto");
 const mapping = require("./FxViewMapping.js");
 //const bufferUtil  = require('bufferutil');
 //const log  = require('./log.js');
-const status_code = exports.statusCode = {
+const status_code = {
     100 : 'Continue',
     101 : 'Switching Protocols',
     102 : 'Processing',                 // RFC 2518, obsoleted by RFC 4918
@@ -472,4 +472,4 @@ Protocols.prototype.Utf8ArrayToStr = function (array) {
     return out;
 }
 
-module.exports = exports = {'headers':new Headers(), parseHeader: Headers, Encoder: Protocols,'protocols':new Protocols()}
+module.exports = exports = {'headers':new Headers(), parseHeader: Headers, Encoder: Protocols,'protocols':new Protocols(), status_code}
