@@ -40,23 +40,22 @@ class ClustersInfo extends EventEmitter {
         }
         return this._mxoss;
     }
-}
-/**
- * 刷新
- */
-ClustersInfo.prototype.refresh = function () {
-    this.clean();
-    let services = this.getProcessInfo();
-    let trash = this.getTrashInfo();
-    let lb = this.getLBAInfo();
-    if (lb) services.push(lb);
-    if (services.length != 0) {
-        services[0].count = this.octoProxyCount;
-        this.info = this.info.concat(services, trash);
-        this.emit("refresh", this.info);
+    /**
+     * 刷新
+     */
+    refresh() {
+        this.clean();
+        let services = this.getProcessInfo();
+        let trash = this.getTrashInfo();
+        let lb = this.getLBAInfo();
+        if (lb) services.push(lb);
+        if (services.length != 0) {
+            services[0].count = this.octoProxyCount;
+            this.info = this.info.concat(services, trash);
+            this.emit("refresh", this.info);
+        }
     }
-
-};
+}
 /**
  * 目前程序的資訊
  * @return {*[]|[{file: string, memoryUsage: NodeJS.MemoryUsage, name: string, count: number, lock, pid: number, lv: string, complete: boolean, uptime}]}
@@ -113,7 +112,7 @@ ClustersInfo.prototype.getProcessInfo = function () {
  * @return {{}}
  */
 ClustersInfo.prototype.unifyData = function (cluster, obj) {
-    if (!obj) obj = {};
+    if (!obj) obj = {lv: 'none'};
 
     if (!cluster) return obj;
 
@@ -152,9 +151,7 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
         obj.memoryUsage = memoryUsage;
     }
     if (typeof nodeConf != "undefined") {
-        obj.lv   = nodeConf.lv;
-        obj.f2db = (nodeConf.f2db);
-        obj.amf = (nodeConf.amf);
+        this.setNodeConf(nodeConf, obj);
     }
     if (Array.isArray(nodeInfo.params)) {
         obj.params.forEach((item) => obj[item[0]] = item[1]);
@@ -163,6 +160,12 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
     if (monitor) obj.monitor = monitor;
     obj.file = _modulePath;
     return obj;
+};
+ClustersInfo.prototype.setNodeConf = function ({lv, f2db, amf}, obj) {
+    if (lv) obj.lv = lv;
+    else obj.lv = 'none';
+    if (f2db) obj.f2db = f2db;
+    if (amf) obj.amf = amf;
 };
 /**
  * 回收機制資訊
@@ -218,11 +221,10 @@ ClustersInfo.prototype.getLBAInfo = function () {
             "mxoss": LBSrv.mxoss
         };
         obj["memoryUsage"] = LBSrv.nodeInfo.memoryUsage;
-        if (typeof LBSrv.nodeConf != "undefined") {
-            obj.lv   = LBSrv.nodeConf.lv;
-            obj.f2db = (LBSrv.nodeConf.f2db);
-            obj.amf = (LBSrv.nodeConf.amf);
-        }
+        const {lv, f2db, amf} = (LBSrv.nodeConf || {});
+        if (lv) obj.lv = lv;
+        if (f2db) obj.f2db = f2db;
+        if (amf) obj.amf = amf;
         this.pids.add(LBSrv._cpfpid);
         return obj;
     } else {

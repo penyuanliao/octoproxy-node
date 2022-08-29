@@ -11,7 +11,8 @@ class webServer extends events.EventEmitter {
     constructor() {
         super();
         this.server = this.setup();
-        this.init();
+        // this.init();
+        this.plugins(this.server);
     }
     init() {
         const {server} = this;
@@ -47,6 +48,30 @@ class webServer extends events.EventEmitter {
             process.send({evt:"processConf", data: {lv:0, f2db:undefined}});
         }
         process.on('SIGINT', () => process.exit(2));
+    }
+    plugins(server) {
+        let OctoPlugins = require('../lib/OctoPlugins.js');
+        this.octoPlugins = new OctoPlugins(this, console);
+        this.octoPlugins.setBitratesGroup = {};
+        this.octoPlugins.database = '127.0.0.1';
+        this.octoPlugins.setupIPCBridge(server);
+        this.octoPlugins.onReload = function onReload(data, handle) {
+            console.log("info", "reload", data, handle);
+            return true;
+        };
+        let onCustomMessage = function onCustomMessage(data, handle) {
+
+        };
+        let onKickUsersOut = function onKickUsersOut(data, handle) {
+
+        };
+        this.octoPlugins.on("ipcMessage", onCustomMessage);
+        this.octoPlugins.on("kickUsersOut", onKickUsersOut);
+        this.octoPlugins.on("gracefully-shutdown", (next) => {
+            next(0);
+        });
+        /** !! important !! The is tell parent yourself has complete. **/
+        this.octoPlugins.makeSureComplete();
     }
 
     /**
