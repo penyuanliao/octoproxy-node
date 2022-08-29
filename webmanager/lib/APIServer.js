@@ -19,6 +19,7 @@ class APIServer extends EventEmitter {
         super();
         // this.createHTTPServer({listen:false, port: 8000});
         this.isWorker = (process.send instanceof Function);
+        this.LOG_LEVEL = NSLog.level;
         this.setup();
     }
 }
@@ -35,6 +36,7 @@ APIServer.prototype.setup = function () {
     this.logServer   = this.createLiveLogServer(10080);
     if (this.isWorker) this.setupIPCBridge();
     this.makeSureComplete();
+    this.updateNodeConf();
 };
 /**
  * socket server
@@ -169,7 +171,7 @@ APIServer.prototype.ipcReceiveMessage = function (args, handle) {
  */
 APIServer.prototype.makeSureComplete = function () {
     if (process.send instanceof Function) {
-        process.send({"action":"creationComplete"});
+        process.send({"action":"creationComplete", data: 1});
     }
     if (this["emit"] instanceof Function) {
         setImmediate(this["emit"].bind(this, "completed"));
@@ -218,7 +220,6 @@ APIServer.prototype.systemMessage = function ({evt, id, data, mode, params}, han
             evt: "processInfo",
             data: {
                 memoryUsage: process.memoryUsage(),
-                lv: this.LOG_LEVEL,
                 connections: (this.connections || 0),
                 bandwidth: (this.bandwidth || {secRate: 0})
             }
@@ -257,5 +258,13 @@ APIServer.prototype.serviceMessage = function ({evt, params}) {
 APIServer.prototype.shutdown = async function (done, reject) {
     NSLog.log("info",`shutdown`);
     done({result: true})
+};
+APIServer.prototype.updateNodeConf = function () {
+    let lv = this.LOG_LEVEL;
+    const json = {
+        evt: 'processConf',
+        data : { lv }
+    };
+    process.send(json);
 };
 module.exports = exports = APIServer;
