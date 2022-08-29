@@ -112,9 +112,9 @@ Headers.prototype.readHeaders = function (chunk) {
     headers["source"] = data;
     headers["lines"] = lines;
     //Check is GET HTTP 1.1
-    var reqMethod = lines[0].toString().match(/^(GET|POST|DELETE|OPTIONS|PUT)? (.+)[\/]? HTTP\/\d\.\d$/i); // WS protocol namespace endpoint no '/'
+    var reqMethod = lines[0].toString().match(/^(GET|POST|DELETE|OPTIONS|PUT|PATCH|COPY|HEAD|LINK|UNLINK|PURGE|LOCK|UNLOCK|PROPFIND|VIEW)? (.+)[\/]? HTTP\/\d\.\d$/i); // WS protocol namespace endpoint no '/'
     // [?=\/] 結尾不包含
-    reqMethod = (reqMethod == null) ? lines[0].toString().match(/^(GET|POST|DELETE|OPTIONS|PUT)? (.+) HTTP\/\d\.\d$/i) + "/" : reqMethod;
+    reqMethod = (reqMethod == null) ? lines[0].toString().match(/^(GET|POST|DELETE|OPTIONS|PUT|PATCH|COPY|HEAD|LINK|UNLINK|PURGE|LOCK|UNLOCK|PROPFIND|VIEW)? (.+) HTTP\/\d\.\d$/i) + "/" : reqMethod;
     if (reqMethod == "null/") return false;
     headers['general'] = [reqMethod[0],reqMethod[2],reqMethod[1]];
 
