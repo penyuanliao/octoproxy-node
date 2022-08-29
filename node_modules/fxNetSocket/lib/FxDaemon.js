@@ -637,7 +637,7 @@ Fxdaemon.prototype = /** @lends Fxdaemon */ {
         let value = 0;
         if (typeof data == "boolean") {
             value = (data ? 1 : 0);
-        } else if (typeof bool === "number") {
+        } else if (typeof data === "number") {
             value = Number.parseInt(data);
         }
         if (value == 1 && this.creationComplete != 1) {
