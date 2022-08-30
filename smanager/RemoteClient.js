@@ -10,6 +10,7 @@ class RemoteClient {
     constructor() {
         this.mode = IConfig.client.mode;
         this.ctrl = undefined;
+        this.progress = new Map();
         this.setup();
     }
     /**
@@ -82,6 +83,19 @@ class RemoteClient {
     async send(params) {
         if (!this.ctrl) return false;
         return await this.ctrl.callAsync("targetEvent", params);
+    }
+    joinSteps({method, show}) {
+        this.progress.set(method, show);
+    };
+    progressSteps(msg) {
+        const { method, step, done } = msg;
+        if (this.progress.has(method)) {
+            let show = this.progress.get(method);
+            if (step) show(step);
+            if (done) {
+                this.progress.delete(method);
+            }
+        }
     }
 }
 

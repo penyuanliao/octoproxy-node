@@ -309,10 +309,26 @@ APIClient.prototype.restartMultiCluster = async function (json) {
     let group = src.group.filter((value) => {
         return (typeof Number.parseInt(value) == "number");
     });
+    let delay = src.delay;
     let params = {
         method: "restartMultiCluster",
-        group
+        group,
+        delay
     };
+
+
+    this.queueSteps({
+        method: 'restartMultiCluster',
+        show: (value) => {
+            console.log(` => step.value: ${value}`);
+            this.write({
+                action: 'progressSteps',
+                target: 'restartMultiCluster',
+                data: {value}
+            })
+        }
+    });
+
     const {result, data} = await manager.send(params);
     let respond = {
         tokenId: json.tokenId,
@@ -609,6 +625,22 @@ APIClient.prototype.getMetadata = async function (json) {
     };
     this.write(respond);
 };
+APIClient.prototype.blockAll = async function (json) {
+    const { manager } = this;
+    let data = json.data || json;
+    let params = {
+        method: "blockAll",
+        bool: data.bool
+    };
+    const {result} = await manager.send(params);
+
+    let respond = {
+        tokenId: json.tokenId,
+        event: "blockAll",
+        result
+    };
+    this.write(respond);
+};
 /** [UDP only] 建立udp **/
 APIClient.prototype.createUDPManager = async function (json) {
     let udp;
@@ -735,8 +767,10 @@ APIClient.prototype.udpEstablish = function (json) {
     this.write(respond);
     return false;
 };
-
-
+APIClient.prototype.queueSteps = function ({method, show}) {
+    const { manager } = this;
+    manager.joinSteps({method, show});
+};
 APIClient.prototype.setManager = function (manager) {
     this.manager = manager;
 };

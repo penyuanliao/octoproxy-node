@@ -150,13 +150,6 @@ class RestManager extends EventEmitter {
 
             return next();
         });
-        server.get('/process/info', async (req, res, next) => {
-            let src = await this.delegate.manager.send({
-                method: "getServiceInfo"
-            });
-            res.send(src);
-            return next();
-        });
         server.get('/process/sys/info', async (req, res, next) => {
             let src = await this.delegate.manager.send({
                 method: "getSysInfo"
@@ -182,6 +175,13 @@ class RestManager extends EventEmitter {
             res.send(src);
             return next();
         });
+        server.get('/process/info', async (req, res, next) => {
+            let src = await this.delegate.manager.send({
+                method: "getServiceInfo"
+            });
+            res.send(src);
+            return next();
+        });
         server.post('/process/info', async (req, res, next) => {
             let {
                 mxoss,
@@ -199,7 +199,7 @@ class RestManager extends EventEmitter {
                 inspect,
                 v8Flags
             } = (req.body || {});
-            if (!mxoss) req.bodyul6.mxoss = 1024;
+            if (!mxoss) req.body.mxoss = 1024;
             if (!file || !assign) {
                 res.send({result: false , error: "invalid argument"});
             } else {
@@ -212,7 +212,6 @@ class RestManager extends EventEmitter {
             }
             return next();
         });
-
         server.put('/process/info', async (req, res, next) => {
             let {oAssign, nAssign, pid, options} = req.body || {};
             if (pid == 'all') {
@@ -235,6 +234,30 @@ class RestManager extends EventEmitter {
             }
 
             return next();
+        });
+        server.patch('/process/batch/reboot', async (req, res, next) => {
+
+            let json = req.body || {};
+            let delay = json.delay || 1000;
+            let group = json.group;
+            if (!Array.isArray(group)) {
+                res.send({result: false , error: "invalid argument"});
+                return next();
+            } else {
+                this.delegate.queueSteps({
+                    method: 'restartMultiCluster',
+                    show: (value) => {
+                        console.log(` => step.value: ${value}`);
+                    }
+                });
+                let src = await this.delegate.manager.send({
+                    method: "restartMultiCluster",
+                    group,
+                    delay
+                });
+                res.send(src);
+            }
+
         });
         server.get('/service/dashboard/info', async (req, res, next) => {
             let src = await this.delegate.manager.send({

@@ -41,7 +41,8 @@ const ManagerEvents = new Set([
     "addSchedule",
     "cancelSchedule",
     "readFiles",
-    "metadata"
+    "metadata",
+    "blockAll"
 ]);
 /**
  * 控制端事件
@@ -349,38 +350,56 @@ IHandler.prototype.restartCluster = function (params, client, callback) {
  * @param callback
  * @return {boolean}
  */
-IHandler.prototype.restartMultiCluster = async function ({group}, client, callback) {
+IHandler.prototype.restartMultiCluster = async function ({group, delay}, client, callback) {
     if (this.hasMultiReboot) {
         if (callback) callback({result: false, error: "script is executing."});
         return false;
     }
     this.hasMultiReboot = true;
-    NSLog.info(`multiReboot params: ${group}`);
-    this.multiReboot(group).then((res) => {
+    let time = Number.parseInt(delay);
+    if (typeof time == "number") time = Math.max(time, 100);
+    NSLog.info(`multiReboot params: ${group} delay=>${time}`);
+    let progress = {
+        step: (value) => {
+            client.send({
+                action: 'progressSteps',
+                method: 'restartMultiCluster',
+                step: value,
+                done: false
+            });
+        }
+    };
+    this.multiReboot(group, time, progress).then((res) => {
         this.hasMultiReboot = false;
+        client.send({ action: 'progressSteps', method: 'restartMultiCluster', done: true});
+        if (callback) callback({result: true, data: group});
     }).catch((err) => {
         this.hasMultiReboot = false;
+        client.send({ action: 'progressSteps', method: 'restartMultiCluster', done: true});
         if (callback) callback({result: false, data: group});
     });
-    if (callback) callback({result: true, data: group});
 };
 /**
  * 重啟排程
  * @param group
+ * @param delay
+ * @param {Object} progress
+ * @param {function} progress.step
  * @return {Promise<boolean>}
  */
-IHandler.prototype.multiReboot = async function (group) {
+IHandler.prototype.multiReboot = async function (group, delay, progress) {
     const clusters = this.delegate.getClusters();
     const keys = Object.keys(clusters);
     const LBSrv = this.delegate.getBalancerCluster();
     let index;
+    let step = 0;
     if (Array.isArray(group) == false || group.length == 0) return false;
     if ((index = group.indexOf(LBSrv._cpfpid)) != -1) {
         this.restartBalancer();
         group.splice(index, 1);
     }
-
-    for (let name of keys) {
+    for (let i = 0; i < keys.length; i++) {
+        let name = keys[i];
         let clusterGroup = clusters[name];
         if (!Array.isArray(clusterGroup)) continue;
         for (let cluster of clusterGroup) {
@@ -390,8 +409,10 @@ IHandler.prototype.multiReboot = async function (group) {
                 NSLog.info("Admin User do restartCluster();");
                 cluster.restart();
                 group.splice(index, 1);
-                NSLog.info('> wait() 1.0s');
-                const wait = await this.waiting(1000);
+                step += 1;
+                NSLog.info('> wait() 1.0s step:', step);
+                if (progress) progress.step(step);
+                const wait = await this.waiting(delay);
                 NSLog.info('> next()');
             }
             if (group.length == 0) return true;
@@ -815,6 +836,15 @@ IHandler.prototype.metadata = function (params, client, callback) {
     let metadata = nodesInfo.getMetadata();
     if (callback) {
         callback({data: metadata, result: true});
+    }
+};
+IHandler.prototype.blockAll = function ({bool}, client, callback) {
+    const { endpoint } = this;
+    if (endpoint.lockState != bool) endpoint.lockState = bool;
+    NSLog.info(`=> blockAll bool:${bool}
+    => lockState: ${endpoint.lockState}`);
+    if (callback) {
+        callback({data: endpoint.lockState, result: true});
     }
 };
 /**

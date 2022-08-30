@@ -296,6 +296,7 @@ class IDelegate extends events.EventEmitter {
         let { getSockInfos } = handle;
         let mode = "";
         let namespace = undefined;
+        let hack = false;
         if (typeof headers["x-forwarded-for"] != "undefined") getSockInfos.xff = headers["x-forwarded-for"];
         else handle.getSockInfos.xff = null;
         const host = (typeof getSockInfos.xff == "string") ? getSockInfos.xff : getSockInfos.address;
@@ -326,14 +327,27 @@ class IDelegate extends events.EventEmitter {
                         namespace = json.namespace;
                         general = ["", namespace];
                     }
+                } else {
+                    general = [];
+                    hack = true;
                 }
             } catch (e) {
+                hack = true;
                 NSLog.log("error", "[Socket] JSON.parse ERROR:", namespace.toString() , e);
             }
         }
+        if (hack) {
+            const {heartbeat_namespace} = cfg;
+            this.tcp_write(handle, this.createBody({namespace: heartbeat_namespace, mode: 'http', status: 401}));
+            this.rejectClientException(handle, "CON_DENY_CONNECT");
+            handle.close(this.close_callback.bind(handle, this));
+            this.handleRelease(handle);
+            handle = null;
+            return true;
+        }
         /** TODO 2016/10/06 -- ADMIN DEMO **/
         let method = general[2];
-        let hasManage = this.onManager({headers, method, mode, source}, handle)
+        let hasManage = this.onManager({headers, method, mode, source}, handle);
         if (hasManage) return true;
         /** TODO 2016/08/17 -- Log Info **/
         if (handle.getSockInfos && TRACE_SOCKET_IO) {
@@ -342,8 +356,10 @@ class IDelegate extends events.EventEmitter {
             handle.getSockInfos.mode  = mode;
         }
 
+
+
         /** 回應heartbeat **/
-        let echo = this.echo({namespace, mode});
+        let echo = this.createBody({namespace, mode, status: 200});
 
         if (echo) {
             this.tcp_write(handle, echo);
@@ -712,7 +728,7 @@ class IDelegate extends events.EventEmitter {
         } else {
             appid = ((getSignature instanceof Function) && getSignature(headers["appid"]));
         }
-        if (swp == "admin" || swp == "log" || corsMode || appid) {
+        if (swp == "admin" || swp == "log" || corsMode || appid || headers.general[1].split("/")[1] === 'mgr') {
             const [cluster] = (this.clusters["inind"] || this.clusters["administrator"] || []);
             const name = `${(cluster ? cluster.name : null)}`;
             const exception = (corsMode ? "HTTP_CROSS_POLICY" : "CON_VERIFIED");
@@ -739,11 +755,13 @@ class IDelegate extends events.EventEmitter {
      * 回傳響應事件
      * @param namespace
      * @param mode
+     * @param status
      * @return {string|boolean}
      */
-    echo({namespace, mode}) {
+    createBody({namespace, mode, status}) {
         const {heartbeat_namespace} = cfg;
         if (!namespace) return false;
+        if (!status) status = 200;
         if (namespace.indexOf(heartbeat_namespace) != -1) {
             let heartbeatRes = "";
             if (mode === "socket" ) {
@@ -751,11 +769,11 @@ class IDelegate extends events.EventEmitter {
 
             } else if (mode == "http") {
                 heartbeatRes = [
-                    "HTTP/1.1 200 OK",
+                    `HTTP/1.1 ${status} ${parser.status_code[status]}`,
                     "Connection: close",
                     "Content-Type: text/plain",
                     "",
-                    "200 ok"
+                    `${status} ${parser.status_code[status]}`
                 ].join("\r\n");
             }
             return heartbeatRes;
@@ -1175,6 +1193,9 @@ class IDelegate extends events.EventEmitter {
 
             }, 1000);
         });
+    }
+    reject() {
+
     }
     release() {
     }

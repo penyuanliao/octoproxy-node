@@ -271,7 +271,7 @@ IManager.prototype.getBalancer = function () {
  * @return {*}
  */
 IManager.prototype.getLockState = function () {
-    return this.delegate._lockState;
+    return this.delegate.lockState;
 };
 /**
  * 取得cpu狀態
