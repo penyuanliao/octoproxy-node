@@ -267,10 +267,11 @@ APIClient.prototype.editCluster = async function (json) {
  */
 APIClient.prototype.killCluster = async function (json) {
     const manager = this.manager;
-    let { pid } = (json.data || json);
+    let { pid, trash } = (json.data || json);
     let params = {
         method: "killCluster",
-        pid: pid
+        pid,
+        trash
     };
     const {result} = await manager.send(params);
     let respond = {
@@ -309,23 +310,21 @@ APIClient.prototype.restartMultiCluster = async function (json) {
     let group = src.group.filter((value) => {
         return (typeof Number.parseInt(value) == "number");
     });
-    let delay = src.delay;
+    let { delay, deploy } = src;
     let params = {
         method: "restartMultiCluster",
         group,
-        delay
+        delay,
+        deploy
     };
-
 
     this.queueSteps({
         method: 'restartMultiCluster',
         show: (value) => {
-            console.log(` => step.value: ${value}`);
             this.write({
-                action: 'progressSteps',
-                target: 'restartMultiCluster',
-                data: {value}
-            })
+                event: 'progressSteps',
+                data: {value, target: src.target}
+            });
         }
     });
 
