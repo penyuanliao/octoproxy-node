@@ -616,6 +616,9 @@ Fxdaemon.prototype = /** @lends Fxdaemon */ {
             NSLog.log("warning", "restart init()", daemon._modulePath);
         },1000); // import need wait 1 sec
     },
+    gracefulShutdown: function () {
+        process.kill(this._cpfpid, 'SIGINT');
+    },
     /**
      * @name Fxdaemon#log
      * @function log
