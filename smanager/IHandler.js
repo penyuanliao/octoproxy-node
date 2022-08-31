@@ -54,6 +54,11 @@ class IHandler extends events {
         this.delegate = delegate;
         this.scheduler = new Scheduler(this);
         this.syncAssignFile = true;
+        this.Deployments = {
+            Reboot:     1,
+            Gracefully: 2,
+            BlueGreen:  3,
+        };
     }
     get endpoint() {
         if (!this.delegate) return false;
@@ -130,20 +135,6 @@ IHandler.prototype.getSysInfo = function (params, client, callback) {
     }
 };
 /**
- *
- * @param params
- * @param client
- * @param callback
- */
-IHandler.prototype.setLogLevel2 = function (params, client, callback) {
-    try {
-        // this.setLogLevel2(params, client, callback);
-    } catch (e)
-    {
-        console.log('setLogLevel2 error',e);
-    }
-};
-/**
  * 增加子程序
  * @param params
  * @param client
@@ -175,7 +166,7 @@ IHandler.prototype.addCluster = function (params, client, callback) {
         this.updateAssign(child.optConf);
     }
 
-    if (callback) callback({result: true, pid: child._cpfpid});
+    if (callback) callback({result: true, pid: child.pid});
 
     return child;
 };
@@ -184,12 +175,12 @@ IHandler.prototype.addClusterAsync = async function (params, client) {
         let bool = false;
         let child = this.addCluster(params, client);
         child.emitter.once('completed', () => {
-            resolve({result: true, pid: child._cpfpid});
+            resolve({result: true, pid: child.pid});
             bool = true;
         });
         this.waiting(5000);
         if (!bool) {
-            resolve({result: true, pid: child._cpfpid});
+            resolve({result: true, pid: child.pid});
         }
     });
 };
@@ -202,6 +193,7 @@ IHandler.prototype.addClusterAsync = async function (params, client) {
 IHandler.prototype.killCluster = function (params, client, callback) {
     const clusters = this.delegate.getClusters();
     const pid = parseInt(params.pid);
+    const trash = params.trash;
     const keys = Object.keys(clusters);
 
     if (!IHandler._verifyArgs(pid, "number")) {
@@ -209,27 +201,43 @@ IHandler.prototype.killCluster = function (params, client, callback) {
         return false;
     }
     let result = false;
-    for (let name of keys) {
-        let group = clusters[name];
-        for (var j = 0; j < group.length; j++) {
-            let cluster = group[j];
-            let c_pid   = cluster._cpfpid;
+    if (trash) {
+        result = this.clearTrash(pid);
+    } else {
+        for (let name of keys) {
+            let group = clusters[name];
+            for (var j = 0; j < group.length; j++) {
+                let cluster = group[j];
+                let c_pid   = cluster.pid;
+                if (c_pid == pid) {
+                    cluster.stop();
+                    cluster.stopHeartbeat();
+                    cluster.isRelease = true;
+                    group.splice(j,1);
+                    if (this.syncAssignFile)
+                        this.deleteAssign({name});
+                    result = true;
+                    break;
+                }
 
-            if (c_pid == pid) {
-                cluster.stop();
-                cluster.stopHeartbeat();
-                cluster.isRelease = true;
-                group.splice(j,1);
-                if (this.syncAssignFile)
-                    this.deleteAssign({name});
-                result = true;
-                break;
             }
-
         }
     }
     if (callback) callback({result});
 };
+IHandler.prototype.clearTrash = function (pid) {
+    let garbageDump = this.delegate.getGarbageDump();
+    for (let i = 0; i < garbageDump.length; i++) {
+        let cluster = garbageDump[i];
+        if (pid == cluster.pid) {
+            cluster.stop();
+            cluster.stopHeartbeat();
+            garbageDump.splice(i, 1);
+            return true;
+        }
+    }
+    return false;
+}
 /**
  * 修改子程序
  * @param params
@@ -256,7 +264,7 @@ IHandler.prototype.editCluster = function (params, client, callback) {
     let modify = false;
     while (--len >= 0) {
         let cluster = oGroup[len];
-        if (cluster._cpfpid == pid || pid == 0) {
+        if (cluster.pid == pid || pid == 0) {
             cluster.name = newName;
             if (typeof mxoss == "undefined") mxoss = cluster.mxoss;
             if (typeof mxoss != "number") mxoss = 2048;
@@ -331,10 +339,10 @@ IHandler.prototype.restartCluster = function (params, client, callback) {
         if (Array.isArray(group)) {
             for (let cluster of group) {
                 if (gracefully) {
-                    NSLog.log('info', "*** Admin User do restartCluster(gracefully);", cluster._cpfpid);
-                    process.kill(cluster._cpfpid, 'SIGINT');
+                    NSLog.log('info', "*** Admin User do restartCluster(gracefully);", cluster.pid);
+                    process.kill(cluster.pid, 'SIGINT');
                 } else {
-                    NSLog.log('info', "*** Admin User do restartCluster();", cluster._cpfpid);
+                    NSLog.log('info', "*** Admin User do restartCluster();", cluster.pid);
                     cluster.restart();
                 }
             }
@@ -346,11 +354,13 @@ IHandler.prototype.restartCluster = function (params, client, callback) {
  * [重啟]多個服務
  * @param params
  * @param params.group
+ * @param deploy 部署
  * @param client
  * @param callback
  * @return {boolean}
  */
-IHandler.prototype.restartMultiCluster = async function ({group, delay}, client, callback) {
+IHandler.prototype.restartMultiCluster = async function ({group, delay, deploy}, client, callback) {
+    let { Deployments } = this;
     if (this.hasMultiReboot) {
         if (callback) callback({result: false, error: "script is executing."});
         return false;
@@ -358,7 +368,8 @@ IHandler.prototype.restartMultiCluster = async function ({group, delay}, client,
     this.hasMultiReboot = true;
     let time = Number.parseInt(delay);
     if (typeof time == "number") time = Math.max(time, 100);
-    NSLog.info(`multiReboot params: ${group} delay=>${time}`);
+    let strategy = Deployments[deploy] || Deployments.Reboot;
+    NSLog.info(`multiReboot params: ${group} delay=>${time} deploy=>${deploy}`);
     let progress = {
         step: (value) => {
             client.send({
@@ -369,7 +380,7 @@ IHandler.prototype.restartMultiCluster = async function ({group, delay}, client,
             });
         }
     };
-    this.multiReboot(group, time, progress).then((res) => {
+    this.multiReboot({group, time, strategy}, progress).then((res) => {
         this.hasMultiReboot = false;
         client.send({ action: 'progressSteps', method: 'restartMultiCluster', done: true});
         if (callback) callback({result: true, data: group});
@@ -381,20 +392,22 @@ IHandler.prototype.restartMultiCluster = async function ({group, delay}, client,
 };
 /**
  * 重啟排程
- * @param group
- * @param delay
+ * @param {Array}group 清單
+ * @param {number} time 重啟時間區隔
+ * @param {String} strategy
  * @param {Object} progress
  * @param {function} progress.step
  * @return {Promise<boolean>}
  */
-IHandler.prototype.multiReboot = async function (group, delay, progress) {
+IHandler.prototype.multiReboot = async function ({group, time, strategy}, progress) {
+    let { Deployments } = this;
     const clusters = this.delegate.getClusters();
     const keys = Object.keys(clusters);
     const LBSrv = this.delegate.getBalancerCluster();
     let index;
     let step = 0;
     if (Array.isArray(group) == false || group.length == 0) return false;
-    if ((index = group.indexOf(LBSrv._cpfpid)) != -1) {
+    if ((index = group.indexOf(LBSrv.pid)) != -1) {
         this.restartBalancer();
         group.splice(index, 1);
     }
@@ -402,19 +415,30 @@ IHandler.prototype.multiReboot = async function (group, delay, progress) {
         let name = keys[i];
         let clusterGroup = clusters[name];
         if (!Array.isArray(clusterGroup)) continue;
-        for (let cluster of clusterGroup) {
-            // console.log(`pid:${cluster._cpfpid}, group: ${group} index: ${group.indexOf(String(cluster._cpfpid))}`);
-            index = group.indexOf(String(cluster._cpfpid));
+        let j = 0;
+        while (j < clusterGroup.length) {
+            let cluster = clusterGroup[j];
+            // console.log(`pid:${cluster.pid}, group: ${group} index: ${group.indexOf(String(cluster.pid))}`);
+            index = group.indexOf(cluster.pid.toString());
             if (index !== -1) {
-                NSLog.info("Admin User do restartCluster();");
-                cluster.restart();
+                NSLog.info(`MultiReboot running 'RESTART' process by ${name} strategy:${strategy}`);
+                if (Deployments.Reboot == strategy) {
+                    cluster.restart();
+                } else if (Deployments.Gracefully == strategy) {
+                    cluster.gracefulShutdown();
+                } else if (Deployments.BlueGreen == strategy) {
+                    await this.delegate.cloneCluster({assign: name, pid: cluster.pid});
+                    NSLog.info(`MultiReboot ${cluster.pid} finished copying.`);
+                    j--;
+                }
+
                 group.splice(index, 1);
                 step += 1;
-                NSLog.info('> wait() 1.0s step:', step);
+                NSLog.info(`MultiReboot tasks:${group.length} => waiting: ${time} ms`);
                 if (progress) progress.step(step);
-                const wait = await this.waiting(delay);
-                NSLog.info('> next()');
+                const wait = await this.waiting(time);
             }
+            j++;
             if (group.length == 0) return true;
         }
     }
@@ -510,7 +534,7 @@ IHandler.prototype.kickoutToPID = function ({pid, trash, params}, client, callba
     if (trash === true) {
         let trashGroup = this.delegate.getGarbageDump();
         for (let j = 0; j < trashGroup.length; j++) {
-            if (trashGroup[j]._cpfpid == pid) {
+            if (trashGroup[j].pid == pid) {
                 trashGroup[j].send({'evt':'kickUsersOut', params:params});
                 if (callback) callback({result: true});
                 return true;

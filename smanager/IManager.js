@@ -195,16 +195,14 @@ IManager.prototype.findCluster = function (pid, name) {
     if (typeof name == "string") {
         let group = clusters[name];
         for (let cluster of group) {
-            let {_cpfpid} = cluster;
-            if (_cpfpid == pid) return cluster;
+            if (cluster.pid == pid) return cluster;
         }
     } else {
         let groupKeys = Object.keys(clusters);
         for (let key of groupKeys) {
             let group = clusters[key];
             for (let cluster of group) {
-                let {_cpfpid} = cluster;
-                if (_cpfpid == pid) return cluster;
+                if (cluster.pid == pid) return cluster;
             }
         }
     }
@@ -442,7 +440,7 @@ IManager.prototype.outOfRangeMemLimit = function (assign) {
                 NSLog.log("info", `OutOfMemory => usage:${memory_m}(${maxMemory}) tun:${(bool ? "on": "off")} score: ${cluster.score}`);
                 if (cluster.score++ > 2) {
                     cluster.score = 0;
-                    return (this.cloneCluster({assign, pid: cluster._cpfpid}) != false);
+                    return (this.cloneCluster({assign, pid: cluster.pid}) != false);
                 }
             } else {
                 cluster.score = 0;
@@ -463,12 +461,12 @@ IManager.prototype.cloneCluster = async function ({assign, pid}) {
     if (!group) {
         return false;
     }
-    NSLog.info(`clone-cluster :${assign}, ${pid}`);
+    NSLog.info(`[cloneCluster]Create new process pid:${pid} assign:${assign}`);
 
     let index = 0;
     let cluster = group[0];
     for (let i = 0; i < group.length; i++) {
-        if (group[i]._cpfpid == pid) {
+        if (group[i].pid == pid) {
             index = i;
             cluster = group[i];
             break;
@@ -490,7 +488,10 @@ IManager.prototype.cloneCluster = async function ({assign, pid}) {
     trash.recycleStartDate = new Date().getTime();
     let garbageDump = manager.getGarbageDump();
     garbageDump.push(trash);
-    NSLog.log("warning","cloneCluster(%s)", assign, group.length, garbageDump.length);
+    NSLog.warning(`[cloneCluster]Waiting to clear for assign => ${assign} 
+                   trash.pid: ${trash.pid},
+                   current: ${group.length} 
+                   garbageDump: ${garbageDump.length}`);
     manager.awaitRecycle();
     return res.pid;
 };

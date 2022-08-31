@@ -96,7 +96,7 @@ ClustersInfo.prototype.getProcessInfo = function () {
             list.push(obj);
             procKeys.push(key);
             procCount.push(cluster.nodeInfo.connections);
-            pids.add(cluster._cpfpid);
+            pids.add(cluster.pid);
             total += cluster.nodeInfo.connections;
             j++;
         }
@@ -117,7 +117,7 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
     if (!cluster) return obj;
 
     const {
-        _cpfpid, name, nodeInfo,
+        pid, name, nodeInfo,
         _dontDisconnect, creationComplete, uptime,
         ats, _lookoutEnabled, _args,
         nodeConf, _modulePath,
@@ -126,7 +126,7 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
     } = cluster;
     const { connections, memoryUsage } = nodeInfo;
     obj.mxoss = mxoss;
-    obj.pid   = _cpfpid;
+    obj.pid   = pid;
     obj.name  = name;
     obj.count = connections;
     obj.lock  = _dontDisconnect;
@@ -136,7 +136,7 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
     obj.lookout = _lookoutEnabled;
     obj.args = _args.slice(1);
     obj.env  = optConf.env;
-    obj.cpuUsage  = this.delegate.getCPU(_cpfpid);
+    obj.cpuUsage  = this.delegate.getCPU(pid);
     let hashtag;
     if (!Array.isArray(tags)) {
         hashtag = (tags || "").split(",")
@@ -181,7 +181,7 @@ ClustersInfo.prototype.getTrashInfo = function () {
         let obj = {trash:true};
         this.unifyData(group[j], obj);
         list.push(obj);
-        this.pids.add(group[j]._cpfpid);
+        this.pids.add(group[j].pid);
         this.octoProxyCount += group[j].nodeInfo.connections;
         j++;
     }
@@ -189,9 +189,9 @@ ClustersInfo.prototype.getTrashInfo = function () {
 };
 ClustersInfo.prototype.updateMetadata = function (cluster) {
     let data = [];
-    let { metadata, _cpfpid } = cluster;
+    let { metadata, pid } = cluster;
     if (metadata) {
-        data.push([_cpfpid, metadata]);
+        data.push([pid, metadata]);
     }
     this.metadata = data;
 };
@@ -207,7 +207,7 @@ ClustersInfo.prototype.getLBAInfo = function () {
     if (!LBSrv) return false;
     if (LBSrv) {
         let obj   = {
-            "pid"  :LBSrv._cpfpid,
+            "pid"  :LBSrv.pid,
             "name" :GAME_LB_NAME_ASSIGN,
             "count":0,
             "lv"   :LBSrv.lv,
@@ -217,7 +217,7 @@ ClustersInfo.prototype.getLBAInfo = function () {
             "complete":LBSrv.creationComplete,
             "uptime":LBSrv.uptime,
             "args": LBSrv._args,
-            "cpuUsage": this.delegate.getCPU(LBSrv._cpfpid),
+            "cpuUsage": this.delegate.getCPU(LBSrv.pid),
             "mxoss": LBSrv.mxoss
         };
         obj["memoryUsage"] = LBSrv.nodeInfo.memoryUsage;
@@ -225,7 +225,7 @@ ClustersInfo.prototype.getLBAInfo = function () {
         if (lv) obj.lv = lv;
         if (f2db) obj.f2db = f2db;
         if (amf) obj.amf = amf;
-        this.pids.add(LBSrv._cpfpid);
+        this.pids.add(LBSrv.pid);
         return obj;
     } else {
         return null;
