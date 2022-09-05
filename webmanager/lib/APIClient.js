@@ -355,22 +355,22 @@ APIClient.prototype.reloadToPID = async function (json) {
     this.write(respond);
 };
 /**
- * 熱更新
+ * 轉換服務
  * @param json
  * @return {Promise<void>}
  */
-APIClient.prototype.hotReload = async function (json) {
+APIClient.prototype.startWarp = async function (json) {
     const manager = this.manager;
     let data = json.data || json;
     let params = {
-        method: "hotReload",
+        method: "startWarp",
         pid: data.pid,
         params: data.params
     };
     const {result} = await manager.send(params);
     let respond = {
         tokenId: json.tokenId,
-        event: "hotReload",
+        event: "startWarp",
         result
     };
     this.write(respond);

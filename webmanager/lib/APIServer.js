@@ -163,7 +163,7 @@ APIServer.prototype.ipcReceiveMessage = function (args, handle) {
     if (args.evt) {
         this.systemMessage.apply(this, arguments);
     } else if (args.action) {
-        this.serviceMessage.apply(this, arguments);
+        this.commandMessage.apply(this, arguments);
     }
 };
 /**
@@ -229,8 +229,6 @@ APIServer.prototype.systemMessage = function ({evt, id, data, mode, params}, han
     else if (evt == 'ipcMessage') {
         NSLog.log("info", "ipcMessage()", arguments[0]);
 
-        process.kill(process.pid, "SIGINT");
-
         process.send({
             evt: 'onIpcMessage',
             id: id,
@@ -243,11 +241,11 @@ APIServer.prototype.systemMessage = function ({evt, id, data, mode, params}, han
 };
 /**
  * 自訂服務事件
- * @param {String} evt 事件
+ * @param {String} action 事件
  * @param {Object} params 參數
  */
-APIServer.prototype.serviceMessage = function ({evt, params}) {
-    NSLog.info(`serviceMessage: ${evt} params: ${JSON.stringify(params)}`);
+APIServer.prototype.commandMessage = function ({action, params}) {
+    NSLog.info(`serviceMessage: ${action} params: ${JSON.stringify(params)}`);
 };
 /**
  * 重啟服務程序

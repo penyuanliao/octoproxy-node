@@ -60,7 +60,7 @@ class webServer extends events.EventEmitter {
             return true;
         };
         let onCustomMessage = function onCustomMessage(data, handle) {
-
+            console.log(`onCustomMessage:`, data);
         };
         let onKickUsersOut = function onKickUsersOut(data, handle) {
 
@@ -69,6 +69,9 @@ class webServer extends events.EventEmitter {
         this.octoPlugins.on("kickUsersOut", onKickUsersOut);
         this.octoPlugins.on("gracefully-shutdown", (next) => {
             next(0);
+
+            setTimeout(() => next(1), 10000);
+
         });
         /** !! important !! The is tell parent yourself has complete. **/
         this.octoPlugins.makeSureComplete();

@@ -18,7 +18,8 @@ class RestManager extends EventEmitter {
         this.visitorAPI = new Set([
             '/user/login',
             '/user/2fa'
-        ])
+        ]);
+        this.accept = new Set(['appsettings', 'configure']);
         this.server = this.createAPIServer();
     }
     createAPIServer() {
@@ -38,7 +39,7 @@ class RestManager extends EventEmitter {
         server.use(restify.plugins.queryParser());
         server.use(restify.plugins.bodyParser());
         server.use(restify.plugins.authorizationParser()); // header authorization parser
-        server.use(async (req,res, next) => {
+        server.use(async (req, res, next) => {
             res.setHeader('Access-Control-Allow-Origin', "*")
             if (this.visitorAPI.has(req.url)) return next();
             let auth = await this.verifyAuth(req.authorization);
@@ -321,15 +322,61 @@ class RestManager extends EventEmitter {
             }
             return next();
         });
-        server.get('/dir', async (req, res, next) => {
+        server.get('/dir/:folder', async (req, res, next) => {
+            let folder = (req.params.folder || 'appsettings');
             let src = await this.delegate.manager.send({
-                method: "readFiles"
+                method: "readFiles",
+                folder
+            });
+
+            if (!this.acceptFolder(folder)) {
+                res.send({
+                    result: false,
+                    code: 'InvalidName',
+                    message: 'This is not a valid folder'});
+                return next();
+            }
+
+            res.send(src);
+            return next();
+        });
+        server.put('/dir', async (req, res, next) => {
+            let folder = (req.body.folder || 'appsettings');
+
+            if (!this.acceptFolder(folder)) {
+                res.send({
+                    result: false,
+                    code: 'InvalidName',
+                    message: 'This is not a valid folder'});
+                return next();
+            }
+
+            let src;
+            src = await this.delegate.manager.send({
+                method: "readFiles",
+                folder
             });
             res.send(src);
             return next();
         });
-        server.get('/dir/:filename', async (req, res, next) => {
+        server.get('/dir/:folder/:filename', async (req, res, next) => {
+            let folder = (req.params.folder || 'appsettings');
             let filename = this.getFilename(req.params.filename);
+
+            if (!filename) {
+                res.send({
+                    result: false,
+                    code: 'InvalidName',
+                    message: 'This is not a valid file name'});
+                return next();
+            } else if (!this.acceptFolder(folder)) {
+                res.send({
+                    result: false,
+                    code: 'InvalidName',
+                    message: 'This is not a valid folder'});
+                return next();
+            }
+
             let src = await this.delegate.manager.send({
                 method: "readFileContents",
                 filename
@@ -337,14 +384,20 @@ class RestManager extends EventEmitter {
             res.send(src);
             return next();
         });
-        server.post('/dir/:filename', async (req, res, next) => {
+        server.post('/dir/:folder/:filename', async (req, res, next) => {
+            let folder = (req.params.folder || 'appsettings');
             let filename = this.getFilename(req.params.filename);
             if (!filename) {
                 res.send({
                     result: false,
                     code: 'InvalidName',
-                    message: 'This is not a valid file name'
-                });
+                    message: 'This is not a valid file name'});
+                return next();
+            } else if (!this.acceptFolder(folder)) {
+                res.send({
+                    result: false,
+                    code: 'InvalidName',
+                    message: 'This is not a valid folder'});
                 return next();
             }
             let {
@@ -370,8 +423,30 @@ class RestManager extends EventEmitter {
             res.send(src);
             return next();
         });
+
+        server.patch('/message/apply', async (req, res, next) => {
+            let {result, error} = await this.verifyAuth(req.authorization);
+            if (result === false) {
+                return next(new errors['UnauthorizedError'](error));
+            }
+
+            let { pid, assign, host } = req.params;
+
+            let src = await this.delegate.manager.send({
+                method: 'ipcMessage',
+                pid,
+                params: {
+                    cmd: 'apply',
+                    assign,
+                    host
+                }
+            });
+
+            res.send(src);
+        });
+
         return server;
-    }
+    };
 
     /**
      * @api {post} /user/password change user password
@@ -389,6 +464,15 @@ class RestManager extends EventEmitter {
         let result = await delegate.auth.changePassword({ password, newPassword, authorization });
         res.send({ result });
         return next();
+    }
+
+    acceptFolder(str) {
+        if (!str) str = 'appsettings';
+        let {accept} = this;
+        return (accept.has(str));
+    }
+    failMassage({code, message}) {
+        return {result: false, code, message };
     }
 }
 

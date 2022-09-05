@@ -23,7 +23,7 @@ const ManagerEvents = new Set([
     "setLBGamePath",
     "clusterLockEnabled",
     "kickoutToPID",
-    "hotReload",
+    "startWarp",
     "reloadToPID",
     "restartCluster",
     "killCluster",
@@ -394,7 +394,7 @@ IHandler.prototype.restartMultiCluster = async function ({group, delay, deploy},
  * 重啟排程
  * @param {Array}group 清單
  * @param {number} time 重啟時間區隔
- * @param {String} strategy
+ * @param {Number} strategy
  * @param {Object} progress
  * @param {function} progress.step
  * @return {Promise<boolean>}
@@ -568,7 +568,15 @@ IHandler.prototype.reloadToPID = function ({pid, params}, client, callback) {
         if (callback) callback({result: true});
     }
 };
-IHandler.prototype.hotReload = function ({pid, params}, client, callback) {
+/**
+ *
+ * @param pid
+ * @param params
+ * @param client
+ * @param callback
+ * @return {boolean}
+ */
+IHandler.prototype.startWarp = function ({pid, params}, client, callback) {
     const _pid = parseInt(pid);
 
     if (!IHandler._verifyArgs(_pid, "number")) {
@@ -579,7 +587,7 @@ IHandler.prototype.hotReload = function ({pid, params}, client, callback) {
     if (!cluster) {
         if (callback) callback({result: false});
     } else {
-        cluster.send({'evt':'hotReload', params:params});
+        cluster.send({'evt':'startWarp', params: params});
         cluster._dontDisconnect = true;
         if (callback) callback({result: true});
     }
@@ -663,7 +671,7 @@ IHandler.prototype.getIPFilter = function (params, client, callback) {
  */
 IHandler.prototype.getDashboardInfo = async function (params, client, callback) {
     const pathname = this.delegate.getPath(DashboardPath);
-    NSLog.log("trace", "getDashboardInfo()", pathname);
+    NSLog.trace("getDashboardInfo()", pathname);
     let data = await this.readFile(pathname, {});
     if (callback) {
         callback({data, result: true});
@@ -874,11 +882,15 @@ IHandler.prototype.blockAll = function ({bool}, client, callback) {
 /**
  * 讀檔案
  * @param {String} filename
+ * @param {String} folder
  * @param {Object} client
  * @param {Function} callback
  */
-IHandler.prototype.readFileContents = function ({filename}, client, callback) {
-    const filepath = xPath.resolve(process.cwd(), '../appsettings', filename);
+IHandler.prototype.readFileContents = function ({filename, folder}, client, callback) {
+
+    if (!folder) folder = 'appsettings'
+
+    const filepath = xPath.resolve(process.cwd(), `../${folder}`, filename);
     let res = false;
     let str, data;
 
@@ -901,12 +913,14 @@ IHandler.prototype.readFileContents = function ({filename}, client, callback) {
 };
 /**
  * 讀取資料夾檔案清單
+ * @param folder
  * @param client
  * @param callback
  */
-IHandler.prototype.readFiles = function ({}, client, callback) {
-    const filepath = util.format("../appsettings/");
-
+IHandler.prototype.readFiles = function ({folder}, client, callback) {
+    if (!folder) folder = 'appsettings'
+    const filepath = util.format(`../${folder}/`);
+    NSLog.info(`readFiles.filepath: ${filepath}`);
     if (!fs.existsSync(filepath)) fs.mkdirSync(filepath);
 
     let res = false;
@@ -927,13 +941,17 @@ IHandler.prototype.readFiles = function ({}, client, callback) {
 /**
  * 寫入檔案
  * @param filename
+ * @param folder
  * @param data
  * @param client
  * @param callback
  */
-IHandler.prototype.saveFileContents = function ({filename, data}, client, callback) {
-    const filepath = xPath.resolve(process.cwd(), '../appsettings', filename);
+IHandler.prototype.saveFileContents = function ({filename, folder, data}, client, callback) {
+    if (!folder) folder = 'appsettings'
 
+    const filepath = xPath.resolve(process.cwd(), `../${folder}`, filename);
+
+    NSLog.info(`saveFileContents.filepath: ${filepath}`);
     if (!fs.existsSync(filepath)) fs.mkdirSync(filepath);
 
     let respond = {

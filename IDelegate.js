@@ -1049,7 +1049,11 @@ class IDelegate extends events.EventEmitter {
         child.optConf = options; //複製程序使用
         child.tags = tags;
         child.init();
-        child.emitter.on('warp_handle', (message, handle) => endpoint.duringWarp(message, handle));
+        child.emitter.on('warp_handle', (message, handle) => {
+            let result = endpoint.duringWarp(message, handle);
+            const { evt, id } = message;
+            child.postMessage({ evt, id, data: result });
+        });
         child.emitter.on('onIpcMessage', (message) => endpoint.mgmtSrv.onIpcMessage(message));
         child.emitter.on('status', (message) => NSLog.log('warning', message));
         child.emitter.on('unexpected', (err) => {
@@ -1108,7 +1112,7 @@ class IDelegate extends events.EventEmitter {
         let worker = this.asyncAssign(assign)
         if (typeof worker === 'undefined' || !worker) {
             handle = null;
-            return;
+            return {result: false, error: 'assign not found.'};
         }
         worker.send({
             evt: event,
@@ -1117,6 +1121,7 @@ class IDelegate extends events.EventEmitter {
             namespace: assign,
             originPath: message.originPath
         }, handle, {keepOpen: false});
+        return {result: true};
     };
     /**
      * cross 規則
