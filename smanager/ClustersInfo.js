@@ -1,6 +1,7 @@
 "use strict";
 const net           = require("net");
 const util          = require("util");
+const {spawn}       = require("child_process");
 const EventEmitter  = require("events");
 const GAME_LB_NAME_ASSIGN = "casino_game_rule";
 const GAME_LB_NAME = "loadBalance";
@@ -21,10 +22,12 @@ class ClustersInfo extends EventEmitter {
         this.info = [];
         //記錄所有pid
         this.pids = new Set();
+        this.memory = new Map();
         this.uptime = Date.now();
         //記錄所有的tags
         this.tags = new Set();
         this.metadata = [];
+        this.commandMap = new Set();
         this._mxoss = -1;
         setTimeout(() => this.refresh(), 1000);
     }
@@ -43,9 +46,9 @@ class ClustersInfo extends EventEmitter {
     /**
      * 刷新
      */
-    refresh() {
+    async refresh() {
         this.clean();
-        let services = this.getProcessInfo();
+        let services = await this.getProcessInfo();
         let trash = this.getTrashInfo();
         let lb = this.getLBAInfo();
         if (lb) services.push(lb);
@@ -55,56 +58,80 @@ class ClustersInfo extends EventEmitter {
             this.emit("refresh", this.info);
         }
     }
-}
-/**
- * 目前程序的資訊
- * @return {*[]|[{file: string, memoryUsage: NodeJS.MemoryUsage, name: string, count: number, lock, pid: number, lv: string, complete: boolean, uptime}]}
- */
-ClustersInfo.prototype.getProcessInfo = function () {
-    const clusters = this.delegate.getClusters();
-    if (!clusters) return [];
-    let keys = Object.keys(clusters);
-    let total = 0;
-    let procCount = this.procCount;
-    let procKeys  = this.procKeys;
-    let pids = this.pids;
-    let list = [{
-        "pid": process.pid,
-        "file": "Main",
-        "name":'octoproxy',
-        "count": 0,
-        "mxoss": this.mxoss,
-        "lock": this.delegate.getLockState(),
-        "memoryUsage": process.memoryUsage(),
-        "complete": 1,
-        "lv": "debug",
-        "uptime": this.uptime,
-        "cpuUsage": this.delegate.getCPU(process.pid),
-        "tags": [...this.tags]
-    }];
-    keys.forEach((key) => {
+    /**
+     * 目前程序的資訊
+     * @return {*[]|[{file: string, memoryUsage: NodeJS.MemoryUsage, name: string, count: number, lock, pid: number, lv: string, complete: boolean, uptime}]}
+     */
+    async getProcessInfo() {
+        const clusters = this.delegate.getClusters();
+        if (!clusters) return [];
+        let keys = Object.keys(clusters);
+        let total = 0;
+        let procCount = this.procCount;
+        let procKeys  = this.procKeys;
+        let pids = this.pids;
+        let list = [{
+            "pid": process.pid,
+            "file": "Main",
+            "name":'octoproxy',
+            "count": 0,
+            "mxoss": this.mxoss,
+            "lock": this.delegate.getLockState(),
+            "memoryUsage": process.memoryUsage(),
+            "complete": 1,
+            "lv": "debug",
+            "uptime": this.uptime,
+            "cpuUsage": this.delegate.getCPU(process.pid),
+            "tags": [...this.tags]
+        }];
 
-        let j     = 0;
-        let group = clusters[key];
-        let obj, cluster;
-        while (j < group.length)
-        {
-            cluster = group[j];
-            obj = {}
-            this.unifyData(cluster, obj);
-            this.updateMetadata(cluster);
-            list.push(obj);
-            procKeys.push(key);
-            procCount.push(cluster.nodeInfo.connections);
-            pids.add(cluster.pid);
-            total += cluster.nodeInfo.connections;
-            j++;
-        }
-        group = null;
-    });
-    this.octoProxyCount += total;
-    return list;
-};
+        keys.forEach((key) => {
+
+            let j     = 0;
+            let group = clusters[key];
+            let obj, cluster;
+            while (j < group.length)
+            {
+                cluster = group[j];
+                obj = {}
+                this.unifyData(cluster, obj);
+                this.updateMetadata(cluster);
+                list.push(obj);
+                procKeys.push(key);
+                procCount.push(cluster.nodeInfo.connections);
+                pids.add(cluster.pid);
+                total += cluster.nodeInfo.connections;
+                j++;
+            }
+            group = null;
+        });
+        this.octoProxyCount += total;
+        this.memory.clear();
+        if (this.commandMap.size != 0) await this.getProcessMemory();
+        this.commandMap.clear();
+        return list;
+    };
+    /**
+     * 分析記憶體
+     * @return {Promise}
+     */
+    getProcessMemory() {
+        return new Promise((resolve) => {
+            const child = spawn('sh', ['-c', 'ps -eo pid,rss,vsz,comm | grep node']);
+            child.stdout.on("data", (data) => {
+                if (!data) return false;
+                data.toString().replace(/( )+/g, " ").split('\n').forEach((element) => {
+                    let [pid, rss, heapTotal] = element.split(" ");
+                    if (pid != '') this.memory.set(Number(pid), { rss: Number(rss) * 1024, heapTotal: Number(heapTotal) * 1024 });
+                });
+                resolve(this.memory);
+            });
+            child.stderr.on('data', (data) => {
+                reject(data.toString());
+            })
+        })
+    }
+}
 /**
  * 檢查數據資料
  * @param cluster
@@ -122,7 +149,7 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
         ats, _lookoutEnabled, _args,
         nodeConf, _modulePath,
         tags, monitor, mxoss,
-        optConf
+        optConf, cmd
     } = cluster;
     const { connections, memoryUsage } = nodeInfo;
     obj.mxoss = mxoss;
@@ -149,6 +176,8 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
     obj.tags = hashtag;
     if (typeof memoryUsage != "undefined") {
         obj.memoryUsage = memoryUsage;
+    } else if (cmd != "" || !obj.lookout) {
+        obj.memoryUsage = this.memory.get(pid);
     }
     if (typeof nodeConf != "undefined") {
         this.setNodeConf(nodeConf, obj);
@@ -159,6 +188,9 @@ ClustersInfo.prototype.unifyData = function (cluster, obj) {
     obj.bitrates = nodeInfo.bitrates;
     if (monitor) obj.monitor = monitor;
     obj.file = _modulePath;
+
+    if (typeof cmd == "string" && cmd != '' || !obj.lookout) this.commandMap.add(pid);
+
     return obj;
 };
 ClustersInfo.prototype.setNodeConf = function ({lv, f2db, amf}, obj) {
