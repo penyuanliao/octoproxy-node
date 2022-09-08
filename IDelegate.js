@@ -1010,7 +1010,7 @@ class IDelegate extends events.EventEmitter {
         env.NODE_CDID = String(index);
         if (options.env) IHandler.setEnvironmentVariables(env, options.env);
         let execArgv = []; // octoProxy pkg versions
-        let {file, assign, mxoss, ats, args, rules, tags, cmd, assign2syntax} = options;
+        let {file, assign, mxoss, ats, args, rules, tags, cmd, assign2syntax, stdio} = options;
         if (options.pkg != true) {
             execArgv = ["--nouse-idle-notification", `--max-old-space-size=${mxoss}`];
             if (options.gc) execArgv.push('--expose-gc');
@@ -1037,7 +1037,8 @@ class IDelegate extends events.EventEmitter {
             heartbeatEnabled: options.heartbeat,
             pkgFile: options.pkg,
             cmd,
-            assign2syntax
+            assign2syntax,
+            stdio
         };
 
         let cmdLine = (assign2syntax) ? [assign].concat(args) : args;
@@ -1231,7 +1232,8 @@ function createChildProperties(params) {
         stdoutFile,
         stderrFile,
         version,
-        assign2syntax
+        assign2syntax,
+        stdio
     } = params;
     /** @typedef {ChildProperties} */
     let options = {
@@ -1299,6 +1301,7 @@ function createChildProperties(params) {
 
     if (typeof version != "number") options.version = 1;
     if (typeof options.assign2syntax != "boolean") options.assign2syntax = true;
+    if (Array.isArray(stdio)) options.stdio = stdio;
     return options;
 }
 IDelegate.createChildProperties = createChildProperties;
