@@ -130,69 +130,70 @@ class ClustersInfo extends EventEmitter {
                 reject(data.toString());
             })
         })
-    }
+    };
+    /**
+     * 檢查數據資料
+     * @param cluster
+     * @param obj
+     * @return {{}}
+     */
+    unifyData(cluster, obj) {
+        if (!obj) obj = {lv: 'none'};
+
+        if (!cluster) return obj;
+
+        const {
+            pid, name, nodeInfo,
+            _dontDisconnect, creationComplete, uptime,
+            ats, _lookoutEnabled, _args,
+            nodeConf, _modulePath,
+            tags, monitor, mxoss,
+            optConf, cmd, rules
+        } = cluster;
+        const { connections, memoryUsage } = nodeInfo;
+        obj.mxoss = mxoss;
+        obj.pid   = pid;
+        obj.name  = name;
+        obj.count = connections;
+        obj.lock  = _dontDisconnect;
+        obj.complete = creationComplete;
+        obj.uptime = uptime;
+        obj.ats   = ats;
+        obj.lookout = _lookoutEnabled;
+        obj.args = _args.slice(1);
+        obj.env  = optConf.env;
+        obj.cpuUsage  = this.delegate.getCPU(pid);
+        let hashtag;
+        if (!Array.isArray(tags)) {
+            hashtag = (tags || "").split(",")
+        } else {
+            hashtag = tags;
+        }
+        if (Array.isArray(tags)) {
+            tags.forEach((value) => this.tags.add(value));
+        }
+        obj.tags = hashtag;
+        if (typeof memoryUsage != "undefined") {
+            obj.memoryUsage = memoryUsage;
+        } else if (cmd != false || !obj.lookout) {
+            obj.memoryUsage = this.memory.get(pid);
+        }
+        if (typeof nodeConf != "undefined") {
+            this.setNodeConf(nodeConf, obj);
+        }
+        if (Array.isArray(nodeInfo.params)) {
+            obj.params.forEach((item) => obj[item[0]] = item[1]);
+        }
+        obj.bitrates = nodeInfo.bitrates;
+        if (monitor) obj.monitor = monitor;
+        obj.file = _modulePath;
+        if (rules) obj.rules = rules;
+        if (typeof cmd == "string" && cmd != false || !obj.lookout) this.commandMap.add(pid);
+
+        return obj;
+    };
 }
-/**
- * 檢查數據資料
- * @param cluster
- * @param obj
- * @return {{}}
- */
-ClustersInfo.prototype.unifyData = function (cluster, obj) {
-    if (!obj) obj = {lv: 'none'};
 
-    if (!cluster) return obj;
-
-    const {
-        pid, name, nodeInfo,
-        _dontDisconnect, creationComplete, uptime,
-        ats, _lookoutEnabled, _args,
-        nodeConf, _modulePath,
-        tags, monitor, mxoss,
-        optConf, cmd
-    } = cluster;
-    const { connections, memoryUsage } = nodeInfo;
-    obj.mxoss = mxoss;
-    obj.pid   = pid;
-    obj.name  = name;
-    obj.count = connections;
-    obj.lock  = _dontDisconnect;
-    obj.complete = creationComplete;
-    obj.uptime = uptime;
-    obj.ats   = ats;
-    obj.lookout = _lookoutEnabled;
-    obj.args = _args.slice(1);
-    obj.env  = optConf.env;
-    obj.cpuUsage  = this.delegate.getCPU(pid);
-    let hashtag;
-    if (!Array.isArray(tags)) {
-        hashtag = (tags || "").split(",")
-    } else {
-        hashtag = tags;
-    }
-    if (Array.isArray(tags)) {
-        tags.forEach((value) => this.tags.add(value));
-    }
-    obj.tags = hashtag;
-    if (typeof memoryUsage != "undefined") {
-        obj.memoryUsage = memoryUsage;
-    } else if (cmd != "" || !obj.lookout) {
-        obj.memoryUsage = this.memory.get(pid);
-    }
-    if (typeof nodeConf != "undefined") {
-        this.setNodeConf(nodeConf, obj);
-    }
-    if (Array.isArray(nodeInfo.params)) {
-        obj.params.forEach((item) => obj[item[0]] = item[1]);
-    }
-    obj.bitrates = nodeInfo.bitrates;
-    if (monitor) obj.monitor = monitor;
-    obj.file = _modulePath;
-
-    if (typeof cmd == "string" && cmd != '' || !obj.lookout) this.commandMap.add(pid);
-
-    return obj;
-};
 ClustersInfo.prototype.setNodeConf = function ({lv, f2db, amf}, obj) {
     if (lv) obj.lv = lv;
     else obj.lv = 'none';

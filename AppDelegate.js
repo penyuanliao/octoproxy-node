@@ -956,14 +956,18 @@ AppDelegate.createChildProperties = function (params) {
         inspect,
         v8Flags,
         rules,
-        tags
+        tags,
+        stdoutFile,
+        stderrFile
     } = params;
     /** @typedef {ChildProperties} */
     let options = {
         file,
         pkg: false,
         ats: false,
-        rules: []
+        rules: [],
+        stdoutFile,
+        stderrFile
     };
     options.assign    = utilities.trimAny(assign);
     options.mxoss     = mxoss || 2048;

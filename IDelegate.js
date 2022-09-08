@@ -1010,7 +1010,7 @@ class IDelegate extends events.EventEmitter {
         env.NODE_CDID = String(index);
         if (options.env) IHandler.setEnvironmentVariables(env, options.env);
         let execArgv = []; // octoProxy pkg versions
-        let {file, assign, mxoss, ats, args, rules, tags} = options;
+        let {file, assign, mxoss, ats, args, rules, tags, cmd, assign2syntax} = options;
         if (options.pkg != true) {
             execArgv = ["--nouse-idle-notification", `--max-old-space-size=${mxoss}`];
             if (options.gc) execArgv.push('--expose-gc');
@@ -1036,10 +1036,11 @@ class IDelegate extends events.EventEmitter {
             lookoutEnabled: options.lookout,
             heartbeatEnabled: options.heartbeat,
             pkgFile: options.pkg,
-            cmd: options.cmd
+            cmd,
+            assign2syntax
         };
 
-        let cmdLine = (assign) ? [assign].concat(args) : args;
+        let cmdLine = (assign2syntax) ? [assign].concat(args) : args;
 
         const child = new daemon(file, cmdLine, daemonOptions);
         child.name = assign;
@@ -1058,7 +1059,7 @@ class IDelegate extends events.EventEmitter {
         child.emitter.on('status', (message) => NSLog.log('warning', message));
         child.emitter.on('unexpected', (err) => {
             NSLog.log('warning', "unexpected:", err.name);
-            endpoint.tgBotTemplate("-1001314121392", "shutdown", [err.name]);
+            //endpoint.tgBotTemplate("-1001314121392", "shutdown", [err.name]);
         });
         child.emitter.on('restart', () => endpoint.mgmtSrv.refreshClusterParams(child));
         return child;
@@ -1226,16 +1227,27 @@ function createChildProperties(params) {
         inspect,
         v8Flags,
         rules,
-        tags
+        tags,
+        stdoutFile,
+        stderrFile,
+        version,
+        assign2syntax
     } = params;
     /** @typedef {ChildProperties} */
     let options = {
         file,
         pkg: false,
         ats: false,
-        rules: []
+        rules: [],
+        stdoutFile,
+        stderrFile,
+        assign2syntax
     };
-    options.assign    = utilities.trimAny(assign);
+    if (assign) {
+        options.assign = utilities.trimAny(assign);
+    } else {
+        options.assign = 'empty';
+    }
     options.mxoss     = mxoss || 2048;
     if (typeof lookout == "boolean") {
         options.lookout = lookout;
@@ -1249,8 +1261,11 @@ function createChildProperties(params) {
         options.heartbeat = true;
     }
 
-    if (file.indexOf(".js") == -1) options.pkg = true;
     if (typeof pkg == "boolean") options.pkg = pkg;
+    if (!options.pkg && file.indexOf(".js") == -1 && file.indexOf(".mjs") == -1 && cmd == '') {
+        options.pkg = true;
+    }
+
     if (typeof args == "string") {
         options.args = utilities.trimAny(args).split(",");
     } else if (Array.isArray(args) && args.length > 0) {
@@ -1269,9 +1284,21 @@ function createChildProperties(params) {
     if (typeof compact == "boolean") options.compact = compact;
     if (typeof inspect == "boolean") options.inspect = inspect;
     if (typeof v8Flags != "undefined") options.v8Flags = v8Flags;
-    if (Array.isArray(rules)) options.rules = rules; //自訂
+    //自訂
+    if (Array.isArray(rules)) {
+        options.rules = rules
+    } else if (typeof rules == "string") {
+        options.rules = utilities.trimAny(rules).split(",");
+    }
+    if (Array.isArray(options.rules)) {
+        options.version = 2;
+        options.assign2syntax = false;
+    }
+
     options.tags = (typeof tags == "string") ? tags.split(",") : tags;
 
+    if (typeof version != "number") options.version = 1;
+    if (typeof options.assign2syntax != "boolean") options.assign2syntax = true;
     return options;
 }
 IDelegate.createChildProperties = createChildProperties;
