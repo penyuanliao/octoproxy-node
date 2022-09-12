@@ -554,11 +554,16 @@ logger.prototype.setConsole = function (console) {
 };
 
 logger.prototype.__defineSetter__("setLevel", function (lvStr) {
+
     var lv = levels.indexOf(lvStr);
-    if (lv == -1)
+    if (lv == -1) {
         debugLevel = 0;
-    else
+        this.level = levels[0];
+    } else {
         debugLevel = lv;
+        this.level = levels[lv];
+    }
+
 });
 logger.prototype.__defineSetter__("setRemoteEnabled", function (enabled) {
     this.remoteEnabled = enabled;
