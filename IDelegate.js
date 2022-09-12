@@ -21,8 +21,7 @@ const uv            = process.binding('uv');
 const fs            = require('fs');
 const net           = require('net');
 const tls           = require('tls');
-const evt           = require('events');
-const cfg           = require('./config.js');
+const iConfig       = require('./IConfig.js').getInstance();
 const gLBSrv        = require('./lib/gameLBSrv.js');
 const Dashboard     = require("./lib/Dashboard.js");
 const TelegramBot   = require("./lib/FxTelegramBot.js");
@@ -30,9 +29,9 @@ const hostname      = require('os').hostname();
 const IHandler      = require('./smanager/IHandler.js');
 
 NSLog.configure({
-    logFileEnabled:true,
-    consoleEnabled:true,
-    level:'debug',
+    logFileEnabled: true,
+    consoleEnabled: true,
+    level: iConfig.level,
     dateFormat:'[yyyy-MM-dd hh:mm:ss]',
     filePath: xPath.join(process.cwd(), "./historyLog"),
     id:"octoproxy",
@@ -42,8 +41,9 @@ NSLog.configure({
     trackOptions:{db:"couchbase://127.0.0.1", bucket:"nodeHistory"},
     fileDateHide: true,
     fileMaxCount: 0,
-    fileSort:"asc",
-    maximumFileSize: 1024 * 1024 * 500});
+    fileSort: "asc",
+    maximumFileSize: 1024 * 1024 * 500
+});
 
 /** remove a socket was pending timeout. **/
 const closeWaitTime = 5000;
@@ -109,7 +109,7 @@ class IDelegate extends events.EventEmitter {
         /** The lockdown not allows user to connect service **/
         this._lockdown       = false;
         /** casino load balance **/
-        this.gameLBSrv       = new gLBSrv(cfg.gamSLB, this);
+        this.gameLBSrv       = new gLBSrv(iConfig.gamSLB, this);
         this.mgmtSrv         = undefined;
         /** record visitor remote address **/
         this.recordDashboard = new Dashboard(Dashboard.loadFile("./historyLog/Dashboard.json"));
@@ -117,19 +117,19 @@ class IDelegate extends events.EventEmitter {
         this.tokenId = 0;
         NSLog.log('info','lockdown:[%s]', this._lockdown);
         NSLog.log('debug', "** Initialize octoproxy.js **");
-        NSLog.log("debug", " > Frontend support listens for RTMP/TCP requests to enabled: [%s]", cfg.gamSLB.rtmpFrontendEnabled);
+        NSLog.log("debug", " > Frontend support listens for RTMP/TCP requests to enabled: [%s]", iConfig.gamSLB.rtmpFrontendEnabled);
         this.init();
     };
     init() {
         utilities.autoReleaseGC(); //** 手動 1 sec gc
-        NSLog.log('info' , 'Game server load balance enabled: [%s]', cfg.gamSLB.enabled);
-        if (cfg.gamSLB.enabled) {
+        NSLog.log('info' , 'Game server load balance enabled: [%s]', iConfig.gamSLB.enabled);
+        if (iConfig.gamSLB.enabled) {
             // Initial start up on Game Server Load Balance.
             this.gameLBSrv.init_daemon();
         }
 
         // 1. setup child process fork
-        this.setupCluster(cfg.forkOptions);
+        this.setupCluster(iConfig.forkOptions);
         // 2. create listen 80 port server
         this.start();
 
@@ -138,9 +138,9 @@ class IDelegate extends events.EventEmitter {
         this.management();
     };
     async start() {
-        let { srvOptions, tlsOptions } = cfg;
+        let { srvOptions, tlsOptions, env } = iConfig;
         NSLog.log('info', `Ready to start create net server ${JSON.stringify(srvOptions)}.`);
-        if (cfg.env !== "development") {
+        if (env !== "development") {
             await this.countdown(10);
         }
         this.server = this.createServer(srvOptions);
@@ -337,7 +337,7 @@ class IDelegate extends events.EventEmitter {
             }
         }
         if (hack) {
-            const {heartbeat_namespace} = cfg;
+            const {heartbeat_namespace} = iConfig;
             this.tcp_write(handle, this.createBody({namespace: heartbeat_namespace, mode: 'http', status: 401}));
             this.rejectClientException(handle, "CON_DENY_CONNECT");
             handle.close(this.close_callback.bind(handle, this));
@@ -397,7 +397,7 @@ class IDelegate extends events.EventEmitter {
         } else if (headers.unicodeNull != null && headers.swfPolicy && mode != 'ws') {
             mode = "flashsocket";
         }
-        const { httpEnabled } = cfg.gamSLB;
+        const { httpEnabled } = iConfig.gamSLB;
         let params = {f5: general[1], host: host};
 
         if (httpEnabled && mode === 'http' && isBrowser) {
@@ -420,7 +420,7 @@ class IDelegate extends events.EventEmitter {
         if (handle) handle.readStop();
     }
     bindingParser(handle, buffer) {
-        let {rtmpFrontendEnabled} = cfg.gamSLB;
+        let {rtmpFrontendEnabled} = iConfig.gamSLB;
         if (!rtmpFrontendEnabled) return false;
         const MediaClientBinder = require("./Framework/FlServer/MediaClientBinder.js");
         const hasRTMP = MediaClientBinder.hasHandshake(buffer);
@@ -441,16 +441,16 @@ class IDelegate extends events.EventEmitter {
             namespace = this.gameLBSrv.urlParse({
                 path: params.f5,
                 host: params.host,
-                vPrefix: cfg.gamSLB.vPrefix,
-                specificBase: cfg.specificBase
+                vPrefix: iConfig.gamSLB.vPrefix,
+                specificBase: iConfig.specificBase
             });
             this.clusterEndpoint({namespace, source, originPath, mode}, handle).then(() => {});
         }
         return true;
     };
     gateway_general({params, url_args, namespace, source, originPath, mode, host}, handle) {
-        const { assign, enabled, videoEnabled, vPrefix } = cfg.gamSLB;
-        const { specificBase } = cfg;
+        const { specificBase, gamSLB } = iConfig;
+        const { assign, enabled, videoEnabled, vPrefix } = gamSLB;
         const chk_assign = (assign == namespace);
         if (enabled && chk_assign || (videoEnabled && typeof url_args != "undefined" && typeof url_args.stream != "undefined")) {
             let lbtimes;
@@ -638,13 +638,13 @@ class IDelegate extends events.EventEmitter {
             if (cb) cb(undefined);
             return;
         }
-
+        let {balance} = iConfig;
         // url_param
-        if (cfg.balance === "url_param") {
+        if (balance === "url_param") {
 
-        } else if (cfg.balance === "roundrobin") {
+        } else if (balance === "roundrobin") {
             this.roundrobin({namespace: clusterName, group: group}, cb);
-        } else if (cfg.balance === "leastconn") { //Each server with the lowest number of connections
+        } else if (balance === "leastconn") { //Each server with the lowest number of connections
             this.leastconn({namespace: clusterName, group: group}, cb);
         } else
         {
@@ -759,7 +759,7 @@ class IDelegate extends events.EventEmitter {
      * @return {string|boolean}
      */
     createBody({namespace, mode, status}) {
-        const {heartbeat_namespace} = cfg;
+        const {heartbeat_namespace} = iConfig;
         if (!namespace) return false;
         if (!status) status = 200;
         if (namespace.indexOf(heartbeat_namespace) != -1) {
@@ -1010,23 +1010,29 @@ class IDelegate extends events.EventEmitter {
         env.NODE_CDID = String(index);
         if (options.env) IHandler.setEnvironmentVariables(env, options.env);
         let execArgv = []; // octoProxy pkg versions
+        let nodeParameters = [];
         let {file, assign, mxoss, ats, args, rules, tags, cmd, assign2syntax, stdio} = options;
-        if (options.pkg != true) {
-            execArgv = ["--nouse-idle-notification", `--max-old-space-size=${mxoss}`];
-            if (options.gc) execArgv.push('--expose-gc');
-            if (options.compact) execArgv.push('--always-compact');
-            if (options.inspect) execArgv.push('--inspect');
-            if (typeof options.v8Flags != "undefined") {
-                let flags = options.v8Flags;
-                if (Array.isArray(flags)) {
-                    flags = flags.filter((value) => {
-                        return (typeof value != "undefined" && value != "" && value != null);
-                    });
-                    execArgv = execArgv.concat(flags);
-                } else if (typeof flags == "string") {
-                    execArgv.push(flags);
-                }
+
+        nodeParameters = ['--nouse-idle-notification', `--max-old-space-size=${mxoss}`]
+        if (options.gc) nodeParameters.push('--expose-gc');
+        if (options.compact) nodeParameters.push('--always-compact');
+        if (options.inspect) nodeParameters.push('--inspect');
+        if (typeof options.v8Flags != "undefined") {
+            let flags = options.v8Flags;
+            if (Array.isArray(flags)) {
+                flags = flags.filter((value) => {
+                    return (typeof value != "undefined" && value != "" && value != null);
+                });
+                nodeParameters = execArgv.concat(flags);
+            } else if (typeof flags == "string") {
+                nodeParameters.push(flags);
             }
+        }
+
+        if (options.pkg != true) {
+            execArgv = nodeParameters;
+        } else {
+            execArgv = [`--options ${nodeParameters.join(",")}`];
         }
         let daemonOptions = {
             env,
@@ -1071,7 +1077,7 @@ class IDelegate extends events.EventEmitter {
      * //not implement//
      */
     management() {
-        NSLog.log('debug', '** Setup management service port:%s **', cfg.managePort);
+        NSLog.log('debug', '** Setup management service port:%s **', iConfig.managePort);
         const IManager = require('./smanager/IManager.js');
         this.mgmtSrv = IManager.createManager(this);
     };
@@ -1185,7 +1191,7 @@ class IDelegate extends events.EventEmitter {
         delete this.server;
         this.server = undefined;
 
-        this.server = this.createServer(cfg.srvOptions);
+        this.server = this.createServer(iConfig.srvOptions);
     };
     /** launch */
     countdown(count) {
