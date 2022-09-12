@@ -59,8 +59,12 @@ class webServer extends events.EventEmitter {
             console.log("info", "reload", data, handle);
             return true;
         };
-        let onCustomMessage = function onCustomMessage(data, handle) {
+        let onCustomMessage = function onCustomMessage(data, handle, next) {
             console.log(`onCustomMessage:`, data);
+            let {evt} = data;
+            if (evt == 'ipcMessage') {
+                next();
+            }
         };
         let onKickUsersOut = function onKickUsersOut(data, handle) {
 

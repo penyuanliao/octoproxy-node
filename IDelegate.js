@@ -7,7 +7,7 @@ const parser        = fxNetSocket.parser;
 const pheaders      = parser.headers;
 const utilities     = fxNetSocket.utilities;
 const daemon        = fxNetSocket.daemon;
-const client        = fxNetSocket.wsClient;
+// const client        = fxNetSocket.wsClient;
 const xPath          = require('path');
 const NSLog         = fxNetSocket.logger.getInstance();
 const tcp_wrap      = process.binding("tcp_wrap");
@@ -22,7 +22,7 @@ const fs            = require('fs');
 const net           = require('net');
 const tls           = require('tls');
 const iConfig       = require('./IConfig.js').getInstance();
-const gLBSrv        = require('./lib/gameLBSrv.js');
+const GLBSrv        = require('./lib/gameLBSrv.js');
 const Dashboard     = require("./lib/Dashboard.js");
 const TelegramBot   = require("./lib/FxTelegramBot.js");
 const hostname      = require('os').hostname();
@@ -54,7 +54,7 @@ const policy = '<?xml version=\"1.0\"?>\n<cross-domain-policy>\n<allow-access-fr
 /** tracking socket close **/
 const TRACE_SOCKET_IO = true;
 /** tcp connection the maximum segment size **/
-const TCP_MTU = 2048;
+// const TCP_MTU = 2048;
 
 const TCP_OPTIONS = Object.freeze({
     host:'0.0.0.0',
@@ -109,7 +109,7 @@ class IDelegate extends events.EventEmitter {
         /** The lockdown not allows user to connect service **/
         this._lockdown       = false;
         /** casino load balance **/
-        this.gameLBSrv       = new gLBSrv(iConfig.gamSLB, this);
+        this.gameLBSrv       = new GLBSrv(iConfig.gamSLB, this);
         this.mgmtSrv         = undefined;
         /** record visitor remote address **/
         this.recordDashboard = new Dashboard(Dashboard.loadFile("./historyLog/Dashboard.json"));
@@ -131,7 +131,7 @@ class IDelegate extends events.EventEmitter {
         // 1. setup child process fork
         this.setupCluster(iConfig.forkOptions);
         // 2. create listen 80 port server
-        this.start();
+        this.start().then(() => {});
 
         this.bindingProcessEvent();
 
@@ -386,7 +386,7 @@ class IDelegate extends events.EventEmitter {
             namespace = args[0];
             let ns_len = args.length;
             for (let i = 1; i < ns_len; i++) {
-                let str = args[i].toString().replace(/(\?|\&)+/g,"");
+                let str = args[i].toString().replace(/([?&])+/g,"");
                 let keyValue = str.split("=");
                 url_args[keyValue[0].toLowerCase()] = keyValue[1];
             }
@@ -437,6 +437,7 @@ class IDelegate extends events.EventEmitter {
                 namespace = json.path;
                 this.clusterEndpoint({namespace, source, originPath, mode}, handle).then(() => {});
             });
+            NSLog.debug(`gateway_http tokencode ${tokencode} => ${url_args}`);
         } else {
             namespace = this.gameLBSrv.urlParse({
                 path: params.f5,
@@ -457,7 +458,7 @@ class IDelegate extends events.EventEmitter {
             let kickOut = false;
             let tokencode = this.gameLBSrv.getLoadBalancePath(url_args, params, (action, json) => {
                 NSLog.log('trace','--------------------------');
-                NSLog.log('info', 'action: %s:%s, token code:%s', action, (typeof url_args == "object") ? JSON.stringify(url_args) : url_args, JSON.stringify(json));
+                NSLog.info(`tokencode: ${tokencode} action:${action}:${(typeof url_args == "object") ? JSON.stringify(url_args) : url_args} => received: ${JSON.stringify(json)}`);
                 NSLog.log('trace','--------------------------');
                 let src;
                 if (kickOut) { return false; }
@@ -571,7 +572,9 @@ class IDelegate extends events.EventEmitter {
                 dir = dir.substr(0, dir.length-1);
             }
             NSLog.log("debug", "onread_rtmp_param.dir:", dir);
-            let worker = await this.asyncAssign({ dir: dir });
+            let worker = await this.asyncAssign({ dir: dir }).catch((reason) => {
+                NSLog.error('rtmp async assign failed:', reason);
+            });
             if (typeof worker === 'undefined' || !worker) {
                 this.rejectClientException(handle, "CON_MOD_NOT_FOUND");
                 mc.socket.destroy();
@@ -580,7 +583,7 @@ class IDelegate extends events.EventEmitter {
             let rtmp_data = (Buffer.isBuffer(packet[0]) ? Buffer.concat(packet) : Buffer.alloc(0));
             worker.send({evt:'c_init', data: rtmp_data, namespace: dir, originPath: dir, mode: "rtmp"}, handle, {keepOpen:false});
 
-            let timer3 = setTimeout(() => {
+            setTimeout(() => {
                 NSLog.log("debug", "onread_rtmp_param setTimeout", )
                 this.rejectClientException(handle, "CON_VERIFIED");
                 mc.socket.destroy();
@@ -655,7 +658,11 @@ class IDelegate extends events.EventEmitter {
     };
     asyncAssign(namespace) {
         return new Promise((resolve, reject) => {
-            this.assign(namespace, resolve);
+            try {
+                this.assign(namespace, resolve);
+            } catch (e) {
+                reject(e);
+            }
         });
     };
     exceptionBreaker({namespace, source, originPath, mode}, handle) {
@@ -909,7 +916,7 @@ class IDelegate extends events.EventEmitter {
 
         return true;
     };
-    bindingProcessEvent(server) {
+    bindingProcessEvent() {
         /** process state **/
         process.on('uncaughtException', function (err) {
             console.error(err.stack);
@@ -925,21 +932,39 @@ class IDelegate extends events.EventEmitter {
             NSLog.log('error',"SIGINT quit node process (Ctrl+D).");
             process.exit(0);
         });
-        process.on('message', function (data, handle) {
-            var json = data;
-            if (typeof json === 'string') {
-
-            }else if(typeof json === 'object'){
-
-                if(data.evt == "processInfo") {
-                    process.send({"evt":"processInfo", "data" : {"memoryUsage":process.memoryUsage(),"connections": 0}})
-                }else{
-                    NSLog.log('debug', 'out of hand. dismiss message');
-                }
-
+        process.on('message', (data, handle) => {
+            if (typeof data === 'string') {}
+            else if (typeof data === 'object') {
+                this.processMessage(data, handle);
             }
         });
     };
+    processMessage({evt}, handle) {
+        if (evt == "processInfo") {
+            process.send({
+                evt,
+                data : {
+                    memoryUsage: process.memoryUsage(),
+                    connections: 0
+                }
+            });
+        } else if (evt === 'c_init') {
+            const { server } = this;
+            let socket = new net.Socket({
+                handle:handle,
+                allowHalfOpen:server.allowHalfOpen
+            });
+            socket.readable = socket.writable = true;
+            socket.server = (mode === 'http' ? null : server);
+            server.emit("connection", socket);
+            socket.emit("connect");
+            socket.relatedData = Buffer.from(data.data);
+            socket.emit('data', socket.relatedData);
+            socket.resume();
+        } else {
+            NSLog.warning(`Out of hand. dismiss message: ${evt}`);
+        }
+    }
     /**
      * 取得子程序
      * @param name
@@ -1010,10 +1035,8 @@ class IDelegate extends events.EventEmitter {
         env.NODE_CDID = String(index);
         if (options.env) IHandler.setEnvironmentVariables(env, options.env);
         let execArgv = []; // octoProxy pkg versions
-        let nodeParameters = [];
         let {file, assign, mxoss, ats, args, rules, tags, cmd, assign2syntax, stdio} = options;
-
-        nodeParameters = ['--nouse-idle-notification', `--max-old-space-size=${mxoss}`]
+        let nodeParameters = ['--nouse-idle-notification', `--max-old-space-size=${mxoss}`];
         if (options.gc) nodeParameters.push('--expose-gc');
         if (options.compact) nodeParameters.push('--always-compact');
         if (options.inspect) nodeParameters.push('--inspect');
@@ -1185,13 +1208,22 @@ class IDelegate extends events.EventEmitter {
         });
         return tlsServer;
     };
-    reboot() {
-        this.server.close();
-        this.server.onconnection = noop;
-        delete this.server;
-        this.server = undefined;
-
-        this.server = this.createServer(iConfig.srvOptions);
+    /**
+     * 重啟服務
+     * @param {boolean}tls 重啟tls server
+     */
+    reboot(tls) {
+        let { srvOptions, tlsOptions } = iConfig;
+        if (tls) {
+            this.tlsServer.close();
+            if (tlsOptions && tlsOptions.enabled) {
+                this.tlsServer = this.createTLSServer(tlsOptions);
+            }
+        } else {
+            this.server.close();
+            this.server.onconnection = noop;
+            this.server = this.createServer(srvOptions);
+        }
     };
     /** launch */
     countdown(count) {
