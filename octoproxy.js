@@ -1,22 +1,27 @@
 /**
  * Created by Benson.Liao on 2016/9/13.
  */
-
-var index = process.argv.findIndex(function (element) {
-    return (element == "-v" || element == "--version");
-});
-
-if (index != -1) {
-    console.log("v" + require("./package.json").version);
-    process.exit(0);
+const IConfig = require('./IConfig.js');
+let { compatibilityMode } = IConfig.StartAppArguments();
+if (!compatibilityMode) compatibilityMode = 'octoKit2';
+if (compatibilityMode === 'octoKit1') {
+    const Config = require("./config.js");
+    const AppDelegate = require('./AppDelegate.js');
+    const main = new AppDelegate();
+    if (Config["telegram"].enabled) {
+        main.createTelegramBot(Config["telegram"].credentials, Config["telegram"].proxyMode);
+    }
+} else {
+    const IDelegate = require('./IDelegate.js');
+    const main = new IDelegate();
+    const Config = IConfig.getInstance();
+    const { enabled, credentials, proxyMode } = Config.telegram;
+    console.log(`Telegram enabled: ${enabled}`);
+    if (enabled) {
+        main.createTelegramBot(credentials, proxyMode);
+    }
 }
-const Config = require("./config.js");
-// const AppDelegate = require('./AppDelegate.js');
-// const main = new AppDelegate();
-const AppDelegate = require('./IDelegate.js');
-const main = new AppDelegate();
-if (Config["telegram"].enabled) {
-    this.createTelegramBot(Config["telegram"].credentials, Config["telegram"].proxyMode);
-}
+
+
 
 
