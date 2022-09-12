@@ -592,12 +592,27 @@ IHandler.prototype.startWarp = function ({pid, params}, client, callback) {
         if (callback) callback({result: true});
     }
 };
+/**
+ * 設定服務的log.level
+ * @param pid
+ * @param params
+ * @param client
+ * @param callback
+ * @return {boolean}
+ */
 IHandler.prototype.setLogLevel = function ({pid, params}, client, callback) {
     const _pid = parseInt(pid);
     NSLog.info(`SetLogLevel: pid:${pid} params.lv: ${params.lv}`);
     if (!IHandler._verifyArgs(_pid, "number")) {
         if (callback) callback({result: false});
         return false;
+    }
+    // main server
+    else if (pid === process.pid) {
+        NSLog.setLevel = params.lv;
+        console.log(`SetLogLevel=> `, NSLog.level);
+        if (callback) callback({result: true});
+        return true;
     }
     const cluster = this.delegate.findCluster(pid);
     if (!cluster) {

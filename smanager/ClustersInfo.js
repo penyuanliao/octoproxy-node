@@ -1,11 +1,9 @@
 "use strict";
-const net           = require("net");
-const util          = require("util");
 const {spawn}       = require("child_process");
 const EventEmitter  = require("events");
 const GAME_LB_NAME_ASSIGN = "casino_game_rule";
-const GAME_LB_NAME = "loadBalance";
-
+const GAME_LB_NAME  = "loadBalance";
+const NSLog         = require('fxNetSocket').logger.getInstance();
 /**
  * 服務資訊
  * @constructor
@@ -79,7 +77,7 @@ class ClustersInfo extends EventEmitter {
             "lock": this.delegate.getLockState(),
             "memoryUsage": process.memoryUsage(),
             "complete": 1,
-            "lv": "debug",
+            "lv": NSLog.level,
             "uptime": this.uptime,
             "cpuUsage": this.delegate.getCPU(process.pid),
             "tags": [...this.tags]
@@ -148,7 +146,8 @@ class ClustersInfo extends EventEmitter {
             ats, _lookoutEnabled, _args,
             nodeConf, _modulePath,
             tags, monitor, mxoss,
-            optConf, cmd, rules
+            optConf, cmd, rules,
+            assign2syntax
         } = cluster;
         const { connections, memoryUsage } = nodeInfo;
         obj.mxoss = mxoss;
@@ -162,6 +161,7 @@ class ClustersInfo extends EventEmitter {
         obj.lookout = _lookoutEnabled;
         obj.args = _args.slice(1);
         obj.env  = optConf.env;
+        obj.assign2syntax  = assign2syntax;
         obj.cpuUsage  = this.delegate.getCPU(pid);
         let hashtag;
         if (!Array.isArray(tags)) {
