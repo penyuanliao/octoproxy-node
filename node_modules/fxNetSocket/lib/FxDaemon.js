@@ -7,6 +7,7 @@ const util   = require('util');
 const path   = require('path');
 const fs     = require('fs');
 const cp     = require('child_process');
+const { spawn, fork, exec } = require('child_process');
 const events = require('events');
 const NSLog  = require('./FxLogger.js').getInstance();
 /**
@@ -190,6 +191,16 @@ class FxDaemon extends events.EventEmitter {
         this.rules = null;
 
     }
+
+    /**
+     * child process
+     * @param {*} value
+     */
+    set child(value) {
+        this._cpf = value;
+        this.pid = value.pid;
+        this.uptime = Date.now();
+    }
     set pid(value) {
         this._cpfpid = value;
     }
@@ -210,24 +221,19 @@ class FxDaemon extends events.EventEmitter {
 
         if (this._cpf) return false;
 
-        let cp_retry = retry.limit;
-        let start = new Date().getTime();
-
         this._killed = false;
 
         if (this.isEmpty()) return false;
-
+        let child;
         if (!pkgFile && !cmd) {
             //js
-            this._cpf = cp.fork(_modulePath, _args, _options);
+            child = cp.fork(_modulePath, _args, _options);
         } else if (cmd != false) {
-            this._cpf = this.spawnCommand();
+            child = this.spawnCommand();
         } else {
-            this._cpf = this.executeCommand();
+            child = this.executeCommand();
         }
-        let child = this._cpf;
-        this.pid = this._cpf.pid;
-        this.uptime = Date.now();
+        this.child = child;
         child.on('exit', (code, signal) => {
             NSLog.log("info",'[%s | %s] process will exit %s (%s)', _modulePath, _args[0], signal, code);
             this._killed = true;
@@ -238,7 +244,7 @@ class FxDaemon extends events.EventEmitter {
                 this.emitter.emit('unexpected', {name: this.name, signal: signal, code: code});
             }
             if (code === 2) {
-                NSLog.log("warning", ` + Exit code SIGINT`);
+                NSLog.log("warning", ` + ${this.name} Exit code SIGINT`);
                 this.restart();
                 return true;
             }
@@ -246,7 +252,12 @@ class FxDaemon extends events.EventEmitter {
         child.on('message', (data, handle) => this.handleMessage(data, handle));
         //啟動心跳檢查機制
         if(this._heartbeatEnabled) this.startHeartbeat();
-    }
+    };
+    /**
+     * custom IPC message event
+     * @param {Object} data
+     * @param {*} handle socket.handle
+     */
     handleMessage(data, handle) {
         let message = (typeof data === "string") ? JSON.parse(data) : data;
 
@@ -293,14 +304,15 @@ class FxDaemon extends events.EventEmitter {
                 if (typeof message.data == "number") value = message.data;
                 this.setMakeSureComplete(value);
             }
-        } else {
+        }
+        else {
             NSLog.error(`The system wa unable to find evt: ${evt ? evt : ''} or action: ${action ? action : ''} message event.`)
         }
 
     };
     isEmpty() {
         return (typeof this._modulePath === 'undefined' || this._modulePath === null || this._modulePath === "");
-    }
+    };
     spawnCommand() {
         const { _modulePath, _args, cmd } = this;
         let { stdoutFile, stderrFile, stdio, execArgv } = (this._options || {});
@@ -337,6 +349,7 @@ class FxDaemon extends events.EventEmitter {
         return child;
     };
     executeCommand() {
+        //pkg
         let DEBUG = Boolean(process.env.NODE_DEBUG);
         const { _modulePath, _args, cmd } = this;
         let { stdoutFile, stderrFile, stdio, execArgv } = (this._options || {});
