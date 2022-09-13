@@ -735,7 +735,9 @@ class IDelegate extends events.EventEmitter {
         } else {
             appid = ((getSignature instanceof Function) && getSignature(headers["appid"]));
         }
-        if (swp == "admin" || swp == "log" || corsMode || appid || headers.general[1].split("/")[1] === 'mgr') {
+        let web = this.isManagerWebRoute(headers.general[1]);
+        if (web) mode = 'web'
+        if (swp == "admin" || swp == "log" || corsMode || appid || web) {
             const [cluster] = (this.clusters["inind"] || this.clusters["administrator"] || []);
             const name = `${(cluster ? cluster.name : null)}`;
             const exception = (corsMode ? "HTTP_CROSS_POLICY" : "CON_VERIFIED");
@@ -757,7 +759,11 @@ class IDelegate extends events.EventEmitter {
         }
         return false;
     };
-
+    isManagerWebRoute(uri) {
+        const { webManagePrefix } = iConfig;
+        let args = xPath.parse(uri);
+        return args.dir.split('/').indexOf(webManagePrefix) != -1;
+    }
     /**
      * 回傳響應事件
      * @param namespace

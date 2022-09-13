@@ -19,7 +19,7 @@ class RestManager extends EventEmitter {
             '/user/login',
             '/user/2fa'
         ]);
-        this.accept = new Set(['appsettings', 'configure']);
+        this.accept = new Set(['appsettings', 'configuration']);
         this.server = this.createAPIServer();
     }
     createAPIServer() {
@@ -379,6 +379,7 @@ class RestManager extends EventEmitter {
 
             let src = await this.delegate.manager.send({
                 method: "readFileContents",
+                folder,
                 filename
             });
             res.send(src);
@@ -406,6 +407,7 @@ class RestManager extends EventEmitter {
             } = req.body || {};
             let src = await this.delegate.manager.send({
                 method: "saveFileContents",
+                folder,
                 filename,
                 data
             });
@@ -510,7 +512,7 @@ RestManager.prototype.start = function (port) {
 };
 
 RestManager.prototype.getFilename = function (filename) {
-    let match = filename.match(/[\w]+.json/g);
+    let match = filename.match(/[\w,\s-]+.json/g);
     if (!match) {
         return false;
     } else {

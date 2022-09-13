@@ -25,6 +25,8 @@ class IConfig {
 
         this.level = 'debug';
 
+        this.webManagePrefix = 'mgr'
+
         this.specificBase = new Set([
             'ws',
             'web'
