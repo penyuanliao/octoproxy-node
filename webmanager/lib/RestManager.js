@@ -51,13 +51,18 @@ class RestManager extends EventEmitter {
                 //未通過驗證
                 next(new errors['UnauthorizedError']('Access is denied due to invalid credentials.'));
             } else {
-                let { data } = auth;
+                let { data, result } = auth;
+                console.log('auth => ');
                 console.log(auth);
                 if (data) {
                     const {twoFactor, otpauth} = data;
                     console.log(`${req.url} twoFactor:${twoFactor}, otpauth:${otpauth}`);
                 }
-                next();
+                if (result == false) {
+                    next(new errors['UnauthorizedError']('Access is denied due to invalid credentials.'));
+                } else {
+                    next();
+                }
             }
         });
         server.post('/echo/:name/:pass', function (req, res, next) {
@@ -476,55 +481,52 @@ class RestManager extends EventEmitter {
     failMassage({code, message}) {
         return {result: false, code, message };
     }
-}
+    /**
+     * 驗證使用者token
+     * @param {Object} authorization
+     * @param {('Bearer'|'Basic')}authorization.scheme
+     * @param authorization.credentials
+     */
+    async verifyAuth(authorization) {
+        // console.log(`authorization.credentials: ${authorization.credentials}`);
 
-/**
- * 驗證使用者token
- * @param {Object} authorization
- * @param {('Bearer'|'Basic')}authorization.scheme
- * @param authorization.credentials
- */
-RestManager.prototype.verifyAuth = async function (authorization) {
-    // console.log(`authorization.credentials: ${authorization.credentials}`);
+        const { credentials } = authorization;
 
-    const { credentials } = authorization;
+        // if (!credentials) return 2;
 
-    // if (!credentials) return 2;
+        let auth = await this.delegate.auth.jwtVerify(credentials);
 
-    let auth = await this.delegate.auth.jwtVerify(credentials);
+        // if (!auth.result) return 1;
 
-    // if (!auth.result) return 1;
-
-    return auth;
-}
-RestManager.prototype.setup = function () {
-    console.log('create');
-};
-RestManager.prototype.getServer = function () {
-    return this.server.server;
-};
-RestManager.prototype.start = function (port) {
-    const server = this.server
-
-    server.listen(port, function () {
-        console.log('RestManager %s listening at %s', server.name, server.url);
-    });
-};
-
-RestManager.prototype.getFilename = function (filename) {
-    let match = filename.match(/[\w,\s-]+.json/g);
-    if (!match) {
-        return false;
-    } else {
-        return match[0];
+        return auth;
     }
-};
+    setup() {
+        console.log('create');
+    };
+    getServer() {
+        return this.server.server;
+    };
+    start() {
+        const server = this.server
 
-RestManager.prototype.clean = function () {
+        server.listen(port, function () {
+            console.log('RestManager %s listening at %s', server.name, server.url);
+        });
+    }
+    getFilename(filename) {
+        let match = filename.match(/[\w,\s-]+.json/g);
+        if (!match) {
+            return false;
+        } else {
+            return match[0];
+        }
+    };
+    clean() {
 
-};
-RestManager.prototype.release = function () {
+    };
+    release() {
 
-};
+    };
+}
 
 module.exports = exports = RestManager;
