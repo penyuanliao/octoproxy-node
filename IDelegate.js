@@ -1250,104 +1250,103 @@ class IDelegate extends events.EventEmitter {
     }
     release() {
     }
-}
-/**
- * @param {ChildProperties} params;
- * @return {Object}
- */
-function createChildProperties(params) {
-    const {
-        mxoss,
-        file,
-        assign,
-        args,
-        lookout,
-        ats,
-        recycleExpired,
-        pkg,
-        cmd,
-        heartbeat,
-        env,
-        compact,
-        inspect,
-        v8Flags,
-        rules,
-        tags,
-        stdoutFile,
-        stderrFile,
-        version,
-        assign2syntax,
-        stdio
-    } = params;
-    /** @typedef {ChildProperties} */
-    let options = {
-        file,
-        pkg: false,
-        ats: false,
-        rules: [],
-        stdoutFile,
-        stderrFile,
-        assign2syntax
+    /**
+     * @param {ChildProperties} params;
+     * @return {Object}
+     */
+    static createChildProperties(params) {
+        const {
+            mxoss,
+            file,
+            assign,
+            args,
+            lookout,
+            ats,
+            recycleExpired,
+            pkg,
+            cmd,
+            heartbeat,
+            env,
+            compact,
+            inspect,
+            v8Flags,
+            rules,
+            tags,
+            stdoutFile,
+            stderrFile,
+            version,
+            assign2syntax,
+            stdio
+        } = params;
+        /** @typedef {ChildProperties} */
+        let options = {
+            file,
+            pkg: false,
+            ats: false,
+            rules: [],
+            stdoutFile,
+            stderrFile,
+            assign2syntax
+        };
+        if (assign) {
+            options.assign = utilities.trimAny(assign);
+        } else {
+            options.assign = 'empty';
+        }
+        options.mxoss     = mxoss || 2048;
+        if (typeof lookout == "boolean") {
+            options.lookout = lookout;
+        } else {
+            options.lookout = true;
+        }
+        if (typeof heartbeat == "boolean") {
+            options.heartbeat = heartbeat;
+        }
+        else {
+            options.heartbeat = true;
+        }
+
+        if (typeof pkg == "boolean") options.pkg = pkg;
+        if (!options.pkg && file.indexOf(".js") == -1 && file.indexOf(".mjs") == -1 && cmd == '') {
+            options.pkg = true;
+        }
+
+        if (typeof args == "string") {
+            options.args = utilities.trimAny(args).split(",");
+        } else if (Array.isArray(args) && args.length > 0) {
+            options.args = args.map((value) => utilities.trimAny(value.toString()));
+        } else {
+            options.args = [];
+        }
+        if (typeof recycleExpired != "undefined") options.recycleExpired = recycleExpired;
+        if (typeof ats == "boolean") options.ats = ats;
+        if (typeof cmd != "undefined") {
+            options.cmd = cmd;
+        } else {
+            options.cmd = false;
+        }
+        if (Array.isArray(env)) options.env = env;
+        if (typeof compact == "boolean") options.compact = compact;
+        if (typeof inspect == "boolean") options.inspect = inspect;
+        if (typeof v8Flags != "undefined") options.v8Flags = v8Flags;
+        //自訂
+        if (Array.isArray(rules)) {
+            options.rules = rules
+        } else if (typeof rules == "string") {
+            options.rules = utilities.trimAny(rules).split(",");
+        }
+        if (Array.isArray(options.rules)) {
+            options.version = 2;
+            options.assign2syntax = false;
+        }
+
+        options.tags = (typeof tags == "string") ? tags.split(",") : tags;
+
+        if (typeof version != "number") options.version = 1;
+        if (typeof options.assign2syntax != "boolean") options.assign2syntax = true;
+        if (Array.isArray(stdio)) options.stdio = stdio;
+        return options;
     };
-    if (assign) {
-        options.assign = utilities.trimAny(assign);
-    } else {
-        options.assign = 'empty';
-    }
-    options.mxoss     = mxoss || 2048;
-    if (typeof lookout == "boolean") {
-        options.lookout = lookout;
-    } else {
-        options.lookout = true;
-    }
-    if (typeof heartbeat == "boolean") {
-        options.heartbeat = heartbeat;
-    }
-    else {
-        options.heartbeat = true;
-    }
-
-    if (typeof pkg == "boolean") options.pkg = pkg;
-    if (!options.pkg && file.indexOf(".js") == -1 && file.indexOf(".mjs") == -1 && cmd == '') {
-        options.pkg = true;
-    }
-
-    if (typeof args == "string") {
-        options.args = utilities.trimAny(args).split(",");
-    } else if (Array.isArray(args) && args.length > 0) {
-        options.args = args.map((value) => utilities.trimAny(value.toString()));
-    } else {
-        options.args = [];
-    }
-    if (typeof recycleExpired != "undefined") options.recycleExpired = recycleExpired;
-    if (typeof ats == "boolean") options.ats = ats;
-    if (typeof cmd != "undefined") {
-        options.cmd = cmd;
-    } else {
-        options.cmd = false;
-    }
-    if (Array.isArray(env)) options.env = env;
-    if (typeof compact == "boolean") options.compact = compact;
-    if (typeof inspect == "boolean") options.inspect = inspect;
-    if (typeof v8Flags != "undefined") options.v8Flags = v8Flags;
-    //自訂
-    if (Array.isArray(rules)) {
-        options.rules = rules
-    } else if (typeof rules == "string") {
-        options.rules = utilities.trimAny(rules).split(",");
-    }
-    if (Array.isArray(options.rules)) {
-        options.version = 2;
-        options.assign2syntax = false;
-    }
-
-    options.tags = (typeof tags == "string") ? tags.split(",") : tags;
-
-    if (typeof version != "number") options.version = 1;
-    if (typeof options.assign2syntax != "boolean") options.assign2syntax = true;
-    if (Array.isArray(stdio)) options.stdio = stdio;
-    return options;
 }
-IDelegate.createChildProperties = createChildProperties;
 
 module.exports = exports = IDelegate;
