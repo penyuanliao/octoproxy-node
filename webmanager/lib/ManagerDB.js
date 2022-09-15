@@ -123,7 +123,8 @@ class Syntax {
             username varchar(50)    NOT NULL UNIQUE,
             password TEXT           NOT NULL,
             token    TEXT           NULL,
-            otp      TEXT           DEFAULT ''
+            otp      TEXT           DEFAULT '',
+            permission INTEGER      DEFAULT 0 
         )`;
     };
     insertAccount({username, password}) {
