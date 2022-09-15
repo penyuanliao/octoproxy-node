@@ -127,8 +127,8 @@ class Syntax {
             permission INTEGER      DEFAULT 0 
         )`;
     };
-    insertAccount({username, password}) {
-        return `INSERT INTO accounts VALUES (NULL, '${username}', '${password}', NULL, '', 0 )`;
+    insertAccount({username, password, permission}) {
+        return `INSERT INTO accounts VALUES (NULL, '${username}', '${password}', NULL, '', ${(permission ? permission : 0)} )`;
     };
     updateAccount({password, username}) {
         return `UPDATE accounts SET password = '${password}' WHERE username = '${username}'`;
