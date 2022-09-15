@@ -128,16 +128,19 @@ class Syntax {
         )`;
     };
     insertAccount({username, password}) {
-        return `INSERT INTO accounts VALUES (NULL, '${username}', '${password}', NULL, '' )`;
+        return `INSERT INTO accounts VALUES (NULL, '${username}', '${password}', NULL, '', 0 )`;
     };
     updateAccount({password, username}) {
-        return `UPDATE accounts SET password='${password}' WHERE username='${username}'`;
+        return `UPDATE accounts SET password = '${password}' WHERE username = '${username}'`;
     };
+    updatePermission({password, username, value}) {
+        return `UPDATE accounts SET permission = '${value}' WHERE username = '${username}' AND password = '${password}' `;
+    }
     updateToken({username, token}) {
-        return `UPDATE accounts SET token='${token}' WHERE username='${username}'`;
+        return `UPDATE accounts SET token = '${token}' WHERE username = '${username}'`;
     };
     updateSecret({username, otp}) {
-        return `UPDATE accounts SET otp='${otp}' WHERE username='${username}'`;
+        return `UPDATE accounts SET otp = '${otp}' WHERE username = '${username}'`;
     };
     secret({username}) {
         return `SELECT username, otp FROM accounts WHERE username = '${username}'`;
