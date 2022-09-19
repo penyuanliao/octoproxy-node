@@ -44,7 +44,7 @@ class ProxyServer extends events.EventEmitter {
         });
 
         return server;
-    }
+    };
     createWebsocketServer() {
         const {web} = this.service;
         const wsServer = new WebSocket.Server({ noServer: true });
@@ -67,7 +67,7 @@ class ProxyServer extends events.EventEmitter {
         });
 
         return wsServer;
-    }
+    };
     onWebSocketConnection(ws) {
         const duplex = new WebSocket.createWebSocketStream(ws, { encoding: "utf8"});
         this.ws_gateway({
@@ -78,7 +78,7 @@ class ProxyServer extends events.EventEmitter {
             namespace: ws.namespace,
             query: ws.query
         });
-    }
+    };
     /**
      * 分析路徑
      * @param url
@@ -100,7 +100,7 @@ class ProxyServer extends events.EventEmitter {
             namespace,
             query
         }
-    }
+    };
 
     /**
      * 連線倒轉

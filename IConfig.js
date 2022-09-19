@@ -1,5 +1,5 @@
 "use strict";
-const { Command } = require('commander');
+const { Command }   = require('commander');
 const { getConfig } = require('fxNetSocket');
 var instance = null;
 var cmdOpts = null;
@@ -180,7 +180,7 @@ class IConfig {
             return 'None';
         }
 
-    }
+    };
     /**
      * Application parameters
      * @return {*}
@@ -204,13 +204,22 @@ class IConfig {
         cmd.option('--wpc-manage-port <number>', 'manager server port.');
         cmd.parse(process.argv);
         return cmdOpts = cmd.opts();
-    }
+    };
     static getInstance() {
         if (instance === null) {
             instance = new IConfig();
             instance.setupAppArguments(IConfig.StartAppArguments());
         }
         return instance;
+    };
+    static ManagerAccounts() {
+        let accounts = new Map([
+
+        ]);
+
+        return {
+            accounts: [ ...accounts.values() ]
+        };
     }
 }
 

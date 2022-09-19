@@ -17,7 +17,6 @@ const OTP           = require("./OTP.js");
 class APIServer extends EventEmitter {
     constructor() {
         super();
-        // this.createHTTPServer({listen:false, port: 8000});
         this.isWorker = (process.send instanceof Function);
         this.LOG_LEVEL = NSLog.level;
         this.setup();
@@ -31,6 +30,7 @@ class APIServer extends EventEmitter {
         this.otp         = new OTP();
         this.wsServer    = this.createTCPServer({listen, port: 8002});
         this.restManager = this.createRestServer({listen, port:8001});
+        this.httpServer  = this.createHTTPServer({listen:false, port: 8003});
         this.manager     = new RemoteClient(); //連線到服務窗口
         this.logServer   = this.createLiveLogServer(10080);
         if (this.isWorker) this.setupIPCBridge();
@@ -72,6 +72,7 @@ class APIServer extends EventEmitter {
             NSLog.log("info",'Web Service start listening port %s.', port);
         });
 
+        return web;
     };
     /**
      * HTTP WEB API

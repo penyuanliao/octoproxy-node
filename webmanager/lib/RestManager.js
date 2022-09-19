@@ -17,8 +17,15 @@ class RestManager extends EventEmitter {
         this.delegate = delegate;
         this.visitorAPI = new Set([
             '/user/login',
+            '/user/logout',
             '/user/2fa'
         ]);
+        this.permissions = new Map([
+            [0, new Set()],
+            [5, new Set([ '/message/apply' ])],
+            [777, new Set(['root'])]
+        ]);
+
         this.accept = new Set(['appsettings', 'configuration']);
         this.server = this.createAPIServer();
     }
@@ -42,6 +49,7 @@ class RestManager extends EventEmitter {
         server.use(async (req, res, next) => {
             res.setHeader('Access-Control-Allow-Origin', "*")
             if (this.visitorAPI.has(req.url)) return next();
+
             let auth = await this.verifyAuth(req.authorization);
             if (auth == 1) {
                 //未授權
@@ -52,15 +60,25 @@ class RestManager extends EventEmitter {
                 next(new errors['UnauthorizedError']('Access is denied due to invalid credentials.'));
             } else {
                 let { data, result } = auth;
-                console.log('auth => ');
+                console.log(`auth => ${req.url}`);
                 console.log(auth);
-                if (data) {
-                    const {twoFactor, otpauth} = data;
-                    console.log(`${req.url} twoFactor:${twoFactor}, otpauth:${otpauth}`);
-                }
+
+
                 if (result == false) {
                     next(new errors['UnauthorizedError']('Access is denied due to invalid credentials.'));
                 } else {
+                    if (data) {
+                        const {twoFactor, otpauth, permission} = data;
+                        console.log(`${req.url} twoFactor:${twoFactor}, otpauth:${otpauth}`);
+                        let rule = this.permissions.get(permission);
+                        if (rule.has('root')) return next();
+                        if (!rule.has(req.url)) {
+                            console.error(`rule ${req.url} permission denied.`);
+                            next(new errors['UnauthorizedError'](`The caller does not permission.`));
+                            return
+                        }
+                    }
+
                     next();
                 }
             }
@@ -91,6 +109,13 @@ class RestManager extends EventEmitter {
             }
             return next();
         });
+        server.post('/user/logout', async (req, res, next) => {
+            console.log(`/user/logout`);
+            let { username } = req.body;
+            let logout = await this.delegate.auth.logout({ username });
+            res.send({ result: logout });
+            return next();
+        })
         server.post('/user/password', (req, res, next) => this.password(req, res, next));
         //二次驗證
         server.post('/user/2fa', async (req, res, next) => {
@@ -496,6 +521,11 @@ class RestManager extends EventEmitter {
 
         let auth = await this.delegate.auth.jwtVerify(credentials);
 
+        if (auth.result) {
+            let { username } = auth.data;
+            let { permission } = await this.delegate.auth.getPermission(username);
+            auth.data.permission = permission;
+        }
         // if (!auth.result) return 1;
 
         return auth;

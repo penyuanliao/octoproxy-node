@@ -16,15 +16,26 @@ class Auth extends EventEmitter {
     constructor() {
         super();
         this.db = new ManagerDB(process.cwd());
-        this.test();
+        this.init();
     }
-    async test() {
-        const username = "newflash@mail.chungyo.net";
-        const password = "nanhvw8Y";
-        const permission = 0;
-        let user = await this.db.getUser(username);
-        if (!user) {
-            await this.register({ username, password, permission });
+    init() {
+        try {
+            const IConfig = require('../../IConfig.js');
+            let data = IConfig.ManagerAccounts();
+            let { accounts } = data;
+            if (accounts) this.createUsers(accounts);
+            return data || {};
+        } catch (e) {
+            return {};
+        }
+    };
+    async createUsers(accounts) {
+        for (let i = 0; i < accounts.length; i++) {
+            let { username, password, permission } = accounts[i];
+            let user = await this.db.getUser(username);
+            if (!user) {
+                await this.register({ username, password, permission });
+            }
         }
     };
     async register({username, password, permission}) {
@@ -178,6 +189,9 @@ class Auth extends EventEmitter {
     };
     async getSecret(username) {
         return await this.db.getSecret(username);
+    };
+    async getPermission(username) {
+        return await this.db.getPermission(username);
     };
 }
 module.exports = exports = Auth;

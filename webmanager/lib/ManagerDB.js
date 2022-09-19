@@ -66,7 +66,9 @@ ManagerDB.prototype.updateSecret = async function (username, otp) {
 ManagerDB.prototype.getSecret = async function (username) {
     return await this.asyncGet(this.syntax.secret({username}));
 };
-
+ManagerDB.prototype.getPermission = async function (username) {
+    return await this.asyncGet(this.syntax.permission({username}));
+};
 ManagerDB.prototype.asyncRun = function (sql) {
     return new Promise((resolve, reject) => {
         this.db.run(sql, (err, res) => {
@@ -144,6 +146,9 @@ class Syntax {
     };
     secret({username}) {
         return `SELECT username, otp FROM accounts WHERE username = '${username}'`;
+    };
+    permission({username}) {
+        return `SELECT username, permission FROM accounts WHERE username = '${username}'`;
     };
     selectAccounts(username) {
         if (username) {
