@@ -759,6 +759,11 @@ class IDelegate extends events.EventEmitter {
         }
         return false;
     };
+    /**
+     * 管理端網頁資料
+     * @param uri
+     * @return {boolean}
+     */
     isManagerWebRoute(uri) {
         const { webManagePrefix } = iConfig;
         let args = xPath.parse(uri);
