@@ -730,13 +730,15 @@ class IDelegate extends events.EventEmitter {
         const swp = headers["sec-websocket-protocol"];
         const {getSignature} = this.mgmtSrv;
 
-        if (mode == 'http' && headers['sec-fetch-mode'] == 'cors' && method === 'OPTIONS') {
+        if (mode == 'http' && method === 'OPTIONS' &&
+            (headers['sec-fetch-mode'] == iConfig.crossPolicy.secFetchMode ||
+                iConfig.crossPolicy.requestMethod.has(headers['access-control-request-method']))) {
             corsMode = (headers["access-control-request-headers"].indexOf('appid') != -1);
         } else {
             appid = ((getSignature instanceof Function) && getSignature(headers["appid"]));
         }
         let web = this.isManagerWebRoute(headers.general[1]);
-        if (web) mode = 'web'
+        if (web) mode = 'web';
         if (swp == "admin" || swp == "log" || corsMode || appid || web) {
             const [cluster] = (this.clusters["inind"] || this.clusters["administrator"] || []);
             const name = `${(cluster ? cluster.name : null)}`;
