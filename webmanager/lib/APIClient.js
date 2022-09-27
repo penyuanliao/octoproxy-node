@@ -16,12 +16,19 @@ class APIClient extends EventEmitter {
         this.manager  = delegate.manager;
         this.delegate = delegate;
         this.cmode    = 0;
-        this.signin   = true;
+        this.signin   = false;
+        this.token    = null;
         this.info     = null;
         this.udp      = null; //視訊專用
         this.viewer   = new Set();
-
         this.logSkip  = new Set(['getServiceInfo', 'getSysInfo']);
+    }
+    get authEnabled() {
+        if (this.delegate.auth) {
+            return this.delegate.auth.enabled;
+        } else {
+            return false;
+        }
     }
     /**
      * 開始連線
@@ -60,21 +67,29 @@ class APIClient extends EventEmitter {
     ready() {
         let { ws } = this;
         if (ws) {
-            ws.write({event: 'ready', version: require('../package.json').version});
+            ws.write({event: 'ready', version: require('../package.json').version, isAuthEnabled: this.authEnabled});
         }
     };
     handle(data) {
         if (typeof data == "string") data = JSON.parse(data);
+        const { authEnabled, signin } = this;
         const {action} = data;
-        if (!this.signin && action === "login") {
+        if (authEnabled && !signin && action === "login") {
             this[action](data);
-        } else if (this.signin && this[action] instanceof Function) {
+        } else if ((authEnabled ? signin : true) && this[action] instanceof Function) {
             if (!this.logSkip.has(action)) NSLog.info(`[APIClient] action: ${action}`);
             this[action](data);
         } else if (this.handle_v1(data)) {
 
         } else {
-            NSLog.warning('[APIClient] Not Found %s', action, data);
+            if (authEnabled && !signin) {
+                NSLog.warning(`[APIClient] authentication required.`);
+                this.authenticationRequired(data);
+            } else {
+                NSLog.warning('[APIClient] Not Found %s', action, data);
+            }
+
+
         }
     };
     handle_v1(data) {
@@ -95,15 +110,28 @@ class APIClient extends EventEmitter {
             return false;
         }
     };
-    async login(json) {
-        const auth = this.delegate.auth;
-        let {result, data} = await auth.jwtVerify(json.token);
+    authenticationRequired({tokenId, action}) {
         let respond = {
-            tokenId: json.tokenId,
-            event: "login",
-            result
+            tokenId,
+            event: action,
+            result: false,
+            error: 'authenticationRequired',
+            message: 'Authentication required. your need to sign in to your Account.'
         };
+        this.write(respond);
+    }
+    async login({tokenId, token}) {
+        const auth = this.delegate.auth;
+        let respond = {
+            tokenId: tokenId,
+            event: "login",
+            result: false
+        };
+        if (!token || token == '') return this.write(respond);
+        let {result, data} = await auth.jwtVerify(token);
+        respond.result = result;
         this.signin = result;
+        this.token = token;
         this.write(respond);
     };
     logout(json) {
@@ -461,19 +489,21 @@ class APIClient extends EventEmitter {
         };
         this.write(respond);
     };
-    async setIPFilter({tokenId, ip, state, endTime, count, log}) {
+    async setIPFilter(json) {
+        let data = json.data || json;
+        let {ip, state, endTime, count, log} = data;
         const manager = this.manager;
         let params = {
             method: "setIPFilter",
-            ip: ip,
-            state: state,
-            endTime: endTime,
-            count: count,
-            log: log
+            ip,
+            state,
+            endTime,
+            count,
+            log
         };
         const {result} = await manager.send(params);
         let respond = {
-            tokenId: tokenId,
+            tokenId: json.tokenId,
             event: "setIPFilter",
             result
         };

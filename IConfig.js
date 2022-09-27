@@ -32,7 +32,11 @@ class IConfig {
             'web'
         ]);
         this.crossPolicy = Object.freeze({
-            'Access-Control-Allow-Origin': []
+            'Access-Control-Allow-Origin': [],
+            'requestMethod': new Set([
+                "POST"
+            ]),
+            'secFetchMode': 'cors'
         });
 
         this.balance = 'leastconn'; //roundrobin
@@ -216,10 +220,13 @@ class IConfig {
         let accounts = new Map([
 
         ]);
-
         return {
-            accounts: [ ...accounts.values() ]
-        };
+            authorization: {
+                enabled: false,
+                secret: "",
+                accounts: [ ...accounts.values() ]
+            }
+        }
     }
 }
 

@@ -15,18 +15,26 @@ const NSLog         = require("fxNetSocket").logger.getInstance();
 class Auth extends EventEmitter {
     constructor() {
         super();
+        this.enabled = false;
         this.db = new ManagerDB(process.cwd());
         this.init();
     }
+
+    /**
+     * 初始化
+     * @return {Auth}
+     */
     init() {
         try {
             const IConfig = require('../../IConfig.js');
-            let data = IConfig.ManagerAccounts();
-            let { accounts } = data;
+            let { authorization } = IConfig.ManagerAccounts();
+            let { accounts, enabled, secret } = authorization;
             if (accounts) this.createUsers(accounts);
-            return data || {};
+            this.enabled = enabled;
+            this.secret = enabled;
+            return this;
         } catch (e) {
-            return {};
+            return this;
         }
     };
     async createUsers(accounts) {
@@ -163,7 +171,7 @@ class Auth extends EventEmitter {
      */
     jwtVerify(token) {
         return new Promise((resolve, reject) => {
-            jwt.verify(token, 'sidonia', (err, decoded) => {
+            jwt.verify(token, this.secret, (err, decoded) => {
 
                 if (err) {
                     // console.log(err.message);

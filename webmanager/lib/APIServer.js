@@ -9,7 +9,7 @@ const RestManager   = require('./RestManager.js');
 const LogServer     = require('./LogServer.js');
 const Auth          = require("./Auth.js");
 const OTP           = require("./OTP.js");
-
+const APIClient     = require("./APIClient.js");
 /**
  * 客端Server服務
  * @constructor
@@ -64,14 +64,18 @@ class APIServer extends EventEmitter {
      * @param port
      */
     createHTTPServer({listen, port}) {
-        const web = http.createServer((req, res) => {});
-        web.on('upgrade', (request, socket, head) => {
-            NSLog.log(request.url, request.method, request.upgrade, request.client);
-        });
-        if (listen) web.listen(port, () => {
-            NSLog.log("info",'Web Service start listening port %s.', port);
-        });
+        // const web = http.createServer((req, res) => {});
+        // web.on('upgrade', (request, socket, head) => {
+        //     NSLog.log(request.url, request.method, request.upgrade, request.client);
+        // });
+        // if (listen) web.listen(port, () => {
+        //     NSLog.log("info",'Web Service start listening port %s.', port);
+        // });
+        const WebManager = require('./WebManager.js');
+        const web = new WebManager({delegate: this});
+        web.on('listen', (element) => {
 
+        });
         return web;
     };
     /**
@@ -90,7 +94,6 @@ class APIServer extends EventEmitter {
      * @param socket 連線進來的使用者
      */
     async onConnection(socket) {
-        const APIClient = require("./APIClient.js");
         const cli = new APIClient(this);
         await cli.connect(socket);
     };
@@ -178,11 +181,14 @@ class APIServer extends EventEmitter {
      * @param {*} handle
      */
     systemMessage({evt, id, data, mode, params}, handle) {
-
         let server;
         if (mode === 'http') {
             server = this.restManager.getServer();
-        } else {
+        }
+        else if (mode === 'web') {
+            server = this.httpServer.getServer();
+        }
+        else {
             server = this.wsServer;
         }
         if (evt === 'c_init2') {

@@ -42,7 +42,9 @@ const ManagerEvents = new Set([
     "cancelSchedule",
     "readFiles",
     "metadata",
-    "blockAll"
+    "blockAll",
+    "getIPFilter",
+    "setIPFilter"
 ]);
 /**
  * 控制端事件
@@ -657,15 +659,26 @@ IHandler.prototype.readBlockIPs = function (params, client, callback) {
     this.delegate.blockIPs = this.readFile(this.IPFilterPath, {enabled:false, allow:{}, deny:{}});
     if (callback) callback({result: true});
 };
-IHandler.prototype.setIPFilter = function ({ip, state, endTime, count, log}, client, callback) {
-    var checkIP = ip.match(/^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g);
+IHandler.prototype.setIPFilter = function (data, client, callback) {
 
+    let {ip, state, endTime, count, log, author} = data;
+    const input = ip.match(/^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g);
     // var checkIPv6 = ip.match(/(?:[\w\d]{1,4}:){7}[\w\d]{1,4}/);
     // ip.split(":")
-    if (checkIP == null) return;
+    if (input == null) {
+        if (callback) callback({result: false});
+        return;
+    }
 
-    var obj = {address: checkIP.toString(), state:state, startTime: new Date().toISOString()};
-
+    let obj = {
+        address: input.toString(),
+        state,
+        startTime: Date.now(),
+        author,
+        count,
+        endTime,
+        log
+    };
     if (state) {
         editor.setIPFilterAdd.apply(this, [obj]);
     } else {
