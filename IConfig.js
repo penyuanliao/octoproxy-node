@@ -4,7 +4,7 @@ const { getConfig } = require('fxNetSocket');
 var instance = null;
 var cmdOpts = null;
 /**
- * 
+ *
  * @constructor
  */
 class IConfig {
@@ -108,21 +108,68 @@ class IConfig {
         };
     }
     setupManager() {
-        /**
-         * FxLogger 監控Log資料接收Port
-         * @type {number}
-         */
-        this.WPC_Logging_Port = 10080;
-        /**
-         * 服務對外Port
-         * @type {number}
-         */
-        this.WPC_HTTP_Port = 10082;
+        this.wpc = {
+            /**
+             * FxLogger 監控Log資料接收Port
+             * @type {number}
+             */
+            logging: {port: 10080},
+            /**
+             * 服務對外websocket Port
+             * @type {number}
+             */
+            ws: {port: 10082},
+            /**
+             * 服務對外restful Port
+             * @type {number}
+             */
+            rest: {port: 10083},
+            /**
+             * 服務對外http Port
+             * @type {number}
+             */
+            http: {port: 10084},
+            udp: {port: 8080}
+        }
+
         /**
          * 跟Ocoto 對接服務接口
          * @type {number}
          */
         this.managePort = 8100;
+
+        this.IManagerConfig = {
+            server: {
+                //server被動等連線
+                passive: {
+                    enabled: true,
+                    host: "0.0.0.0",
+                    port: this.managePort,
+                    // 提供HTTP Server
+                    web: true,
+                    // 是否聆聽port服務
+                    listen: true
+                },
+                //server主動連線
+                active: {
+                    enabled: false,
+                    port: this.managePort,
+                    host: "127.0.0.1",
+                },
+            },
+            client: {
+                mode: "active",
+                active: {
+                    host: "127.0.0.1",
+                    port: this.managePort
+                },
+                passive: {
+                    host: "0.0.0.0",
+                    port: this.managePort
+                }
+            },
+            SIGNATURE: "284vu86"
+        };
     };
     setupAppArguments(options) {
         this.cmdOpts = options;

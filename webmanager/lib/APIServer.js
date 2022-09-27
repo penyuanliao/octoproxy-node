@@ -15,28 +15,35 @@ const APIClient     = require("./APIClient.js");
  * @constructor
  */
 class APIServer extends EventEmitter {
-    constructor() {
+    constructor(configure) {
         super();
         this.isWorker = (process.send instanceof Function);
         this.LOG_LEVEL = NSLog.level;
+        this.configure = configure;
+        this.bandwidth = {secRate: 0};
+        this.liecounts = 0;
         this.setup();
     }
     /**
      * 初始化設定
      */
     setup() {
+        const { wpc } = this.configure;
         const listen = !this.isWorker;
         this.auth        = new Auth();
         this.otp         = new OTP();
-        this.wsServer    = this.createTCPServer({listen, port: 8002});
-        this.restManager = this.createRestServer({listen, port:8001});
-        this.httpServer  = this.createHTTPServer({listen:false, port: 8003});
+        this.wsServer    = this.createTCPServer({listen, port: wpc.ws.port});
+        this.restManager = this.createRestServer({listen, port: wpc.rest.port});
+        this.httpServer  = this.createHTTPServer({listen, port: wpc.http.port});
         this.manager     = new RemoteClient(); //連線到服務窗口
-        this.logServer   = this.createLiveLogServer(10080);
+        this.logServer   = this.createLiveLogServer(wpc.logging.port);
         if (this.isWorker) this.setupIPCBridge();
         this.makeSureComplete();
         this.updateNodeConf();
     };
+    get connections() {
+        return this.liecounts;
+    }
     /**
      * socket server
      * @param port
@@ -84,7 +91,7 @@ class APIServer extends EventEmitter {
      * @param port
      * @return {RestManager}
      */
-    createRestServer ({listen, port}) {
+    createRestServer({listen, port}) {
         const manager = new RestManager(this);
         if (listen) manager.start({port: port});
         return manager;
@@ -96,6 +103,7 @@ class APIServer extends EventEmitter {
     async onConnection(socket) {
         const cli = new APIClient(this);
         await cli.connect(socket);
+        this.liecounts++;
     };
     /**
      * remote log
@@ -257,7 +265,7 @@ class APIServer extends EventEmitter {
             evt: 'processConf',
             data : { lv }
         };
-        process.send(json);
+        if (process.send instanceof Function) process.send(json);
     };
     /**
      * clear

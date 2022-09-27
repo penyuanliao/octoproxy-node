@@ -1,6 +1,6 @@
 const  net     = require("net");
 const {Client} = require("../lib/RPCSocket.js");
-const IConfig  = require("./IManagerConfig.js");
+const { IManagerConfig }  = require('../IConfig.js').getInstance();
 const NSLog    = require("fxNetSocket").logger.getInstance();
 
 /**
@@ -8,7 +8,7 @@ const NSLog    = require("fxNetSocket").logger.getInstance();
  */
 class RemoteClient {
     constructor() {
-        this.mode = IConfig.client.mode;
+        this.mode = IManagerConfig.client.mode;
         this.ctrl = undefined;
         this.progress = new Map();
         this.setup();
@@ -29,7 +29,7 @@ class RemoteClient {
      * @return {*}
      */
     createPassiveServer() {
-        const {port, host} = IConfig.client.passive;
+        const {port, host} = IManagerConfig.client.passive;
         const server = net.createServer(async (socket) => {
             const ctrl = await this.passive(socket);
             if (!ctrl) return false;
@@ -45,7 +45,7 @@ class RemoteClient {
      * @return {Client}
      */
     active() {
-        let {host, port} = JSON.parse(JSON.stringify(IConfig.client.active));
+        let {host, port} = JSON.parse(JSON.stringify(IManagerConfig.client.active));
         let options = {
             host,
             port,
@@ -53,7 +53,7 @@ class RemoteClient {
         }
         const ctrl = new Client(this, options);
         ctrl.on("connect", function () {
-            NSLog.info(' - Active mode, the client connect to server port.');
+            NSLog.info(' - Active mode, the client connect to server port:%s.', port);
         });
         return ctrl;
     };

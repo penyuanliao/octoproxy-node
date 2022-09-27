@@ -544,7 +544,7 @@ class RestManager extends EventEmitter {
     getServer() {
         return this.server.server;
     };
-    start() {
+    start({port}) {
         const server = this.server
 
         server.listen(port, function () {

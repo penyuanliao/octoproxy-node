@@ -9,7 +9,7 @@ const IHandler      = require("./IHandler.js");
 const ClustersInfo  = require("./ClustersInfo.js");
 const CoreInfo      = require("./CoreInfo.js");
 // const editor        = require('../lib/AssignEdittor.js');
-const IConfig       = require("./IManagerConfig.js");
+const IConfig       = require('../IConfig.js').getInstance();
 const {UDPClient}   = require("../lib/UDP.js");
 const NSLog         = require('fxNetSocket').logger.getInstance();
 const hostname      = require("os").hostname();
@@ -17,7 +17,6 @@ const IPFilterPath  = "../configuration/IPFilter.json";
 const AssignPath    = "../configuration/Assign.json";
 const syncAssignFile = true;
 const saveHeapTime   = (10 * 60 * 1000);
-
 /**
  * 管理器
  * @constructor
@@ -35,7 +34,7 @@ class IManager extends EventEmitter {
         this.nodesInfo = new ClustersInfo(this);
         this.coreInfo  = new CoreInfo(this);
         this.iHandler  = this.setupHandler();
-        this.udp       = new UDPClient(this, 8080);
+        this.udp       = new UDPClient(this, IConfig.wpc.udp.port);
         this.iHandler.setup({
             IPFilterPath,
             AssignPath,
@@ -90,12 +89,13 @@ class IManager extends EventEmitter {
      * @default 預設被動等控制端服務管理中心連入
      */
     setupServerMode() {
-        if (IConfig.server.passive.enabled) {
-            let options = JSON.parse(JSON.stringify(IConfig.server.passive));
+        let { server } = IConfig.IManagerConfig;
+        if (server.passive.enabled) {
+            let options = JSON.parse(JSON.stringify(server.passive));
             this.server = this.createTCPServer(options);
         }
-        if (IConfig.server.active.enabled) {
-            let options = JSON.parse(JSON.stringify(IConfig.server.active));
+        if (server.active.enabled) {
+            let options = JSON.parse(JSON.stringify(server.active));
             this.createConnect(options);
         }
     };

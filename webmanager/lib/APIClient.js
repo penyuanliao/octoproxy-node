@@ -14,14 +14,22 @@ class APIClient extends EventEmitter {
         super();
         this.socket   = null;
         this.manager  = delegate.manager;
-        this.delegate = delegate;
+        this.wDelegate = new WeakMap([[this, delegate]]);
         this.cmode    = 0;
         this.signin   = false;
         this.token    = null;
         this.info     = null;
+        this.udpPort  = delegate.configure.udp.port;
         this.udp      = null; //視訊專用
         this.viewer   = new Set();
         this.logSkip  = new Set(['getServiceInfo', 'getSysInfo']);
+    }
+    get delegate() {
+        if (this.wDelegate.has(this))
+            return this.wDelegate.get(this);
+        else {
+            return null;
+        }
     }
     get authEnabled() {
         if (this.delegate.auth) {
@@ -673,7 +681,7 @@ class APIClient extends EventEmitter {
     async createUDPManager(json) {
         let udp;
         if (!this.udp) {
-            udp = new UDPManager(this, 8080);
+            udp = new UDPManager(this, this.udpPort);
             this.udp = udp;
         } else {
             udp = this.udp
@@ -809,11 +817,15 @@ class APIClient extends EventEmitter {
     };
     release() {
         if (this.udp) this.udp.release();
+        if (!this.delegate) return false;
         if (this.viewer) {
             const { logServer } = this.delegate;
             this.viewer.forEach((value) => logServer.leave(value));
             this.viewer.clear();
         }
+        let { delegate } = this;
+        delegate.liecounts = Math.max(--delegate.liecounts, 0);
+        return true;
     };
 }
 module.exports = exports = APIClient;
