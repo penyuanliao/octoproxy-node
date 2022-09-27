@@ -28,6 +28,13 @@ class RestManager extends EventEmitter {
 
         this.accept = new Set(['appsettings', 'configuration']);
         this.server = this.createAPIServer();
+    };
+    ssl() {
+        var options = {
+            key: fs.readFileSync('./server-key.pem'),
+            ca: [fs.readFileSync('./cert.pem')],
+            cert: fs.readFileSync('./server-cert.pem')
+        };
     }
     createAPIServer() {
         const server = restify.createServer({
@@ -110,8 +117,8 @@ class RestManager extends EventEmitter {
             return next();
         });
         server.post('/user/logout', async (req, res, next) => {
-            console.log(`/user/logout`);
             let { username } = req.body;
+            NSLog.info(`${req.url} user: ${username}`);
             let logout = await this.delegate.auth.logout({ username });
             res.send({ result: logout });
             return next();
@@ -462,14 +469,15 @@ class RestManager extends EventEmitter {
                 return next(new errors['UnauthorizedError'](error));
             }
 
-            let { pid, assign, host } = req.params;
+            let { pid, appName, streamName, host } = req.params;
 
             let src = await this.delegate.manager.send({
                 method: 'ipcMessage',
                 pid,
                 params: {
                     cmd: 'apply',
-                    assign,
+                    appName,
+                    streamName,
                     host
                 }
             });
