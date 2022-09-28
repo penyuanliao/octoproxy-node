@@ -1150,7 +1150,7 @@ class IDelegate extends events.EventEmitter {
      * @param handle
      * @return {Promise<void>}
      */
-    async duringWarp(message, handle) {
+    duringWarp(message, handle) {
         const assign = String(message.goto);
         const event = "wrap_socket";
         let worker = this.asyncAssign(assign)
@@ -1160,6 +1160,7 @@ class IDelegate extends events.EventEmitter {
         }
         worker.send({
             evt: event,
+            mode,
             raw: message.raw,
             metadata: message.metadata,
             namespace: assign,

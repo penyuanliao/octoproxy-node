@@ -19,7 +19,8 @@ class APIClient extends EventEmitter {
         this.signin   = false;
         this.token    = null;
         this.info     = null;
-        this.udpPort  = delegate.configure.udp.port;
+
+        this.udpPort  = delegate.configure.wpc.udp.port;
         this.udp      = null; //視訊專用
         this.viewer   = new Set();
         this.logSkip  = new Set(['getServiceInfo', 'getSysInfo']);
@@ -502,7 +503,7 @@ class APIClient extends EventEmitter {
         let {ip, state, endTime, count, log} = data;
         const manager = this.manager;
         let params = {
-            method: "setIPFilter",
+            method: "addIPBlockList",
             ip,
             state,
             endTime,
@@ -520,7 +521,7 @@ class APIClient extends EventEmitter {
     async getIPFilter(json) {
         const manager = this.manager;
         let params = {
-            method: "getIPFilter"
+            method: "readIPBlockList"
         };
         const {result, data} = await manager.send(params);
         let respond = {
@@ -677,6 +678,22 @@ class APIClient extends EventEmitter {
         };
         this.write(respond);
     };
+    async warpTunnel(json) {
+        const { manager } = this;
+        let data = json.data || json;
+        let params = {
+            method: "warpTunnel",
+            params: data
+        };
+        const {result} = await manager.send(params);
+        let respond = {
+            tokenId: json.tokenId,
+            event: "warpTunnel",
+            result
+        };
+        this.write(respond);
+
+    }
     /** [UDP only] 建立udp **/
     async createUDPManager(json) {
         let udp;

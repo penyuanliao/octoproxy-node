@@ -34,7 +34,6 @@ const ManagerEvents = new Set([
     "readConfigFile",
     "readFileContents",
     "saveFileContents",
-    "readBlockIPs",
     "getDashboardInfo",
     "lockdownMode",
     "getSchedule",
@@ -43,8 +42,9 @@ const ManagerEvents = new Set([
     "readFiles",
     "metadata",
     "blockAll",
-    "getIPFilter",
-    "setIPFilter"
+    "readIPBlockList",
+    "addIPBlockList",
+    "warpTunnel"
 ]);
 /**
  * 控制端事件
@@ -67,6 +67,51 @@ class IHandler extends events {
         if (!this.delegate.delegate) return false;
         return this.delegate.delegate;
     }
+    /**
+     * 服務跳轉
+     * @param params
+     * @param params.from 服務pid
+     * @param params.togo assign名稱
+     * @param params.that 哪個服務pid
+     * @param params.who
+     * @param client
+     * @param callback
+     * @return {boolean}
+     */
+    warpTunnel(params, client, callback) {
+        let {from, togo, that, who} = params;
+        //togo assign;
+        //that pid
+        if (from == that) {
+            if (callback) callback({ result: false, error: 'in the same place' });
+            return false;
+        }
+        let { delegate } = this;
+        let child = delegate.findCluster(from);
+        if (typeof togo == "undefined") {
+            let next  = delegate.findCluster(that);
+            params.togo = next.name.split(",")[0];
+        }
+        let json = {
+            evt: 'startWarp',
+            id: delegate.getTokenId(),
+            params
+        };
+        NSLog.info(`warpTunnel => ${JSON.stringify(json, null, '\t')}`);
+        child.postMessage(json, undefined, {keepOpen: false, timeout: 60000}, (data) => {
+            let {evt, id, reboot, error} = (data || {});
+            if (error) NSLog.error(`warpTunnel => postMessage ${evt} error: ${error}`);
+            else NSLog.info(`warpTunnel => postMessage ${evt}`);
+            child._dontDisconnect = true;
+            if (callback) {
+                callback({result: true});
+            }
+            callback = null;
+        });
+        child._dontDisconnect = true;
+    }
+
+
 }
 
 /**
@@ -655,11 +700,14 @@ IHandler.prototype.setRecordEnabled = function ({enabled}, client, callback) {
     if (callback) callback({result: false});
 };
 /** 服務紀錄的ip **/
-IHandler.prototype.readBlockIPs = function (params, client, callback) {
-    this.delegate.blockIPs = this.readFile(this.IPFilterPath, {enabled:false, allow:{}, deny:{}});
-    if (callback) callback({result: true});
+IHandler.prototype.readIPBlockList = function (params, client, callback) {
+    //let data = this.readFile(this.IPFilterPath, {enabled:false, allow:{}, deny:{}});
+    let data = editor.getIPFilter.apply(this);
+    console.log(data);
+    this.delegate.blockIPs = data;
+    if (callback) callback({result: true, data});
 };
-IHandler.prototype.setIPFilter = function (data, client, callback) {
+IHandler.prototype.addIPBlockList = function (data, client, callback) {
 
     let {ip, state, endTime, count, log, author} = data;
     const input = ip.match(/^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g);
@@ -686,10 +734,9 @@ IHandler.prototype.setIPFilter = function (data, client, callback) {
     }
     if (callback) callback({result: true});
 };
-IHandler.prototype.getIPFilter = function (params, client, callback) {
-    const data = editor.getIPFilter.apply(this);
-    if (callback) callback({result: true, data});
-};
+
+
+
 /**
  * 讀取dashboard資訊
  * @param params
@@ -863,7 +910,7 @@ IHandler.prototype.setLBGamePath = function (params, client, callback) {
     if (!LBSrv) {
         if (callback) callback({result: false});
     } else {
-        console.log('setLBGamePath', Object.keys(params));
+        NSLog.log('setLBGamePath', Object.keys(params));
         LBSrv.setGamePath(params.data, (data) => {
             if (callback) callback({data, result: true});
         });

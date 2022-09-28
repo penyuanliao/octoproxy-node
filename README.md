@@ -271,3 +271,13 @@ not required or supported)
 
 
 //http://www.kinmen.info/vic/study/game/game_01.htm
+
+
+
+warp flow =>
+
+manager => evt: startWarp -> child_process
+child   => evt: warp_handle -> main_process
+main    => evt: warp_socket -> child_process
+
+

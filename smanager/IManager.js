@@ -196,7 +196,13 @@ class IManager extends EventEmitter {
             for (let cluster of group) {
                 if (cluster.pid == pid) return cluster;
             }
+        } else if (this.delegate.clusterMap) {
+            NSLog.info(`clusterMap find Cluster => pid:${ pid }`);
+            for (let child of this.delegate.clusterMap.keys()) {
+                if (child.pid == pid) return child;
+            }
         } else {
+
             let groupKeys = Object.keys(clusters);
             for (let key of groupKeys) {
                 let group = clusters[key];

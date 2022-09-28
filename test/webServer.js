@@ -7,7 +7,7 @@ const events = require("events");
  *
  * @constructor
  */
-class webServer extends events.EventEmitter {
+class webServer extends events {
     constructor() {
         super();
         this.server = this.setup();
@@ -73,9 +73,7 @@ class webServer extends events.EventEmitter {
         this.octoPlugins.on("kickUsersOut", onKickUsersOut);
         this.octoPlugins.on("gracefully-shutdown", (next) => {
             next(0);
-
             setTimeout(() => next(1), 10000);
-
         });
         /** !! important !! The is tell parent yourself has complete. **/
         this.octoPlugins.makeSureComplete();
