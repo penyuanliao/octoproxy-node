@@ -263,6 +263,14 @@ class FxDaemon extends events.EventEmitter {
 
         let { evt, action } = message;
 
+        let { blocking } = this;
+        if (message.id && blocking.has(message.id)) {
+            let {cb, timeout} = blocking.get(message.id);
+            clearTimeout(timeout);
+            cb(message);
+            cb = null;
+        }
+
         if (evt === 'processInfo') {
             this._msgcb ? this._msgcb(message.data) : false;
         }
@@ -275,17 +283,11 @@ class FxDaemon extends events.EventEmitter {
         else if (evt === 'startWarpComplete') {
             if (message.reboot) {
                 this.restart();
-                this._dontDisconnect = false;
             }
+            this._dontDisconnect = false;
         }
         else if (evt === 'c_init2' || evt === 'c_init') {
-            let { blocking } = this;
-            if (blocking.has(message.id)) {
-                let {cb, timeout} = blocking.get(message.id);
-                clearTimeout(timeout);
-                cb(message);
-                cb = null;
-            }
+
         }
         else if (evt === 'onIpcMessage') {
             this.emitter.emit("onIpcMessage", message);
@@ -523,11 +525,12 @@ class FxDaemon extends events.EventEmitter {
         if (creationComplete != 1) return false;
 
         if (_cpf && !_killed) {
+            let timeout = (options && options.timeout) ? options.timeout : 5000;
             _cpf.send(message, handle, options, () => {
                 if (cb) this.blocking.set(message.id, {cb, timeout: setTimeout(() => {
                         cb({event: false, error:'timeout'});
                         this.blocking.delete(message.id);
-                    }, 5000)});
+                    }, timeout)});
             });
 
         } else {
