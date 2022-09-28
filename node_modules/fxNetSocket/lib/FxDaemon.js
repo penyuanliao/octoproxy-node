@@ -272,9 +272,11 @@ class FxDaemon extends events.EventEmitter {
         else if (evt === 'warp_handle') {
             this.emitter.emit("warp_handle", message, handle);
         }
-        else if (evt === 'hotReloadComplete') {
-            this.restart();
-            this._dontDisconnect = false;
+        else if (evt === 'startWarpComplete') {
+            if (message.reboot) {
+                this.restart();
+                this._dontDisconnect = false;
+            }
         }
         else if (evt === 'c_init2' || evt === 'c_init') {
             let { blocking } = this;
