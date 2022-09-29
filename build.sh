@@ -58,8 +58,8 @@ cp -f ../configuration/Assign.json ${HOME}/configuration;
 echo "[INFO]    -> copy: configuration/OctoProxy.json -> ${HOME}/configuration";
 cp -f ../configuration/OctoProxy.json ${HOME}/configuration;
 
-echo "[INFO]    -> copy: configuration/IPFilter.json -> ${HOME}/configuration";
-cp -f ../configuration/IPFilter.json ${HOME}/configuration;
+echo "[INFO]    -> copy: configuration/BlockList.json -> ${HOME}/configuration";
+cp -f ../configuration/BlockList.json ${HOME}/configuration;
 echo "[INFO]    $(${md5} ${output_path}/octoproxy)";
 
 # building remote server

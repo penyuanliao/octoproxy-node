@@ -73,13 +73,13 @@ class IHandler extends events {
      * @param params.from 服務pid
      * @param params.togo assign名稱
      * @param params.that 哪個服務pid
-     * @param params.who
+     * @param params.list 清單
      * @param client
      * @param callback
      * @return {boolean}
      */
-    warpTunnel(params, client, callback) {
-        let {from, togo, that, who} = params;
+    warpTunnel({params}, client, callback) {
+        let {from, togo, that, list} = params;
         //togo assign;
         //that pid
         if (from == that) {
@@ -94,24 +94,29 @@ class IHandler extends events {
         }
         let json = {
             evt: 'startWarp',
-            id: delegate.getTokenId(),
+            id: delegate.tokenId,
             params
         };
         NSLog.info(`warpTunnel => ${JSON.stringify(json, null, '\t')}`);
-        child.postMessage(json, undefined, {keepOpen: false, timeout: 60000}, (data) => {
-            let {evt, id, reboot, error} = (data || {});
-            if (error) NSLog.error(`warpTunnel => postMessage ${evt} error: ${error}`);
-            else NSLog.info(`warpTunnel => postMessage ${evt}`);
+        if (child) {
+            child.postMessage(json, undefined, {keepOpen: false, timeout: 60000}, (data) => {
+                let {evt, id, reboot, error} = (data || {});
+                if (error) NSLog.error(`warpTunnel => postMessage ${evt} error: ${error}`);
+                else NSLog.info(`warpTunnel => postMessage ${evt}`);
+                child._dontDisconnect = true;
+                if (callback) {
+                    callback({result: true});
+                }
+                callback = null;
+            });
             child._dontDisconnect = true;
+        } else {
             if (callback) {
-                callback({result: true});
+                callback({result: false, error: `The process '${from}' not found.`});
             }
-            callback = null;
-        });
-        child._dontDisconnect = true;
+        }
+
     }
-
-
 }
 
 /**
@@ -670,6 +675,7 @@ IHandler.prototype.setLogLevel = function ({pid, params}, client, callback) {
         if (callback) callback({result: true});
     }
 };
+
 IHandler.prototype.reloadMgmt = function ({pid}, client, callback) {
     if (process.pid != pid) {
         if (callback) callback({result: false});
@@ -703,8 +709,7 @@ IHandler.prototype.setRecordEnabled = function ({enabled}, client, callback) {
 IHandler.prototype.readIPBlockList = function (params, client, callback) {
     //let data = this.readFile(this.IPFilterPath, {enabled:false, allow:{}, deny:{}});
     let data = editor.getIPFilter.apply(this);
-    console.log(data);
-    this.delegate.blockIPs = data;
+    this.delegate.blockIPs.load(data);
     if (callback) callback({result: true, data});
 };
 IHandler.prototype.addIPBlockList = function (data, client, callback) {

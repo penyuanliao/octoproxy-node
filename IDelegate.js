@@ -1343,15 +1343,15 @@ class IDelegate extends events.EventEmitter {
         } else if (typeof rules == "string") {
             options.rules = utilities.trimAny(rules).split(",");
         }
-        if (Array.isArray(options.rules)) {
+        if (Array.isArray(options.rules) && options.rules.length > 0) {
             options.version = 2;
             options.assign2syntax = false;
         }
 
         options.tags = (typeof tags == "string") ? tags.split(",") : tags;
-
         if (typeof version != "number") options.version = 1;
-        if (typeof options.assign2syntax != "boolean") options.assign2syntax = true;
+        if (typeof assign2syntax != "boolean") options.assign2syntax = true;
+        else options.assign2syntax = assign2syntax;
         if (Array.isArray(stdio)) options.stdio = stdio;
         return options;
     };

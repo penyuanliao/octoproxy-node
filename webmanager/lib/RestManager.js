@@ -297,6 +297,20 @@ class RestManager extends EventEmitter {
             }
 
         });
+        server.post('/process/warp/tunnel', async (req, res, next) => {
+            let json = req.body || {};
+            let {from, togo, that, list} = json;
+            if (!from || !that) {
+                res.send({result: false , error: "invalid argument"});
+                return next();
+            }
+            let src = await this.delegate.manager.send({
+                method: "warpTunnel",
+                params: json
+            });
+            res.send(src);
+            return next();
+        });
         server.get('/service/dashboard/info', async (req, res, next) => {
             let src = await this.delegate.manager.send({
                 method: "getDashboardInfo"

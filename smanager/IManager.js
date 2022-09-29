@@ -8,6 +8,7 @@ const {Server}      = require("../lib/RPCSocket.js");
 const IHandler      = require("./IHandler.js");
 const ClustersInfo  = require("./ClustersInfo.js");
 const CoreInfo      = require("./CoreInfo.js");
+const IBlockList    = require("./IBlockList.js");
 // const editor        = require('../lib/AssignEdittor.js');
 const IConfig       = require('../IConfig.js').getInstance();
 const {UDPClient}   = require("../lib/UDP.js");
@@ -40,14 +41,21 @@ class IManager extends EventEmitter {
             AssignPath,
             syncAssignFile
         });
-        this.blockIPs = this.readFile(IPFilterPath, {enabled:true, allow:{}, deny:{}});
-
+        this.blockIPs = new IBlockList()
+            .load(this.readFile(IPFilterPath, {enabled:true, allow:{}, deny:{}}));
         //auto check
         this.autoTimes = 0;
         this.setupServerMode();
         this.setup();
         this.start();
     }
+    /** Create new dynamic id in process.send **/
+    get tokenId() {
+        return this.delegate.getTokenId();
+    };
+    get blockListEnabled() {
+        return this.blockIPs.enabled;
+    };
     /**
      * 建立事件監聽
      * @return {IHandler}
@@ -196,11 +204,6 @@ class IManager extends EventEmitter {
             for (let cluster of group) {
                 if (cluster.pid == pid) return cluster;
             }
-        } else if (this.delegate.clusterMap) {
-            NSLog.info(`clusterMap find Cluster => pid:${ pid }`);
-            for (let child of this.delegate.clusterMap.keys()) {
-                if (child.pid == pid) return child;
-            }
         } else {
 
             let groupKeys = Object.keys(clusters);
@@ -287,20 +290,7 @@ class IManager extends EventEmitter {
     /**
      * 初始化
      */
-    setup() {
-        Object.defineProperties(this, {
-            /** 阻擋IP */
-            blockIPsEnabled: {
-                get:function () {
-                    if (typeof this.blockIPs != "undefined" && typeof this.blockIPs.enabled == "boolean") {
-                        return this.blockIPs.enabled;
-                    } else {
-                        return false;
-                    }
-                }, configurable: false, enumerable: false
-            }
-        });
-    };
+    setup() {};
     /**
      * 開始心跳
      */
@@ -488,13 +478,12 @@ class IManager extends EventEmitter {
         manager.awaitRecycle();
         return res.pid;
     };
-    /** 統計ip **/
-    checkedIPDeny(ip) {
-        if (!this.blockIPsEnabled) return true;
-        //Denying the connection.
-        if (typeof ip != "string") return false;
-        // console.log(this.blockIPs["deny"]);
-        return typeof this.blockIPs["deny"][ip] != "undefined" && this.blockIPs["deny"][ip].enabled === true;
+    /** 阻擋異常address **/
+    checkedIPDeny(address) {
+        //是否開啟
+        if (!this.blockListEnabled) return true;
+        if (typeof address != "string") return false;
+        return this.blockIPs.check(address);
     };
     /**
      * UDP 接管服務
@@ -572,7 +561,7 @@ class IManager extends EventEmitter {
     /** http規則 */
     getSignature(appID) {
         if (typeof appID == "string" && appID != "") {
-            return (appID === IConfig.SIGNATURE);
+            return (appID === IConfig.IManagerConfig.SIGNATURE);
         } else {
             return false;
         }
