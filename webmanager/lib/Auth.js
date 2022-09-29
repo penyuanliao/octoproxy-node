@@ -17,6 +17,7 @@ class Auth extends EventEmitter {
         super();
         this.enabled = false;
         this.db = new ManagerDB(process.cwd());
+        this.expiry = Math.floor(Date.now() / 1000) + (60 * 60);
         this.init();
     }
 
@@ -28,10 +29,11 @@ class Auth extends EventEmitter {
         try {
             const IConfig = require('../../IConfig.js');
             let { authorization } = IConfig.ManagerAccounts();
-            let { accounts, enabled, secret } = authorization;
+            let { accounts, enabled, secret, expiry } = authorization;
             if (accounts) this.createUsers(accounts);
             this.enabled = enabled;
-            this.secret = enabled;
+            this.secret  = secret;
+            if (expiry) this.expiry = expiry;
             return this;
         } catch (e) {
             return this;
@@ -96,12 +98,12 @@ class Auth extends EventEmitter {
         if (valid) {
             const payload = {
                 username,
-                exp: Math.floor(Date.now() / 1000) + (60 * 60), // 1hour
+                exp: this.expiry, // 1hour
                 twoFactor,
                 otpauth: false
             };
             const options = {};
-            let token = jwt.sign(payload, 'sidonia', options);
+            let token = jwt.sign(payload, this.secret, options);
             await this.db.flushToken({token, username}); //刷新
             return token;
         }
@@ -111,7 +113,7 @@ class Auth extends EventEmitter {
         const {username} = payload;
         payload.otpauth = true;
         const options = {};
-        let token = jwt.sign(payload, 'sidonia', options);
+        let token = jwt.sign(payload, this.secret, options);
         await this.db.flushToken({token, username}); //刷新
         return token;
     };

@@ -712,25 +712,48 @@ IHandler.prototype.readIPBlockList = function (params, client, callback) {
     this.delegate.blockIPs.load(data);
     if (callback) callback({result: true, data});
 };
-IHandler.prototype.addIPBlockList = function (data, client, callback) {
-
-    let {ip, state, endTime, count, log, author} = data;
-    const input = ip.match(/^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g);
-    // var checkIPv6 = ip.match(/(?:[\w\d]{1,4}:){7}[\w\d]{1,4}/);
-    // ip.split(":")
+IHandler.prototype.ipv6Regex = function () {
+    return new RegExp(/^(?:(?:[a-fA-F\d]{1,4}:){7}(?:[a-fA-F\d]{1,4}|:)|(?:[a-fA-F\d]{1,4}:){6}(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3}|:[a-fA-F\d]{1,4}|:)|(?:[a-fA-F\d]{1,4}:){5}(?::(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3}|(?::[a-fA-F\d]{1,4}){1,2}|:)|(?:[a-fA-F\d]{1,4}:){4}(?:(?::[a-fA-F\d]{1,4}){0,1}:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3}|(?::[a-fA-F\d]{1,4}){1,3}|:)|(?:[a-fA-F\d]{1,4}:){3}(?:(?::[a-fA-F\d]{1,4}){0,2}:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3}|(?::[a-fA-F\d]{1,4}){1,4}|:)|(?:[a-fA-F\d]{1,4}:){2}(?:(?::[a-fA-F\d]{1,4}){0,3}:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3}|(?::[a-fA-F\d]{1,4}){1,5}|:)|(?:[a-fA-F\d]{1,4}:){1}(?:(?::[a-fA-F\d]{1,4}){0,4}:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3}|(?::[a-fA-F\d]{1,4}){1,6}|:)|(?::(?:(?::[a-fA-F\d]{1,4}){0,5}:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3}|(?::[a-fA-F\d]{1,4}){1,7}|:)))(?:%[0-9a-zA-Z]{1,})?$/, 'gm')
+};
+IHandler.prototype.ipv4Regex = function () {
+    return new RegExp(/^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/,'gm');
+};
+IHandler.prototype.validateAddress = function (address, type) {
+    let regex = (type == 'ipv6') ? this.ipv6Regex() : this.ipv4Regex();
+    const input = address.match(regex);
     if (input == null) {
+        return;
+    } else {
+        return input.toString();
+    }
+}
+
+IHandler.prototype.IPBlockList = function (data, client, callback) {
+
+    let {ip, state, endTime, count, log, author, range, subnet, type} = data;
+    let input
+    let address = this.validateAddress(ip, type);
+
+    if (!address) {
         if (callback) callback({result: false});
         return;
     }
-
+    if (range) {
+        range = this.validateAddress(range, type);
+    }
+    if (typeof subnet == "number" && subnet <= 128) {
+        subnet = Number.parseInt(subnet);
+    }
     let obj = {
-        address: input.toString(),
+        address,
         state,
         startTime: Date.now(),
         author,
         count,
         endTime,
-        log
+        log,
+        range,
+        subnet
     };
     if (state) {
         editor.setIPFilterAdd.apply(this, [obj]);

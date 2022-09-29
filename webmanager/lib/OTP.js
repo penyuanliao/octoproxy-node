@@ -24,9 +24,10 @@ class OTP extends events.EventEmitter {
         this.options = { digits, algorithm, period};
     }
     async test() {
+        nanoid().toUpperCase();
         let issuer = 'octoMan';
         let username = '12345@ex.com.tw';
-        let secret = 'BOZNDJLWR2LP3INRVERRL7XGHNCWJLR4';nanoid().toUpperCase();
+        let secret = 'BOZNDJLWR2LP3INRVERRL7XGHNCWJLR4';
         let digits = 6;
         let period = 30;
         let algorithm = 'sha1';

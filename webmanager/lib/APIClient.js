@@ -34,7 +34,8 @@ class APIClient extends EventEmitter {
     }
     get authEnabled() {
         if (this.delegate.auth) {
-            return this.delegate.auth.enabled;
+            return false;
+            // return this.delegate.auth.enabled;
         } else {
             return false;
         }
@@ -503,7 +504,7 @@ class APIClient extends EventEmitter {
         let {ip, state, endTime, count, log} = data;
         const manager = this.manager;
         let params = {
-            method: "addIPBlockList",
+            method: "IPBlockList",
             ip,
             state,
             endTime,

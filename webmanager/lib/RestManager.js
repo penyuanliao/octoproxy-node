@@ -335,6 +335,22 @@ class RestManager extends EventEmitter {
             }
             return next();
         });
+        server.post('/service/blocklist', async (req, res, next) => {
+
+            const {auth} = this.delegate;
+
+            const {authorization} = req;
+            const {result, data} = await auth.jwtVerify(authorization.credentials);
+            console.log(result, data);
+
+            let src = await this.delegate.manager.send({
+                method: "readIPBlockList"
+            });
+            res.send(src);
+            return next();
+        });
+        server.put('/service/blocklist', async (req, res, next) => this.blocklistHandle(req, res, next));
+        server.del('/service/blocklist', async (req, res, next) => this.blocklistHandle(req, res, next));
         server.get('/user/otp/qrcode', async (req, res, next) => {
             const {otp} = this.delegate;
             const img = await otp.test();
@@ -573,6 +589,41 @@ class RestManager extends EventEmitter {
             return match[0];
         }
     };
+
+    async blocklistHandle(req, res, next) {
+        let {
+            address,
+            enabled,
+            endTime,
+            count,
+            log,
+            range,
+            subnet,
+            type
+        } = req.body || {};
+
+        const {auth} = this.delegate;
+
+        const {authorization} = req;
+        const {result, data} = await auth.jwtVerify(authorization.credentials);
+        if (result == false) {
+            return next(new errors['UnauthorizedError']('Access is denied due to invalid credentials.'));
+        }
+        let src = await this.delegate.manager.send({
+            method: "IPBlockList",
+            ip: address,
+            state: enabled,
+            endTime,
+            count,
+            log,
+            author: data.username,
+            range,
+            subnet,
+            type
+        });
+        res.send(src);
+        return next();
+    }
     clean() {
 
     };
