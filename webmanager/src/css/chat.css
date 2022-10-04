@@ -1,0 +1,35 @@
+
+html,body {
+    font-family: "Microsoft JhengHei",'Source Sans Pro','Helvetica Neue',Helvetica,Arial,sans-serif;
+}
+.easypiechart {
+    position: relative;
+    text-align: center;
+}
+.easypiechart > div {
+    position: relative;
+    z-index: 1;
+}
+.easypiechart > div .text {
+    position: absolute;
+    width: 100%;
+    top: 60%;
+    line-height: 1;
+}
+.easypiechart > div img {
+    margin-top: -4px;
+}
+.easypiechart canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+}
+.easypiechart > div > .step {
+    margin-left: 10px;
+}
+.inline {
+    margin-left: 10px;
+    margin-right: 10px;
+    margin-top: 10px;
+}

@@ -1,0 +1,593 @@
+doctype html
+
+mixin WidgetInfo(num, text)
+    div.widget-pie-info
+        div.widget-pie-info-num
+            = num
+        div.widget-pie-info-text
+            = text
+
+mixin Knob(grid, cls, chat_cls, num, text)
+    div(class=grid)
+        div(class=`${cls} widget-pie`)
+            div.knob
+                div(style="width:90px;height:90px;")
+                    div(class=`chart ${chat_cls} easypiechart` data-percent="0")
+                        span(style="font-size: x-large; font-weight:bold;") 0
+                        | %
+            +WidgetInfo(num, text)
+mixin CreateOptions(group)
+    -   for (let i = 0; i < group.length; i++)
+        option= group[i]
+
+
+html
+    head
+        meta(charset="UTF-8")
+        title Projects Manager Console
+        link(rel="stylesheet" type="text/css" href="css/chat.css")
+        link(rel="stylesheet" type="text/css" href="css/normalize.css")
+        link(rel="stylesheet" type="text/css" href="css/menu.css")
+        //字體
+        link(rel="stylesheet" type="text/css" href="css/fontawesome-free-6.1.2-web/css/all.css")
+        link(rel="stylesheet" type="text/css" href="css/fontawesome-free-6.1.2-web/css/v4-shims.min.css")
+
+        //Bootstrap
+        link(rel="stylesheet" type="text/css" href="src/bootstrap3/css/bootstrap-editable.css")
+        link(rel="stylesheet" type="text/css" href="src/bootstrap3/css/bootstrap.min.css")
+        link(rel="stylesheet" type="text/css" href="src/bootstrap3/css/bootstrap-datetimepicker.min.css")
+        link(rel="stylesheet" type="text/css" href="src/bootstrap3/css/bootstrap-theme.css")
+
+        link(rel="stylesheet" type="text/css" href="css/table.css")
+        link(rel="stylesheet" type="text/css" href="css/select2/select2.css")
+        link(rel="stylesheet" type="text/css" href="css/scrollbar/jquery.mCustomScrollbar.css")
+        link(rel="stylesheet" type="text/css" href="css/test.css")
+        //Alert
+        script(type="text/javascript" src="js/jquery-latest.min.js")
+        script(type="text/javascript" src="js/sweetalert2.all.min.js")
+        script(type="text/javascript" src="js/scrollbar/jquery.mousewheel.min.js")
+        script(type="text/javascript" src="js/jquery.easy-pie-chart.js")
+        script(type="text/javascript" src="js/sparkline/jquery.sparkline.min.js")
+        script(type="text/javascript" src="js/jquery.dataTables.min.js")
+        script(type="text/javascript" src="js/jquery.cookie.js")
+        script(type="text/javascript" src="cryptoJS/rollups/aes.js")
+        script(type="text/javascript" src="js/datepicker/bootstrap-datetimepicker.js")
+        script(type="text/javascript" src="js/viewerEditor/jquery.json-editor.min.js")
+        script(type="text/javascript" src="js/ua-parser.js")
+        //Bootstrap
+        script(type="text/javascript" src="src/bootstrap3/js/bootstrap.min.js")
+        script(type="text/javascript" src="src/bootstrap3/js/bootstrap.js")
+        //Bootstrap plus
+        script(type="text/javascript" src="src/bootstrap3/js/bootstrap-editable.js")
+        script(type="text/javascript" src="src/bootstrap3/js/bootstrap-confirm-delete.js")
+        script(type="text/javascript" src="src/bootstrap3/js/dataTables.bootstrap.js")
+        //scrollbar
+        script(type="text/javascript" src="js/scrollbar/jquery.mCustomScrollbar.concat.min.js")
+        script(type="text/javascript" src="js/select2/select2.min.js")
+        //config
+        script(type="text/javascript" src="js/config.js")
+        script(type="text/javascript" src="js/wsConnect.js")
+        script(type="text/javascript" src="js/componentKit.js")
+        script(type="text/javascript" src="js/main.js")
+        script.
+            $(document).ready(() => { });
+    body
+        div(class="top-bar")
+        div(id="wrapper" class="context-box")
+            div.page-navigation
+            div.right-content
+                div.row
+                    +Knob("col-xs-12 col-sm-3 col-md-5 col-md-offset-2 col-lg-2", "system-visitors", "chartVisits", 0, "Total Visits")
+                    +Knob("col-xs-12 col-sm-3 col-md-5 col-lg-2", "system-info-incoming", "chartIncoming", 0, "Incoming Users(One Hr.)")
+                    +Knob("col-xs-12 col-sm-3 col-md-5 col-md-offset-2 col-lg-2 col-lg-offset-0", "system-info-hdd", "chartInfo", 0, "Used HD")
+                    +Knob("col-xs-12 col-sm-3 col-md-5 col-lg-2", "system-info-loadAvg", "chartInfo", 0, "Load Average")
+                div.row
+                    div.col-md-2
+                        // Network
+                        div#panel-network.block
+                            div.block-head
+                                h2
+                                    span.fa.fa-wifi
+                                    |  Network
+                                ul.buttons
+                                    li
+                                        a.block-toggle(href='#')
+                                            span.fa.fa-chevron-down
+                            div#node-network-Monitor.block-content
+                                h5
+                                    small.face (tcp)
+                                    |Interface Traffic
+                                div.row
+                                    div.col-xs-3.col-sm-6
+                                        small
+                                            i.fa.fa-fw.fa-globe.text-curious-blue
+                                            |  Active
+                                        span.fa.fa-level-up
+                                            h5.m-b-0
+                                                span.it-active 0
+                                                small cnt/s
+                                    div.col-xs-3.col-sm-6
+                                        small
+                                            i.fa.fa-fw.fa-globe.text-curious-blue
+                                            |  Passive
+                                        span.fa.fa-level-down
+                                            h5.m-b-0
+                                                span.it-passive 0
+                                                small cnt/s
+
+
+
+                                div.row
+                                    div.col-xs-3.col-sm-6
+                                        <!-- CurrEstab (es, close_wait) -->
+                                        small
+                                            i.fa.fa-fw.fa-circle.text-curious-green
+                                            |  CurrEstab
+
+                                    div.col-xs-3.col-sm-6
+                                        small
+                                            i.fa.fa-fw.fa-circle.text-curious-red
+                                            |  RetransRate
+                                        h5.m-b-0
+                                            span.it-retransRate 0.0
+                                            small %
+
+                            div#node-devices-Monitor.block-content
+                                h5 Interface Devices
+                                div.list
+                                    div.list-item-content
+                                        h6.pro-file
+                                            span.fa.fa-signal &nbsp;
+                                            span.dev-ipAddress 127.0.0.1&nbsp;
+                                            small.dev-face (ol)
+                                        span.fa.fa-level-down.text-curious-green
+                                        | &nbsp;
+                                        span.receive 100
+                                        | &nbsp;
+                                        span.r-unit KBs
+                                        span.fa.fa-level-up.text-curious-red
+                                        | &nbsp;
+                                        span.transmit 20
+                                        | &nbsp;
+                                        span.t-unit kBs
+                                        span.col-xs-12.network-stat-transmit
+                                        span.col-xs-12.network-stat-receive
+
+                            div.block-footer
+                        // Tools
+                        div#node-tools-panel.block
+                            div.block-head
+                                h2
+                                    span.fa.fa-wifi
+                                    |  Tools
+
+                    div#wrapper-content.col-md-10.col-lg-8
+                        div#process-content
+                            div.block
+                                div.block-head
+                                    h2
+                                        span.fa.fa-rocket
+                                        |  Node.JS Process Projects
+                                    ul.buttons
+                                        li
+                                            a
+                                                div.has-feedback.has-search
+                                                    span.glyphicon.glyphicon-search.form-control-feedback
+                                                    input#proc-filter.form-control(type="text" placeholder="Search")
+
+                                        li
+                                            a#btn-login(title="Login" href="#") Login
+                                        li
+                                            a#btn-logout(title="Logout" href="#" style="display: none;")
+                                                span.fa
+                                                | Logout
+                                        li
+                                            a#btn-batch(href="#")
+                                                span.fa.fa-tasks
+                                        li
+                                            a#f2dbInfo(href="#")
+                                                span.fa.fa-file-lines
+                                        li
+                                            a.block-refresh(href="#")
+                                                span.pro-refresh.fa.fa-refresh.refresh-anim.paused-animation
+                                                span.project-duration.fa(style="padding-left: 2px;") 5
+                                        li
+                                            a.block-toggle(href="#")
+                                                span.fa.fa-chevron-down
+                                        li
+                                            a#pref-settings(href="#")
+                                                span.fa.fa-cog.fa-log
+                                div#node-service.block-content.list
+                                    div.progress-tmp.list-item(hidden)
+                                        div.list-item-content
+                                            div.list-item-container.list-item-container-small
+                                                div.pro-status
+                                                    p.state-maint(hidden)
+                                                        span.pro-state.label.label-maint
+                                                            i.fa-solid.fa-hammer
+                                                    p.state-pend(hidden)
+                                                        span.pro-state.label.label-warning PEND
+                                                    p.state-on(hidden)
+                                                        span.pro-state.label.label-success ON
+                                                    p.state-off()
+                                                        span.pro-state.label.label-danger OFF
+                                                    p.state-trash(hidden)
+                                                        span.pro-state.label.label-danger
+                                                            i.fa.fa-trash(aria-hidden="true")
+                                                div
+                                                    span.fa.fa-clock-o
+                                                    span.list-item-date  8:21 hours
+
+                                            div.list-item-container.col-sm-3.col-xs-7
+                                                h4
+                                                    span.pro-file ../projects/main.js
+                                                    | &nbsp;
+                                                    i.pro-lock.fa.fa-lock
+                                                p.text-muted-bold
+                                                    a.pro-assign(href="#" data-toggle="tooltip") octoproxy
+                                            div.list-item-container.col-sm-1.col-xs-12
+                                                span.fa.fa-user
+                                                span.pro-count.text(style="font-weight: bolder" data-toggle="tooltip" data-placement="top" title="0")  10000
+                                                p
+                                                    i.fa-solid.fa-tags &nbsp;
+                                                    span.pro-hashtag.text-muted #tags
+
+                                            div.list-item-container.col-sm-2.col-xs-3
+                                                p
+                                                    span
+                                                        b CPU&nbsp;
+                                                    span.pro-cpu-usage.text-muted 20%
+                                                    span.pro-cpu-history
+                                                p
+                                                    span
+                                                        b RAM&nbsp;
+                                                        |
+                                                    span.pro-memory-usage.text-muted 1.5G
+                                                    span.pro-memory-history
+                                            div.list-item-container.col-sm-2.col-xs-3
+                                                p
+                                                    span
+                                                        b LogLevel&nbsp;
+                                                    a.pro-log-level(href="#" data-type="select" data-placement="right") Error
+                                                p
+                                                    span.fa-solid.fa-database &nbsp;
+                                                    span.pro-db.text-muted NONE
+                                            div.list-item-right
+                                                div
+                                                    button.list-item-info.btn.btn-default
+                                                        i.fa.fa-terminal
+                                                    button.list-item-trigger.btn.btn-default
+                                                        i.fa.fa-chevron-left
+                                                    button.list-item-tachometer.btn.btn-default(style="display: none;")
+                                                        i.fa.fa-tachometer
+                                                    button.list-item-monitor.btn.btn-default(style="display: block;")
+                                                        i.fa.fa-desktop
+
+                                        div.pro-subview.lit-bitrates.list-item-content.list-tachometer(style="padding-top: 0; padding-bottom: 0; height: 0;display: none;")
+                                            h6.title Rates:
+                                            div.subview-content
+                                        div.pro-monitor.list-item-content(style="padding-top: 0; padding-bottom: 0; height: 0")
+                                            div(style="white-space: pre-line;")
+                                                label.title monitor:
+                                                p.content
+                                        div.pro-metadata.list-item-content(style="padding-top: 0; padding-bottom: 0; height: 0")
+                                            div(style="white-space: pre-line;")
+                                                label.title metadata:
+                                                p.content
+                                        div.list-item-controls(style="right: -80%;")
+                                            div
+                                                button.pro-edited.btn.btn-primary
+                                                    i.fa.fa-pencil
+                                                button.pro-restart.btn.btn-warning
+                                                    i.fa.fa-refresh
+                                                button.pro-delete.btn.btn-danger
+                                                    i.fa.fa-ban
+                                                button.pro-locked.btn.btn-default
+                                                    i.fa.fa-unlock
+                                                    i.fa.fa-lock(hidden)
+                                                button.pro-kick-out.btn.btn-info
+                                                    i.fa.fa-user-times
+                                                button.game-recycle.btn.btn-warning
+                                                    i.fa.fa-code
+                                                button.chevron-right.btn.btn-default
+                                                    i.fa.fa-chevron-right
+                                div.block-footer
+                                    div(style="float: right;")
+                                        nav(aria-label="Page navigation example")
+                                            ul#project_pagination.pagination
+                                            <!-- 分頁 -->
+                                    div(style="width: 200px; display: inline;float: left; margin-right: 4px;")
+                                        select#ipAddress(style="width: 200px;height: 34px; overflow: hidden; border: 1px solid #ccc;")
+                                    button#srvConnect.btn.btn-danger.btn-weight Connect
+                                    button#loadList.btn.btn-default.btn-weight
+                                        span.fa.fa-refresh.refresh-anim.paused-animation
+                                        | &nbsp;Refresh
+                                    button#btn-insert-cluster.btn.btn-default.btn-weight Insert
+                                    button#sysInfoBtn.btn.btn-default.btn-weight CoreInfo
+                                    button#btn-mgmtReLoad.btn.btn-default.btn-weight(style="visibility:hidden;") mgmtReLoad
+                        <!-- Load Balance Panel -->
+                        div.load-balance-panel
+                            div.block
+                                div.block-head
+                                    h2
+                                        span.fa.fa-code-fork
+                                        |  Load Balance
+                                    ul.buttons
+                                        li
+                                            a.block-refresh(href="#")
+                                                span.fa.fa-refresh
+                                        li
+                                            a.block-toggle(href="#")
+                                                span.fa.fa-chevron-down
+                                div.block-content.list
+                                div.block-footer
+                                    button.btn.btn-default.btn-weight.btn-insert
+                                        i.fa.fa-plus
+                                        | &nbsp;Insert
+                                    button.btn.btn-success.btn-save(disabled)
+                                        i.fa.fa-floppy-o
+                                        | &nbsp;Save
+                                    button.btn.btn-info.btn-load
+                                        i.fa.fa-refresh
+                                        | &nbsp;Load
+                        <!-- AMF Config Panel -->
+                        div.amf-config-panel
+                            div.block
+                                div.block-head
+                                    h2
+                                        span.fa.fa-code-fork
+                                        | &nbsp;ServerAPI Config
+                                    ul.buttons
+                                        li
+                                            a.block-refresh(href="#")
+                                                span.fa.fa-refresh
+                                        li
+                                            a.block-toggle(href="#")
+                                                span.fa.fa-chevron-down
+                                div.block-content.list
+                                div.block-footer
+                                    button.btn.btn-default.btn-weight.btn-insert
+                                        i.fa.fa-plus
+                                        | &nbsp;Insert
+                                    button.btn.btn-success.btn-save(disabled)
+                                        i.fa.fa-floppy-o
+                                        | &nbsp;Save
+                                    button.btn.btn-info.btn-load
+                                        i.fa.fa-refresh
+                                        | &nbsp;Load
+                        <!-- Settings Panel -->
+                        div.SettingsPanel
+                            div.block
+                                div.block-head
+                                    h2
+                                        span.fa.fa-cubes
+                                        | &nbsp;Settings
+                                    ul.buttons
+                                        li: a#btn-insert-schedule.block-plus(href="#"): span.fa.fa-calendar-plus-o
+                                        li: a.block-refresh(href="#"): span.fa.fa-refresh
+                                        li: a.block-toggle(href="#"): span.fa.fa-chevron-down
+                                div#sch-pan-tabs.block-content.list(role="tablist")
+                                    ul.nav.nav-tabs
+                                        li.active: a(data-toggle="tab" href="#tab-task" aria-hidden="true")
+                                            span.glyphicon.glyphicon-calendar(aria-hidden="true")
+                                            | &nbsp;Schedule
+                                        li: a(data-toggle="tab" href="#tab-app" aria-hidden="true")
+                                            span.glyphicon.glyphicon-folder-open(aria-hidden="true")
+                                            | &nbsp;AppSettings
+                                        li: a(data-toggle="tab" href="#tab-conf" aria-hidden="true")
+                                            span.glyphicon.glyphicon-folder-open(aria-hidden="true")
+                                            | &nbsp;Configure
+                                        li: a(data-toggle="tab" href="#tab-sms" aria-hidden="true")
+                                            span.glyphicon.glyphicon-send(aria-hidden="true")
+                                            | &nbsp;SmsManager
+                                        <!-- Tab panes -->
+                                    div.tab-content
+                                        div#tab-task.tab-pane.active(role="tabpanel")
+                                            div#node-schedule.block-content.list
+                                                div.list-item.schedule-tmp(hidden)
+                                                    div.list-item-content
+                                                        div.list-item-container(style="margin-top: 10px")
+                                                            p.sch-cd
+                                                                i.fa.fa-hourglass-half
+                                                                | &nbsp;4 year
+                                                        div.list-item-container-l
+                                                            h4.sch-name Process
+                                                            p.text-muted
+                                                                span.sch-event Reboot
+                                                                span.pro-memory-history
+                                                        div.list-item-container(style="margin-right: 30px;")
+                                                            h4 Execute Time:
+                                                            p.sch-exe-time
+                                                                i.fa.fa-calendar
+                                                                | &nbsp;2020/12/12 12:20
+                                                        div.list-item-container
+                                                            h4 Date Added:
+                                                            p.sch-date-add
+                                                                i.fa.fa-clock-o
+                                                                | &nbsp;2020/12/12 01:00
+                                                        div.list-item-right: div
+                                                            button.btn.btn-danger.list-item-sch-rm.test3: i.fa.fa-remove
+                                                    div.list-item-content.list-tachometer.list-bitrates(style="padding-top: 0; padding-bottom: 0;")
+                                                        h6
+                                                        div.bitrates
+                                                    div.list-item-controls(style="right: -80%;")
+                                        div#tab-app.tab-pane(role="tabpanel")
+                                            div.block-content
+                                                p Directory:
+                                                select.app-settings-dir(name="dir" style="width: 200px;height: 34px; overflow: hidden; border: 1px solid #ccc;")
+                                                button.app-settings.btn.btn-info(name="open")
+                                                    i.fa.fa-file-o
+                                                    |  Load
+                                                button.app-settings.btn.btn-default.btn-weight(name="save")
+                                                    i.fa.fa-save
+                                                    |  Save
+                                                pre#json-display-tab-app
+                                        div#tab-conf.tab-pane(role="tabpanel")
+                                            div.block-content
+                                                p Directory:
+                                                select.app-settings-dir(name="dir" style="width: 200px;height: 34px; overflow: hidden; border: 1px solid #ccc;")
+                                                button.app-settings.btn.btn-info(name="open")
+                                                    i.fa.fa-file-o
+                                                    |  Load
+                                                button.app-settings.btn.btn-default.btn-weight(name="save")
+                                                    i.fa.fa-save
+                                                    |  Save
+                                                pre#json-display-tab-conf
+                                        div#tab-sms.tab-pane(role="tabpanel")
+                                            div.block-content
+                                                table#sms-table-display.table.table-hover(style="width: 100%" role="grid")
+                                            div.block-content
+                                                div handoff:
+                                                    select
+
+
+                                div.block-footer
+                        <!-- Connections Panel -->
+                        div.connectionsPanel(style="display: none;")
+                            div.block
+                                div.block-head
+                                    h2
+                                        span.fa.fa-code-fork
+                                        | &nbsp;Connection IP Address
+                                    ul.buttons
+                                        li: a.block-refresh(href="#"): span.fa.fa-refresh
+                                        li: a.block-toggle(href="#"): span.fa.fa-chevron-down
+                                div.block-content.list
+                                    div.dataTables_wrapper
+                                        table#srv-connect.table.dataTable.table-bordered.table-striped.sortable_simple(style="width: 100%" role="grid")
+                                            thead: tr
+                                                th #
+                                                th IP-Address
+                                                th Count
+                                                th(style="width: 180px;") uptime
+                                            tbody
+                                div.block-footer
+        <!-- VIEW POPUP -->
+        div#modal_log_cluster.modal.fade.in(tabindex="-1" role="dialog")
+            div.modal-backdrop.fade.in
+            div.modal-dialog(style="width: 1000px;")
+                div.modal-content
+                    div.modal-header
+                        button.close(type="button" data-dismiss="modal" aria-hidden="true") x
+                        h4.modal-title Remote Console
+                    div.modal-body
+                        div.scroll-content-log(style="height: auto; min-height: 200px;")
+                    div.modal-footer
+                        label
+                            span#modal_log_rows 0
+                            | rows
+                        button.btn.btn-default.btn-clean(type="button" data-dismiss="modal") Close
+        <!-- PROCESS INFO -->
+        div#modal_process_info.modal.fade.in(tabindex="-1" role="dialog")
+            div.modal-backdrop.fade.in
+            div.modal-dialog(style="width: 1000px;")
+                div.modal-content
+                    div.modal-header
+                        button.close(type="button" data-dismiss="modal" aria-hidden="true") x
+                        h4.modal-title System Information
+                    div.modal-body
+                        div.scroll-content-log(style="height: auto; max-height:550px; overflow:auto;")
+                            table.table.table-striped
+                                thead
+                                    tr
+                                        th
+                                        th Assign Rule
+                                        th Information
+                                tbody.info-tbody
+                                    tr.info-tr
+                                        td.info-id #1
+                                        td.info-ar -
+                                        td.info-add -
+                    div.modal-footer
+                        button.btn.btn-default.btn-clean(type="button" data-dismiss="modal") Close
+        <!-- PREFERENCES SETTINGS -->
+        div#modal_pref_settings.modal.fade.in(tabindex="-1" role="dialog")
+            div.modal-backdrop.fade.in
+            div.modal-dialog(style="width: 1000px;")
+                div.modal-content
+                    div.modal-header
+                        button.close(type="button" data-dismiss="modal" aria-hidden="true") x
+                        h4.modal-title Preferences
+                    div.modal-body
+                        div.scroll-content-log(style="height: auto; min-height: 200px;")
+                            label Performance
+                            div.checkbox: label
+                                input#cpuState(type="checkbox")
+                                | &nbsp;Enable cpu state
+                            div.checkbox: label
+                                input#memState(type="checkbox")
+                                | &nbsp;Enable memory state
+                            label Elements Panel
+                            div.checkbox: label
+                                input#ipPanelState(type="checkbox")
+                                | &nbsp;Enable connection panel
+                            label Console
+                            div.checkbox: label
+                                input#consoleReload(type="checkbox")
+                                | &nbsp;Show mgmt reload
+                            label Rows per page
+                            select#rowsPerPage
+                                +CreateOptions([25, 50, 75, 100, 200])
+
+                    div.modal-footer
+                        button.btn.btn-default.btn-clean(type="button" data-dismiss="modal") Close
+        <!-- 登入畫面 -->
+        div#user_login.modal.fade.in(tabindex="-1" role="dialog")
+            div.modal-backdrop.fade.in
+            div.modal-dialog(style="width: auto; max-width: 500px;")
+                div.modal-content
+                    div.modal-header: h4.modal-title
+                        span.fa.fa-right-to-bracket
+                        | &nbsp;Login
+                    div.modal-body
+                        form(style="min-height: 100px;")
+                            div(style="width: auto; text-align: center")
+                                h1(style="font-size: xx-large; margin-top: 20px; margin-bottom: 60px;")
+                                    span.text-muted Admin
+                                    | Manager
+                            div.form-group: div.input-group.input-group-lg
+                                span.input-group-addon: span.glyphicon.glyphicon-user(aria-hidden="true")
+                                input#username.form-control.input-lg(style="height: 46px;" type="text" name="username" placeholder="請輸入帳號")
+                            div.form-group: div.input-group.input-group-lg
+                                span.input-group-addon: span.glyphicon.glyphicon-lock(aria-hidden="true")
+                                input#password.form-control.input-lg(style="height: 46px;" type="password" name="password" placeholder="請輸入密碼")
+                            div#user_message(style="height: 60px;")
+                    div.modal-footer
+                        button#btn-login-submit.btn.btn-success(value="Login" style="width: 200px; height: 46px; font-size: large;") Login
+
+        <!-- schedule -->
+        div#schedule_edit.modal.fade(tabindex="-1" role="dialog")
+            div.modal-backdrop.fade.in
+            div.modal-dialog(role="document")
+                div.modal-content
+                    div.modal-header
+                        button.close(type="button" data-dismiss="modal" aria-hidden="true") x
+                        h4.modal-title Create schedule
+                    div.modal-body
+                        form
+                            div.form-group
+                                label.control-label(for="schedule-thread") Thread:
+                                br
+                                select#schedule-thread(name="schedule_thread" style="width: 260px;")
+                            div.form-group
+                                label.control-label(for="schedule-behavior") Behavior:
+                                br
+                                select#schedule-behavior(name="schedule_behavior" style="width: 260px;")
+                                    optgroup(label="System"): option Reboot
+                                    optgroup(label="Deployment"): option Blue-Green
+                            div.form-group
+                                label.control-label(for="form_datetime") Execute Time:
+                                div#datetimepicker1.input-group.date(style="width: 260px;")
+                                    input#form_datetime.form-control(type="text" name="schedule_data" style="height: 34px;")
+                                    span.input-group-addon: i.glyphicon.glyphicon-calendar
+                            div.form-group.Every_Invocation
+                                label.control-label(for="schedule-repeating") Repeating:
+                                br
+                                select#schedule-repeating(name="schedule_repeating" style="width: 260px;")
+                                    +CreateOptions(["None", "Hours", "Day", "Week", "Month"])
+                    div.modal-footer
+                        label
+                            span#modal_log_rows2 0
+                            | &nbsp;rows
+                        button#sendSchedule.btn.btn-primary(type="button" data-dismiss="modal" data="insert") Send
+                        button.btn.btn-default.btn-clean(type="button" data-dismiss="modal") Close

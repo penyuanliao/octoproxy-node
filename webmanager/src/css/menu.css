@@ -1,0 +1,126 @@
+
+/* latin-ext */
+@font-face {
+    font-family: 'Titillium Web';
+    font-style: normal;
+    font-weight: 300;
+    src: local('Titillium WebLight'), local('TitilliumWeb-Light'), url(TitilliumWebLight.woff2) format('woff2');
+    unicode-range: U+0100-024F, U+1E00-1EFF, U+20A0-20AB, U+20AD-20CF, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+    font-family: 'Titillium Web';
+    font-style: normal;
+    font-weight: 300;
+    src: local('Titillium WebLight'), local('TitilliumWeb-Light'), url(TitilliumWebLight2.woff2) format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2212, U+2215, U+E0FF, U+EFFD, U+F000;
+}
+
+.ui {
+    border:1px solid #00ccbf;
+    width: 320px;
+    overflow:auto;
+}
+.ui .left-menu {
+    width: auto;
+    box-sizing: content-box;
+    padding-right: 1%;
+    height: 100%;
+    /*background: #434753;*/
+}
+.ui .list-friends {
+    list-style: none;
+    font-size: 13px;
+    height: 88%;
+}
+
+.ui .list-friends > li {
+    display: -webkit-box;
+    display: -webkit-flex;
+    display: -ms-flexbox;
+    display: flex;
+    margin-top: -1px;
+    margin-left: -40px;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    height: 56px;
+    border:1px solid #ccc;
+}
+.ui .list-friends > li:hover {
+    background: #5bc0de;
+}
+
+.ui .list-friends .info {
+    -webkit-box-flex: 1;
+    -webkit-flex: 1;
+    -ms-flex: 1;
+    flex: 1;
+    margin-left: 8px;
+    margin-top: -4px;
+
+}
+.ui .list-friends .conns {
+    margin-right: 12px;
+    margin-top: 14px;
+}
+.ui .list-friends .sname {
+    color: #272727;
+    margin-top: 12px;
+}
+.ui .list-friends .status {
+    position: relative;
+    top: 4px;
+    margin-left: 14px;
+    color: #a8adb3;
+}
+.ui .list-friends .off:after,
+.ui .list-friends .on:after {
+    content: '';
+    left: -12px;
+    top: 4px;
+    position: absolute;
+    height: 7px;
+    width: 7px;
+    border-radius: 50%;
+}
+.ui .list-friends .off:after {
+    background: #fd8064;
+}
+.ui .list-friends .on:after {
+    background: #62bf6e;
+}
+.right-content{
+    border:0px solid #00ccbf;
+    width: 100%;
+}
+.context-box {
+    -webkit-box-orient: horizontal;
+    -webkit-box-direction: normal;
+    -webkit-flex-direction: row;
+    -ms-flex-direction: row;
+    flex-direction: row;
+    display: -webkit-box;
+    display: -webkit-flex;
+    display: -ms-flexbox;
+    display: flex;
+    overflow: hidden;
+}
+.circle-on {
+    width: 10px;
+    height: 10px;
+    background-color: #00a157;
+    -moz-border-radius: 10px;
+    -webkit-border-radius: 10px;
+    float:left;
+}
+.circle-off {
+    width: 10px;
+    height: 10px;
+    background-color: #c12e2a;
+    -moz-border-radius: 10px;
+    -webkit-border-radius: 10px;
+    float:left;
+
+}
