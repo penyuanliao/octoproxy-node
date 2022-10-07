@@ -826,7 +826,7 @@ class IDelegate extends events.EventEmitter {
         if (cb) cb(req);
     };
     /** close complete **/
-    close_callback() {
+    close_callback(mode) {
         let handle, endpoint;
         if (arguments[0] instanceof IDelegate) {
             endpoint = arguments[0];
@@ -854,7 +854,9 @@ class IDelegate extends events.EventEmitter {
             if (TRACE_SOCKET_IO) {
                 let ts = endpoint.dateFormat();
                 let lb = (lbPath ? lbPath : 'null');
-                NSLog.log(status, `{"msg":"${message}", "ts": "${ts}", "src":"${address}", "xff":"${xff}" , "mode":"${mode}", "path":"${path}", "lb":${lb}}`);
+                if (mode != 'web') {
+                    NSLog.log(status, `{"msg":"${message}", "ts": "${ts}", "src":"${address}", "xff":"${xff}" , "mode":"${mode}", "path":"${path}", "lb":${lb}}`);
+                }
                 endpoint.clearGetSockInfos(handle);
             }
 
@@ -900,7 +902,7 @@ class IDelegate extends events.EventEmitter {
         handle.getSockInfos.path = name;
         handle.getSockInfos.mode = mode;
         this.rejectClientException(handle, exception);
-        handle.close(this.close_callback.bind(handle, this));
+        handle.close(this.close_callback.bind(handle, this, mode));
         this.handleRelease(handle);
         handle = null;
     }
