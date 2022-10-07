@@ -34,10 +34,19 @@ class WebManager extends EventEmitter {
 
         app.use(bodyParser.json()); // support json encoded bodies
         app.use(bodyParser.urlencoded({ extended: true })); // support encoded bodies
-        app.use('/css', express.static(__dirname + '/css'));
-        app.use('/fonts', express.static(__dirname + '/fonts'));
-        app.use('/js', express.static(__dirname + '/js'));
-
+        app.use('/mgr/src/bootstrap3', express.static(Path.resolve(__dirname, '../src/bootstrap3')));
+        app.use('/mgr/cryptoJS', express.static(Path.resolve(__dirname, '../src/cryptoJS')));
+        app.use('/mgr/css', express.static(Path.resolve(__dirname, '../src/css')));
+        app.use('/mgr/fonts', express.static(Path.resolve(__dirname, '../src/fonts')));
+        app.use('/mgr/js', express.static(Path.resolve(__dirname, '../src/js')));
+        app.use(async (req, res, next) => {
+            let url = req.url;
+            if (url.indexOf('/mgr') == -1) {
+                console.log(req.rawHeaders);
+            }
+            res.setHeader('connection', 'close');
+            next();
+        });
         app.use(session({
             secret: 'sidonia_shizuka',
             name: 'user', // optional
@@ -48,6 +57,7 @@ class WebManager extends EventEmitter {
 
             console.log(req.session)
             console.log(req.sessionID)
+            console.log(req.session.user, req.headers.cookie)
             req.session.user = '1234'
             res.send('Hello World!')
 
@@ -74,10 +84,13 @@ class WebManager extends EventEmitter {
     };
     setPug(app) {
         app.set('view engine', 'pug');
-        app.set('views', Path.resolve(__dirname, '../html'));
-        app.get('/mgr/test2', (req, res) => {
-            res.render('index', {user: "pug", mode: 'http'});
-        })
+        app.set('views', Path.resolve(__dirname, '../src/html'));
+        app.get('/mgr/node', (req, res, next) => {
+            console.log(req.sessionID)
+            // req.session.user = 'Guest'
+            res.render('index', {sessionID: req.sessionID, user: req.session.user, mode: 'pug'});
+            return next();
+        });
     }
     setup() {}
     clean() {}

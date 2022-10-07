@@ -551,7 +551,7 @@ var componentKit = (function ()
     }
     class IFetcher {
         static login_token() {
-            let token = $.cookie("sid");
+            let token = $.cookie("token");
 
             if (token) {
                 return token;
@@ -561,7 +561,7 @@ var componentKit = (function ()
         }
         constructor(delegate, options) {
             this.delegate = delegate;
-            this.options = { appid: '284vu86', scheme: 'http', port: 80, host: '127.0.0.1'};
+            this.options = { appid: '284vu86', scheme: 'http', port: 80, host: '127.0.0.1', route: '/octopus'};
             this.setupConnect(options);
         }
         setup({control}) {
@@ -596,6 +596,7 @@ var componentKit = (function ()
         }
         getBearerToken() {
             let token = IFetcher.login_token();
+            console.log(`token =>`, token);
             if (token) {
                 return `Bearer ${token}`;
             } else {
@@ -604,9 +605,9 @@ var componentKit = (function ()
         }
         //讀取資料夾清單
         async appSettingsDir(folder) {
-            const {host, port, appid} = this.options;
+            const {host, port, appid, route} = this.options;
             if (!folder) folder = '';
-            let path = `http://${host}:${port}/dir/${folder}`;
+            let path = `http://${host}:${port}${route}/dir/${folder}`;
             const authorization = this.getBearerToken();
             const resolve = await fetch(path, {
                 method: 'GET',
@@ -620,14 +621,14 @@ var componentKit = (function ()
         };
         //讀取檔案
         async appSettingsFile({filename, folder}) {
-            const {host, port, appid} = this.options;
+            const {host, port, appid, route} = this.options;
             if (filename) {
                 filename = `/${filename}`;
             } else {
                 filename = ""
             }
             if (!folder) folder = '';
-            let path = `http://${host}:${port}/dir/${folder}${filename}`;
+            let path = `http://${host}:${port}${route}/dir/${folder}${filename}`;
             const authorization = this.getBearerToken();
             const resolve = await fetch(path, {
                 method: 'GET',
@@ -641,14 +642,14 @@ var componentKit = (function ()
         };
         //儲存檔案
         async appSettingsSave({filename, folder}, data) {
-            const {host, port, appid} = this.options;
+            const {host, port, appid, route} = this.options;
             if (filename) {
                 filename = `/${filename}`;
             } else {
                 filename = ""
             }
-            if (!folder) folder = '';
-            let path = `http://${host}:${port}/dir/${folder}${filename}`;
+            if (!folder) folder = 'appsettings';
+            let path = `http://${host}:${port}${route}/dir/${folder}${filename}`;
             const authorization = this.getBearerToken();
             const resolve = await fetch(path, {
                 method: 'POST',
@@ -662,8 +663,8 @@ var componentKit = (function ()
             return await resolve.json();
         };
         async login({username, password}) {
-            let {host, port, scheme, appid} = this.options;
-            let path = `${scheme}://${host}:${port}/user/login`;
+            let {host, port, scheme, appid, route} = this.options;
+            let path = `${scheme}://${host}:${port}${route}/user/login`;
             const userLogin = await fetch(path, {
                 method: 'POST',
                 body: JSON.stringify({
@@ -679,9 +680,9 @@ var componentKit = (function ()
         };
 
         async logout({username}) {
-            let {host, port, scheme, appid} = this.options;
+            let {host, port, scheme, appid, route} = this.options;
 
-            let path = `${scheme}://${host}:${port}/user/logout`;
+            let path = `${scheme}://${host}:${port}${route}/user/logout`;
             const userLogout = await fetch(path, {
                 method: 'POST',
                 body: JSON.stringify({ username }),
@@ -693,8 +694,8 @@ var componentKit = (function ()
             return await userLogout.json();
         }
         async getMetadata() {
-            const {host, port, appid} = this.options;
-            let path = `http://${host}:${port}/process/sys/metadata`;
+            const {host, port, appid, route} = this.options;
+            let path = `http://${host}:${port}${route}/process/sys/metadata`;
             const authorization = this.getBearerToken();
             const resolve = await fetch(path, {
                 method: 'GET',
@@ -715,7 +716,7 @@ var componentKit = (function ()
             this.completed = null;
         }
         get isConnected() {
-            return !($("#srvConnect").is( "disabled") == true);
+            return ($("#srvConnect").attr( "disabled") == 'disabled');
         }
         get isAuthEnabled() {
             if (this.version == 'v2') {
@@ -992,7 +993,7 @@ var componentKit = (function ()
             }
         }
         async getIPFilter() {
-            console.log('getIPFilter');
+            if (this.isConnected == false) return Swal.fire({ icon: 'warning', title: 'Not connected'});
             if (this.version === "v1") {
                 this.admin.getIPFilter();
             } else {
@@ -1124,7 +1125,7 @@ var componentKit = (function ()
             $('.app-settings[name=open]').click(async () => {
                 if (!this.target) return console.log("target null");
                 const filename = this.target.find('.app-settings-dir').val();
-                let folder = '';
+                let folder = 'appsettings';
                 let id = this.target.attr('id');
                 if (id == 'tab-conf') folder = 'configuration';
                 let {result, code, message, data, error} = await this.appSettings({filename, folder});
@@ -1170,7 +1171,7 @@ var componentKit = (function ()
         }
         loginBtn(mAdapter) {
             $("#btn-logout").hide();
-            $.cookie("sid", '');
+            $.cookie("token", '');
             $("#btn-login").click(async () => {
                 $("#user_login").modal("show");
             });
@@ -1180,7 +1181,7 @@ var componentKit = (function ()
                 });
                 $("#btn-logout").hide();
                 $("#btn-login").show();
-                $.cookie("sid", '');
+                $.cookie("token", '');
                 location.reload();
             });
 
@@ -1189,6 +1190,7 @@ var componentKit = (function ()
                 //let host = document.getElementById('ipAddress').value;
                 const username = $('#username').val();
                 const password = $('#password').val();
+
                 let respond = await this.iFetchManger.login({ username, password });
 
                 if (!respond.result) {
@@ -1207,8 +1209,7 @@ var componentKit = (function ()
                     this.token = respond.data.token;
                     $("#user_login").modal("hide");
                     $("#btn-login").hide();
-                    console.log( this.token);
-                    $.cookie("sid", this.token);
+                    $.cookie("token", this.token);
                     $.cookie("username", username);
 
                     this.popup({
@@ -2786,7 +2787,9 @@ var componentKit = (function ()
             return `
             <div class="modal-header">
                 <a class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></a>
-                <h4 class="modal-title" id="modal_edit_clusterLabel">${edit ? 'Edit' : 'Insert'} Cluster</h4>
+                <h4 class="modal-title" id="modal_edit_clusterLabel">
+                    ${edit ? '<i class="fa fa-file-arrow-edit"></i> ' : '<i class="fa fa-file-arrow-up"></i> '} 
+                    ${edit ? 'Edit' : 'Insert'} Cluster</h4>
             </div>`;
         };
         createBody({pid, file, name, mxoss, args, cmd, env, tags, lookout, ats, assign2syntax, rules}) {
@@ -2944,7 +2947,7 @@ var componentKit = (function ()
             if (!value) return true;
             if (typeof value == "undefined") return true;
             if (value == "") return true;
-            return (typeof value == "object" && Object.keys(value).length == 0);
+            return (typeof value == "object" && (Object.keys(value).length == 0 || !value.pid));
         }
         insertSubmit(manager) {
             let options = this.inputSerialize();

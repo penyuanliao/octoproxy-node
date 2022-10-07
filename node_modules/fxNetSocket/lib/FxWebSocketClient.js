@@ -323,7 +323,12 @@ FxWebSocketClient.prototype.recordPing = function (client, data) {
     if (data.indexOf('"ping":') != -1) {
         let json;
         if (data.indexOf('"rtt":') != -1 && data.indexOf(',') == -1) return true;
-        json = JSON.parse(data);
+        try {
+            json = JSON.parse(data);
+        } catch (e) {
+            const NSLog = require('./FxLogger.js').getInstance();
+            NSLog.error(`recordPing() data: ${data}`, e);
+        }
         if (typeof json.ping != "number" && typeof json.rtt != "number") return false;
         const ping = client.probeResult(json);
         if (typeof data != "undefined") this.emit("ping", {ping:ping});

@@ -15,6 +15,7 @@ class RestManager extends EventEmitter {
     constructor(delegate) {
         super();
         this.delegate = delegate;
+        this.route = '';//'octopus';
         this.visitorAPI = new Set([
             '/user/login',
             '/user/logout',
@@ -47,6 +48,7 @@ class RestManager extends EventEmitter {
             allowHeaders: ['appid', 'authorization'],
             exposeHeaders: ['appid', 'authorization']
         });
+        const { route } = this;
         server.pre(cors.preflight);
         server.use(cors.actual);
         server.use(restify.plugins.acceptParser(server.acceptable));
@@ -90,42 +92,28 @@ class RestManager extends EventEmitter {
                 }
             }
         });
-        server.post('/echo/:name/:pass', function (req, res, next) {
+        server.post(`${route}/echo/:name/:passs`, function (req, res, next) {
             console.log(req.body);
             console.log(req.query);
             res.send(req.params);
             return next();
         });
         //登入驗證
-        server.post('/user/login', async (req, res, next) => {
+        server.post(`${route}/user/login`, async (req, res, next) => {
             let {username, password} = req.body;
-            let login = await this.delegate.auth.login({
-                username, password
-            })
-            if (login === false) {
-                res.send({
-                    result: false
-                });
-            } else {
-                res.send({
-                    result: true,
-                    data: {
-                        token: login
-                    }
-                });
-            }
+            res.send(await this.login({username, password}));
             return next();
         });
-        server.post('/user/logout', async (req, res, next) => {
+        server.post(`${route}/user/logout`, async (req, res, next) => {
             let { username } = req.body;
             NSLog.info(`${req.url} user: ${username}`);
             let logout = await this.delegate.auth.logout({ username });
             res.send({ result: logout });
             return next();
         })
-        server.post('/user/password', (req, res, next) => this.password(req, res, next));
+        server.post(`${route}/user/password`, (req, res, next) => this.password(req, res, next));
         //二次驗證
-        server.post('/user/2fa', async (req, res, next) => {
+        server.post(`${route}/user/2fa`, async (req, res, next) => {
             const {otp, auth} = this.delegate;
             const {authorization} = req;
             let {result, data} = await auth.jwtVerify(authorization.credentials);
@@ -149,13 +137,13 @@ class RestManager extends EventEmitter {
             }
             return next();
         });
-        server.get('/amf/config', async (req, res, next) => {
+        server.get(`${route}/amf/config`, async (req, res, next) => {
             let src = await this.delegate.manager.send({ method: "getAMFConfig" })
             res.send(src);
             return next();
         });
         // load balancing forwarding rule
-        server.get('/balancing/rule', async (req, res, next) => {
+        server.get(`${route}/balancing/rule`, async (req, res, next) => {
 
             let src = await this.delegate.manager.send({
                 method: "getLBGamePath"
@@ -163,7 +151,7 @@ class RestManager extends EventEmitter {
             res.send(src);
             return next();
         });
-        server.post('/balancing/rule', async (req, res, next) => {
+        server.post(`${route}/balancing/rule`, async (req, res, next) => {
             let data;
             let json = req.body;
             let checked = true;
@@ -188,21 +176,21 @@ class RestManager extends EventEmitter {
 
             return next();
         });
-        server.get('/process/sys/info', async (req, res, next) => {
+        server.get(`${route}/process/sys/info`, async (req, res, next) => {
             let src = await this.delegate.manager.send({
                 method: "getSysInfo"
             });
             res.send(src);
             return next();
         });
-        server.get('/process/sys/metadata', async (req, res, next) => {
+        server.get(`${route}/process/sys/metadata`, async (req, res, next) => {
             let src = await this.delegate.manager.send({
                 method: "metadata"
             });
             res.send(src);
             return next();
         });
-        server.del('/process/user/kickout', async (req, res, next) => {
+        server.del(`${route}/process/user/kickout`, async (req, res, next) => {
             let {pid, trash, params} = req.body || {};
             let src = await this.delegate.manager.send({
                 method: "kickoutToPID",
@@ -213,14 +201,14 @@ class RestManager extends EventEmitter {
             res.send(src);
             return next();
         });
-        server.get('/process/info', async (req, res, next) => {
+        server.get(`${route}/process/info`, async (req, res, next) => {
             let src = await this.delegate.manager.send({
                 method: "getServiceInfo"
             });
             res.send(src);
             return next();
         });
-        server.post('/process/info', async (req, res, next) => {
+        server.post(`${route}/process/info`, async (req, res, next) => {
             let {
                 mxoss,
                 file,
@@ -250,7 +238,7 @@ class RestManager extends EventEmitter {
             }
             return next();
         });
-        server.put('/process/info', async (req, res, next) => {
+        server.put(`${route}/process/info`, async (req, res, next) => {
             let {oAssign, nAssign, pid, options} = req.body || {};
             if (pid == 'all') {
                 pid = 0;
@@ -273,7 +261,7 @@ class RestManager extends EventEmitter {
 
             return next();
         });
-        server.patch('/process/batch/reboot', async (req, res, next) => {
+        server.patch(`${route}/process/batch/reboot`, async (req, res, next) => {
 
             let json = req.body || {};
             let delay = json.delay || 1000;
@@ -297,7 +285,7 @@ class RestManager extends EventEmitter {
             }
 
         });
-        server.post('/process/warp/tunnel', async (req, res, next) => {
+        server.post(`${route}/process/warp/tunnel`, async (req, res, next) => {
             let json = req.body || {};
             let {from, togo, that, list} = json;
             if (!from || !that) {
@@ -311,7 +299,7 @@ class RestManager extends EventEmitter {
             res.send(src);
             return next();
         });
-        server.get('/service/dashboard/info', async (req, res, next) => {
+        server.get(`${route}/service/dashboard/info`, async (req, res, next) => {
             let src = await this.delegate.manager.send({
                 method: "getDashboardInfo"
             })
@@ -322,7 +310,7 @@ class RestManager extends EventEmitter {
             }
             return next();
         });
-        server.post('/service/lockdown/mode', async (req, res, next) => {
+        server.post(`${route}/service/lockdown/mode`, async (req, res, next) => {
             let json = req.body || {};
             let src = await this.delegate.manager.send({
                 method: "lockdownMode",
@@ -335,7 +323,7 @@ class RestManager extends EventEmitter {
             }
             return next();
         });
-        server.post('/service/blocklist', async (req, res, next) => {
+        server.post(`${route}/service/blocklist`, async (req, res, next) => {
 
             const {auth} = this.delegate;
 
@@ -349,16 +337,16 @@ class RestManager extends EventEmitter {
             res.send(src);
             return next();
         });
-        server.put('/service/blocklist', async (req, res, next) => this.blocklistHandle(req, res, next));
-        server.del('/service/blocklist', async (req, res, next) => this.blocklistHandle(req, res, next));
-        server.get('/user/otp/qrcode', async (req, res, next) => {
+        server.put(`${route}/service/blocklist`, async (req, res, next) => this.blocklistHandle(req, res, next));
+        server.del(`${route}/service/blocklist`, async (req, res, next) => this.blocklistHandle(req, res, next));
+        server.get(`${route}/user/otp/qrcode`, async (req, res, next) => {
             const {otp} = this.delegate;
             const img = await otp.test();
             res.setHeader('Content-Type', 'image/png');
             res.end(img);
             return next();
         });
-        server.get('/user/login/gen/otp', async (req, res, next) => {
+        server.get(`${route}/user/login/gen/otp`, async (req, res, next) => {
             const {otp, auth} = this.delegate;
 
             const {authorization} = req;
@@ -389,7 +377,7 @@ class RestManager extends EventEmitter {
             }
             return next();
         });
-        server.get('/dir/:folder', async (req, res, next) => {
+        server.get(`${route}/dir/:folder`, async (req, res, next) => {
             let folder = (req.params.folder || 'appsettings');
             let src = await this.delegate.manager.send({
                 method: "readFiles",
@@ -407,7 +395,7 @@ class RestManager extends EventEmitter {
             res.send(src);
             return next();
         });
-        server.put('/dir', async (req, res, next) => {
+        server.put(`${route}/dir`, async (req, res, next) => {
             let folder = (req.body.folder || 'appsettings');
 
             if (!this.acceptFolder(folder)) {
@@ -426,7 +414,7 @@ class RestManager extends EventEmitter {
             res.send(src);
             return next();
         });
-        server.get('/dir/:folder/:filename', async (req, res, next) => {
+        server.get(`${route}/dir/:folder/:filename`, async (req, res, next) => {
             let folder = (req.params.folder || 'appsettings');
             let filename = this.getFilename(req.params.filename);
 
@@ -452,7 +440,7 @@ class RestManager extends EventEmitter {
             res.send(src);
             return next();
         });
-        server.post('/dir/:folder/:filename', async (req, res, next) => {
+        server.post(`${route}/dir/:folder/:filename`, async (req, res, next) => {
             let folder = (req.params.folder || 'appsettings');
             let filename = this.getFilename(req.params.filename);
             if (!filename) {
@@ -623,6 +611,21 @@ class RestManager extends EventEmitter {
         });
         res.send(src);
         return next();
+    }
+    async login({username, password}) {
+        let login = await this.delegate.auth.login(arguments[0])
+        if (login === false) {
+            return {
+                result: false
+            };
+        } else {
+            return {
+                result: true,
+                data: {
+                    token: login
+                }
+            };
+        }
     }
     clean() {
 

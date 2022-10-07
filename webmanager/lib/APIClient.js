@@ -612,20 +612,20 @@ class APIClient extends EventEmitter {
     };
     /**
      * 取消:排程
-     * @param tokenId
-     * @param id
+     * @param json.tokenId
+     * @param json.data.id
      * @return {Promise<void>}
      * @version 2.0.0
      */
-    async cancelSchedule({tokenId, id}) {
+    async cancelSchedule(json) {
         const {manager} = this;
         let params = {
             method: "cancelSchedule",
-            id
+            id: json.data.id
         };
         const {result, data} = await manager.send(params);
         let respond = {
-            tokenId,
+            tokenId: json.tokenId,
             event: "cancelSchedule",
             data,
             result

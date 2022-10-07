@@ -17,13 +17,14 @@ mixin Knob(grid, cls, chat_cls, num, text)
                         | %
             +WidgetInfo(num, text)
 mixin CreateOptions(group)
-    -   for (let i = 0; i < group.length; i++)
-        option= group[i]
-
+    -
+    each value in group
+        option= value
 
 html
     head
         meta(charset="UTF-8")
+        meta(name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no")
         title Projects Manager Console
         link(rel="stylesheet" type="text/css" href="css/chat.css")
         link(rel="stylesheet" type="text/css" href="css/normalize.css")
@@ -70,9 +71,25 @@ html
         script(type="text/javascript" src="js/componentKit.js")
         script(type="text/javascript" src="js/main.js")
         script.
-            $(document).ready(() => { });
+            $(document).ready(() => {
+                let info = {
+                    user: "#{user}",
+                    sessionID: "#{sessionID}",
+                    mode: ("#{mode}" || '')
+                }
+                console.log(info);
+                load(info);
+            });
     body
-        div(class="top-bar")
+        nav.navbar.navbar-default.no-radius
+            div.container-fluid
+                div.navbar-header
+                    a.navbar-brand(href="javascript:;")
+                        span(style="color: #555") Manager
+                        span.text-muted Server
+                ul.nav.navbar-nav
+                    li.active: a(href="javascript:;") Home
+                    li: a(href="/mgr/test") Dashboard
         div(id="wrapper" class="context-box")
             div.page-navigation
             div.right-content
@@ -101,28 +118,31 @@ html
                                     div.col-xs-3.col-sm-6
                                         small
                                             i.fa.fa-fw.fa-globe.text-curious-blue
-                                            |  Active
+                                            |  Active&nbsp;
                                         span.fa.fa-level-up
-                                            h5.m-b-0
-                                                span.it-active 0
-                                                small cnt/s
+                                        h5.m-b-0
+                                            span.it-active 0
+                                            | &nbsp;
+                                            small cnt/s
                                     div.col-xs-3.col-sm-6
                                         small
                                             i.fa.fa-fw.fa-globe.text-curious-blue
-                                            |  Passive
+                                            |  Passive&nbsp;
                                         span.fa.fa-level-down
-                                            h5.m-b-0
-                                                span.it-passive 0
-                                                small cnt/s
-
-
-
+                                        h5.m-b-0
+                                            span.it-passive 0
+                                            | &nbsp;
+                                            small cnt/s
                                 div.row
                                     div.col-xs-3.col-sm-6
                                         <!-- CurrEstab (es, close_wait) -->
                                         small
                                             i.fa.fa-fw.fa-circle.text-curious-green
                                             |  CurrEstab
+                                        h5.m-b-0
+                                            span.it-currEstab 0
+                                            | &nbsp;
+                                            small cnt/s
 
                                     div.col-xs-3.col-sm-6
                                         small
@@ -130,7 +150,7 @@ html
                                             |  RetransRate
                                         h5.m-b-0
                                             span.it-retransRate 0.0
-                                            small %
+                                            small &nbsp;%
 
                             div#node-devices-Monitor.block-content
                                 h5 Interface Devices
@@ -144,7 +164,8 @@ html
                                         | &nbsp;
                                         span.receive 100
                                         | &nbsp;
-                                        span.r-unit KBs
+                                        span.r-unit kBs
+                                        | &nbsp;
                                         span.fa.fa-level-up.text-curious-red
                                         | &nbsp;
                                         span.transmit 20
@@ -160,7 +181,56 @@ html
                                 h2
                                     span.fa.fa-wifi
                                     |  Tools
+                                ul.buttons
+                                    li: a.block-toggle(href="javascript:;"): span.fa.fa-chevron-down
 
+                            div.block-content.list
+                                ul.nav.nav-tabs
+                                    li(role="presentation" data-toggle="tab" class="active")
+                                        a(data-toggle="tab" href="#home")
+                                            span.glyphicon.glyphicon-check(aria-hidden="true")
+                                            |  Game Test
+                                    li(role="presentation")
+                                        a(data-toggle="tab" href="#deny" aria-hidden="true")
+                                            span.glyphicon.glyphicon-globe  IP blocking
+                                <!-- Tab panes -->
+                                div.tab-content(style="margin-left: 4px;")
+                                    div#home.tab-pane.active(role="tabpanel")
+                                        div
+                                            div#test-success.fa.fa-check-circle.text-success(hidden style="font-size: 14px;"): span Connection Success!!
+                                            div#test-failed.fa.fa-times-circle.text-danger(hidden style="font-size: 14px;"): span Connection Failed!!
+                                        div
+                                            div.form-group
+                                                label(for="host-key") + Url testing:
+                                                br
+                                                a#scheme-key ws
+                                                | ://
+                                                a#host-key(href="javascript:;") 127.0.0.1:8000
+                                                | /
+                                                a#f5-key(href="javascript:;") fxLive
+                                                | /fxLB?gameType=
+                                                a#game-key(href="javascript:;") test
+                                            div.form-group
+                                                label(for="sid-key") (options) SID:
+                                                a#sid-key(href="javascript:;") Identity
+                                            div#btn-testing-start.btn.btn-default start
+                                            div#btn-testing-stop.btn.btn-default stop
+                                        div#test-log.row
+                                            h5.col-xs-12 Console
+                                            <!-- Test log -->
+                                            div.col-xs-12.testing-console
+
+                                    <!-- BlockList -->
+                                    div#deny.tab-pane
+                                        table#ip-address-blocking.table.table-bordered
+                                            thead: tr
+                                                th.t-ssmall #
+                                                th.t-medium IP
+                                                th.t-ssmall 刪除
+                                            tbody
+                                        button#btn-blocking-load.btn.btn-default: span.fa.fa-refresh
+                                        input#input-blocking(style="width: 110px;")
+                                        button#btn-blocking.btn.btn-default join
                     div#wrapper-content.col-md-10.col-lg-8
                         div#process-content
                             div.block
@@ -176,26 +246,26 @@ html
                                                     input#proc-filter.form-control(type="text" placeholder="Search")
 
                                         li
-                                            a#btn-login(title="Login" href="#") Login
+                                            a#btn-login(title="Login" href="javascript:;") Login
                                         li
-                                            a#btn-logout(title="Logout" href="#" style="display: none;")
+                                            a#btn-logout(title="Logout" href="javascript:;" style="display: none;")
                                                 span.fa
                                                 | Logout
                                         li
-                                            a#btn-batch(href="#")
+                                            a#btn-batch(href="javascript:;")
                                                 span.fa.fa-tasks
                                         li
-                                            a#f2dbInfo(href="#")
+                                            a#f2dbInfo(href="javascript:;")
                                                 span.fa.fa-file-lines
                                         li
-                                            a.block-refresh(href="#")
+                                            a.block-refresh(href="javascript:;")
                                                 span.pro-refresh.fa.fa-refresh.refresh-anim.paused-animation
                                                 span.project-duration.fa(style="padding-left: 2px;") 5
                                         li
-                                            a.block-toggle(href="#")
+                                            a.block-toggle(href="javascript:;")
                                                 span.fa.fa-chevron-down
                                         li
-                                            a#pref-settings(href="#")
+                                            a#pref-settings(href="javascript:;")
                                                 span.fa.fa-cog.fa-log
                                 div#node-service.block-content.list
                                     div.progress-tmp.list-item(hidden)
@@ -224,7 +294,7 @@ html
                                                     | &nbsp;
                                                     i.pro-lock.fa.fa-lock
                                                 p.text-muted-bold
-                                                    a.pro-assign(href="#" data-toggle="tooltip") octoproxy
+                                                    a.pro-assign(href="javascript:;" data-toggle="tooltip") octoproxy
                                             div.list-item-container.col-sm-1.col-xs-12
                                                 span.fa.fa-user
                                                 span.pro-count.text(style="font-weight: bolder" data-toggle="tooltip" data-placement="top" title="0")  10000
@@ -248,7 +318,7 @@ html
                                                 p
                                                     span
                                                         b LogLevel&nbsp;
-                                                    a.pro-log-level(href="#" data-type="select" data-placement="right") Error
+                                                    a.pro-log-level(href="javascript:;" data-type="select" data-placement="right") Error
                                                 p
                                                     span.fa-solid.fa-database &nbsp;
                                                     span.pro-db.text-muted NONE
@@ -298,11 +368,14 @@ html
                                             <!-- 分頁 -->
                                     div(style="width: 200px; display: inline;float: left; margin-right: 4px;")
                                         select#ipAddress(style="width: 200px;height: 34px; overflow: hidden; border: 1px solid #ccc;")
+                                    div.btn-group(role="group" aria-label="ctrl-buttons")
                                     button#srvConnect.btn.btn-danger.btn-weight Connect
                                     button#loadList.btn.btn-default.btn-weight
                                         span.fa.fa-refresh.refresh-anim.paused-animation
                                         | &nbsp;Refresh
-                                    button#btn-insert-cluster.btn.btn-default.btn-weight Insert
+                                    button#btn-insert-cluster.btn.btn-default.btn-weight
+                                        span.fa.fa-plus
+                                        | &nbsp;Insert
                                     button#sysInfoBtn.btn.btn-default.btn-weight CoreInfo
                                     button#btn-mgmtReLoad.btn.btn-default.btn-weight(style="visibility:hidden;") mgmtReLoad
                         <!-- Load Balance Panel -->
@@ -314,10 +387,10 @@ html
                                         |  Load Balance
                                     ul.buttons
                                         li
-                                            a.block-refresh(href="#")
+                                            a.block-refresh(href="javascript:;")
                                                 span.fa.fa-refresh
                                         li
-                                            a.block-toggle(href="#")
+                                            a.block-toggle(href="javascript:;")
                                                 span.fa.fa-chevron-down
                                 div.block-content.list
                                 div.block-footer
@@ -339,10 +412,10 @@ html
                                         | &nbsp;ServerAPI Config
                                     ul.buttons
                                         li
-                                            a.block-refresh(href="#")
+                                            a.block-refresh(href="javascript:;")
                                                 span.fa.fa-refresh
                                         li
-                                            a.block-toggle(href="#")
+                                            a.block-toggle(href="javascript:;")
                                                 span.fa.fa-chevron-down
                                 div.block-content.list
                                 div.block-footer
@@ -363,9 +436,9 @@ html
                                         span.fa.fa-cubes
                                         | &nbsp;Settings
                                     ul.buttons
-                                        li: a#btn-insert-schedule.block-plus(href="#"): span.fa.fa-calendar-plus-o
-                                        li: a.block-refresh(href="#"): span.fa.fa-refresh
-                                        li: a.block-toggle(href="#"): span.fa.fa-chevron-down
+                                        li: a#btn-insert-schedule.block-plus(href="javascript:;"): span.fa.fa-calendar-plus-o
+                                        li: a.block-refresh(href="javascript:;"): span.fa.fa-refresh
+                                        li: a.block-toggle(href="javascript:;"): span.fa.fa-chevron-down
                                 div#sch-pan-tabs.block-content.list(role="tablist")
                                     ul.nav.nav-tabs
                                         li.active: a(data-toggle="tab" href="#tab-task" aria-hidden="true")
@@ -450,8 +523,8 @@ html
                                         span.fa.fa-code-fork
                                         | &nbsp;Connection IP Address
                                     ul.buttons
-                                        li: a.block-refresh(href="#"): span.fa.fa-refresh
-                                        li: a.block-toggle(href="#"): span.fa.fa-chevron-down
+                                        li: a.block-refresh(href="javascript:;"): span.fa.fa-refresh
+                                        li: a.block-toggle(href="javascript:;"): span.fa.fa-chevron-down
                                 div.block-content.list
                                     div.dataTables_wrapper
                                         table#srv-connect.table.dataTable.table-bordered.table-striped.sortable_simple(style="width: 100%" role="grid")
@@ -526,6 +599,7 @@ html
                                 input#consoleReload(type="checkbox")
                                 | &nbsp;Show mgmt reload
                             label Rows per page
+                            |
                             select#rowsPerPage
                                 +CreateOptions([25, 50, 75, 100, 200])
 
@@ -543,8 +617,8 @@ html
                         form(style="min-height: 100px;")
                             div(style="width: auto; text-align: center")
                                 h1(style="font-size: xx-large; margin-top: 20px; margin-bottom: 60px;")
-                                    span.text-muted Admin
                                     | Manager
+                                    span.text-muted Account
                             div.form-group: div.input-group.input-group-lg
                                 span.input-group-addon: span.glyphicon.glyphicon-user(aria-hidden="true")
                                 input#username.form-control.input-lg(style="height: 46px;" type="text" name="username" placeholder="請輸入帳號")
@@ -554,7 +628,6 @@ html
                             div#user_message(style="height: 60px;")
                     div.modal-footer
                         button#btn-login-submit.btn.btn-success(value="Login" style="width: 200px; height: 46px; font-size: large;") Login
-
         <!-- schedule -->
         div#schedule_edit.modal.fade(tabindex="-1" role="dialog")
             div.modal-backdrop.fade.in

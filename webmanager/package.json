@@ -17,6 +17,10 @@
     "restify-cors-middleware2": "^2.1.2",
     "restify-errors": "^8.0.2",
     "sqlite3": "^5.1.1",
-    "ws": "^8.8.1"
+    "ws": "^8.8.1",
+    "http-proxy-middleware": "^2.0.6"
+  },
+  "devDependencies": {
+
   }
 }

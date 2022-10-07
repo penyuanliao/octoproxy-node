@@ -4760,3 +4760,7 @@ button {
     border-color: #46b8da;
     color: white;
 }
+.no-radius {
+    border-radius: unset;
+    margin-bottom: 0px;
+}

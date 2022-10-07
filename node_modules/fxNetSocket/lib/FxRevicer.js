@@ -385,7 +385,7 @@ FxRevicer.prototype.parserSocket = function (cb) {
     let buf = this.reader.read(this.reader.bufLen);
     this.emit("data", buf);
     if (typeof this.chunkBuffer == "undefined" || this.chunkBuffer.length <= 0) {
-        this.chunkBuffer = Buffer.from(chunk);
+        this.chunkBuffer = Buffer.from(buf);
     } else {
         this.chunkBuffer = Buffer.concat([this.chunkBuffer, buf], this.chunkBuffer.length + buf.length);
     }

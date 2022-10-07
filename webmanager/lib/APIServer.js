@@ -33,8 +33,13 @@ class APIServer extends EventEmitter {
         this.auth        = new Auth();
         this.otp         = new OTP();
         this.wsServer    = this.createTCPServer({listen, port: wpc.ws.port});
-        this.restManager = this.createRestServer({listen, port: wpc.rest.port});
-        this.httpServer  = this.createHTTPServer({listen, port: wpc.http.port});
+        this.restManager = this.createRestServer({
+            listen: (wpc.rest.listen ? true : listen),
+            port: wpc.rest.port});
+        this.httpServer  = this.createHTTPServer({
+            listen: (wpc.http.listen ? true : listen),
+            port: wpc.http.port});
+        this.proxy       = this.createWebProxyServer();
         this.manager     = new RemoteClient(); //連線到服務窗口
         this.logServer   = this.createLiveLogServer(wpc.logging.port);
         if (this.isWorker) this.setupIPCBridge();
@@ -79,12 +84,24 @@ class APIServer extends EventEmitter {
         //     NSLog.log("info",'Web Service start listening port %s.', port);
         // });
         const WebManager = require('./WebManager.js');
-        const web = new WebManager({delegate: this});
+        const web = new WebManager({delegate: this, listen, port});
         web.on('listen', (element) => {
 
         });
         return web;
     };
+    createWebProxyServer() {
+        const WebMiddleware = require('./WebMiddleware.js');
+        return new WebMiddleware()
+            .start(this.createWebProxyRouters());
+    }
+    createWebProxyRouters() {
+        const { wpc } = this.configure;
+        let routers = [];
+        routers.push(wpc.http);
+        routers.push(wpc.rest);
+        return routers;
+    }
     /**
      * HTTP WEB API
      * @param listen
@@ -190,14 +207,10 @@ class APIServer extends EventEmitter {
      */
     systemMessage({evt, id, data, mode, params}, handle) {
         let server;
-        if (mode === 'http') {
-            server = this.restManager.getServer();
-        }
-        else if (mode === 'web') {
-            server = this.httpServer.getServer();
-        }
-        else {
-            server = this.wsServer;
+
+        if (mode) {
+            server = this.serverRouter(mode);
+            console.log(`connect => ${mode}`, server.constructor.name);
         }
         if (evt === 'c_init2') {
             let socket = new net.Socket({
@@ -241,6 +254,15 @@ class APIServer extends EventEmitter {
             NSLog.log("info",'out of hand. dismiss message [%s]', evt);
         }
     };
+    serverRouter(mode) {
+        if (mode == 'http' || mode == 'web') {
+            if (this.configure.wpc.proxyMode) return this.proxy.getServer();
+            if (mode === 'http') return this.restManager.getServer();
+            if (mode === 'web') return this.httpServer.getServer();
+        } else {
+            return this.wsServer;
+        }
+    }
     /**
      * 自訂服務事件
      * @param {String} action 事件

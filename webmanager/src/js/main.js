@@ -1,6 +1,5 @@
 var delIPDenyClicked
-window.onload = load;
-function load() {
+function load(info) {
     const protocol  = "admin.op"; //'admin.op.aes';
     let version = "v1";
     let firstConnect = false;
@@ -85,7 +84,7 @@ function load() {
         .refresh();
 
     let viewCtrl = new IViewControl({ alert })
-        .loginBtn(mAdapter)
+        .loginBtn(mAdapter, info)
         .f2dbInfo(proTable);
     //init hidden
     var projects =  $("#node-service").parents(".block").first();
