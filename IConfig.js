@@ -123,13 +123,35 @@ class IConfig {
              * 服務對外restful Port
              * @type {number}
              */
-            rest: {port: 10083},
+            rest: {
+
+                listen: true,
+
+                port: 10083,
+
+                router: ['/octopus'],
+
+                pathRewrite: function (pathname, req) {
+                    return pathname.replace('/octopus', '/');
+                }
+            },
             /**
              * 服務對外http Port
              * @type {number}
              */
-            http: {port: 10084},
-            udp: {port: 8080}
+            http: {
+                listen: true,
+
+                port: 10084,
+
+                router: ['/mgr']
+            },
+
+            udp: {port: 8080},
+
+            debug: false,
+
+            proxyMode: true
         }
 
         /**
@@ -274,7 +296,7 @@ class IConfig {
                 accounts: [ ...accounts.values() ]
             }
         }
-    }
+    };
 }
 
 module.exports = exports = IConfig;
