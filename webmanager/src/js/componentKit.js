@@ -665,11 +665,12 @@ var componentKit = (function ()
         async login({username, password}) {
             let {host, port, scheme, appid, route} = this.options;
             let path = `${scheme}://${host}:${port}${route}/user/login`;
+            let aes = new IEncoder();
             const userLogin = await fetch(path, {
                 method: 'POST',
                 body: JSON.stringify({
                     username,
-                    password
+                    password: aes.encryption(password)
                 }),
                 headers: {
                     'Content-Type': 'application/json',
@@ -694,8 +695,8 @@ var componentKit = (function ()
             return await userLogout.json();
         }
         async getMetadata() {
-            const {host, port, appid, route} = this.options;
-            let path = `http://${host}:${port}${route}/process/sys/metadata`;
+            const {host, port, scheme, appid, route} = this.options;
+            let path = `${scheme}://${host}:${port}${route}/process/sys/metadata`;
             const authorization = this.getBearerToken();
             const resolve = await fetch(path, {
                 method: 'GET',
@@ -1182,7 +1183,7 @@ var componentKit = (function ()
                 $("#btn-logout").hide();
                 $("#btn-login").show();
                 $.cookie("token", '');
-                location.reload();
+                // location.reload();
             });
 
             $("#btn-login-submit").click(async () => {
@@ -3539,21 +3540,20 @@ var componentKit = (function ()
             panel.find(".btn-insert").click(() => this.insert());
         };
     }
-    class ICrypto {
-        constructor() {
-            this.key = CryptoJS.enc.Utf8.parse("2ccf858554a5f119f33516b514efa9d2");  //十六位十六進制數作為密鑰
-            this.iv = CryptoJS.enc.Utf8.parse('c2e9d24aa29d125d');   //十六位十六進制數作為密鑰偏移量
-
+    class IEncoder {
+        constructor(key, iv) {
+            this.key = CryptoJS.enc.Utf8.parse(key || "2ccf858554a5f119f33516b514efa9d2");  //十六位十六進制數作為密鑰
+            this.iv = CryptoJS.enc.Utf8.parse(iv || 'c2e9d24aa29d125d');   //十六位十六進制數作為密鑰偏移量
         }
         //加密方法
-        Encrypt(word) {
+        encryption(word) {
             const { key, iv } = this;
             const srcs = CryptoJS.enc.Utf8.parse(word);
             const encrypted = CryptoJS.AES.encrypt(srcs, key, { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
-            return encrypted.ciphertext.toString().toUpperCase();
+            return encrypted.ciphertext.toString();
         }
         //解密方法
-        Decrypt(word) {
+        decryption(word) {
             const { key, iv } = this;
             let encryptedHexStr = CryptoJS.enc.Hex.parse(word);
             let srcs = CryptoJS.enc.Base64.stringify(encryptedHexStr);
@@ -3672,7 +3672,7 @@ var componentKit = (function ()
         IFetcher,
         IEditTables,
         IEditTablesDB,
-        ICrypto,
+        IEncoder,
         ITesting
     }
 })();
