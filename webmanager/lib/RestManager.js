@@ -56,7 +56,7 @@ class RestManager extends EventEmitter {
         server.use(restify.plugins.bodyParser());
         server.use(restify.plugins.authorizationParser()); // header authorization parser
         server.use(async (req, res, next) => {
-            res.setHeader('Access-Control-Allow-Origin', "*")
+            res.setHeader('Access-Control-Allow-Origin', "*");
             if (this.visitorAPI.has(req.url)) return next();
 
             let auth = await this.verifyAuth(req.authorization);
@@ -92,6 +92,13 @@ class RestManager extends EventEmitter {
                 }
             }
         });
+        server.get(`${route}/version`, function (req, res, next) {
+            res.send({
+                result: true,
+                version: this.version
+            });
+            return next();
+        })
         server.post(`${route}/echo/:name/:passs`, function (req, res, next) {
             console.log(req.body);
             console.log(req.query);
@@ -101,7 +108,14 @@ class RestManager extends EventEmitter {
         //登入驗證
         server.post(`${route}/user/login`, async (req, res, next) => {
             let {username, password} = req.body;
-            res.send(await this.login({username, password}));
+            let sessionID = req.header('proxy-session-id');
+            let session = await this.delegate.httpServer.getSession(sessionID);
+            let user = await this.login({username, password});
+            if (user.result) {
+                session.user = username;
+                await this.delegate.httpServer.setSession(sessionID, session);
+            }
+            res.send(user);
             return next();
         });
         server.post(`${route}/user/logout`, async (req, res, next) => {

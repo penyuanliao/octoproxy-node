@@ -18,6 +18,10 @@ class Auth extends EventEmitter {
         this.enabled = false;
         this.db = new ManagerDB(process.cwd());
         this.expiry = Math.floor(Date.now() / 1000) + (60 * 60);
+        this.aes = {
+            key: '2ccf858554a5f119f33516b514efa9d2',
+            iv: 'c2e9d24aa29d125d'
+        };
         this.init();
     }
 
@@ -92,7 +96,7 @@ class Auth extends EventEmitter {
      * @return {Promise<*|boolean>}
      */
     async login({username, password}) {
-
+        password = this.decryption(password, this.aes);
         let {valid, user, twoFactor} = await this.verify({username, password});
 
         if (valid) {
@@ -105,7 +109,10 @@ class Auth extends EventEmitter {
             const options = {};
             let token = jwt.sign(payload, this.secret, options);
             await this.db.flushToken({token, username}); //刷新
-            return token;
+            return {
+                payload,
+                token
+            };
         }
         return false;
     };
@@ -202,6 +209,32 @@ class Auth extends EventEmitter {
     };
     async getPermission(username) {
         return await this.db.getPermission(username);
+    };
+    encryption(data, {key, iv}) {
+        if (typeof data != 'string') data = JSON.stringify(data);
+        iv = iv || "";
+        if (typeof key == 'undefined') key = this.aes.key;
+        let clearEncoding = 'utf8';
+        let cipherEncoding = 'hex';
+        let cipherChunks = [];
+        let cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+        cipher.setAutoPadding(true);
+        cipherChunks.push(cipher.update(data, clearEncoding, cipherEncoding));
+        cipherChunks.push(cipher.final(cipherEncoding));
+        return cipherChunks.join('');
+    };
+    decryption(data, {key, iv}) {
+        if (!data) return "";
+        iv = iv || "";
+        if (typeof key == 'undefined') key = this.aes.key;
+        let clearEncoding = 'utf8';
+        let cipherEncoding = 'hex';
+        let cipherChunks = [];
+        let decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+        decipher.setAutoPadding(true);
+        cipherChunks.push(decipher.update(data, cipherEncoding, clearEncoding));
+        cipherChunks.push(decipher.final(clearEncoding));
+        return cipherChunks.join('');
     };
 }
 module.exports = exports = Auth;

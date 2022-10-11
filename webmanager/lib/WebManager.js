@@ -15,6 +15,7 @@ class WebManager extends EventEmitter {
     constructor({delegate, listen, port}) {
         super();
         this.delegate = delegate;
+        this.store = new session.MemoryStore();
         this.app = this.createHttpServer();
         this.server = this.listen({ listen, port });
     }
@@ -48,6 +49,7 @@ class WebManager extends EventEmitter {
             next();
         });
         app.use(session({
+            store: this.store,
             secret: 'sidonia_shizuka',
             name: 'user', // optional
             saveUninitialized: false,
@@ -86,12 +88,26 @@ class WebManager extends EventEmitter {
         app.set('view engine', 'pug');
         app.set('views', Path.resolve(__dirname, '../src/html'));
         app.get('/mgr/node', (req, res, next) => {
-            console.log(req.sessionID)
-            // req.session.user = 'Guest'
+            if (!req.session.user) req.session.user = 'Guest';
+            // console.log(`${req.sessionID} => req.session.user: ${req.session.user}`);
             res.render('index', {sessionID: req.sessionID, user: req.session.user, mode: 'pug'});
             return next();
         });
     }
+    getSession(sessionID) {
+        return new Promise((resolve) => {
+            let { store } = this;
+            store.get(sessionID, (err, sess) => resolve(sess));
+        });
+    };
+    setSession(sessionID, session) {
+        return new Promise((resolve) => {
+            let { store } = this;
+            store.set(sessionID, session, (err, sess) => {
+                resolve(sess)
+            });
+        })
+    };
     setup() {}
     clean() {}
     release() {}

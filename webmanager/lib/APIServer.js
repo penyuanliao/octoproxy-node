@@ -92,7 +92,7 @@ class APIServer extends EventEmitter {
     };
     createWebProxyServer() {
         const WebMiddleware = require('./WebMiddleware.js');
-        return new WebMiddleware()
+        return new WebMiddleware(this.httpServer.store)
             .start(this.createWebProxyRouters());
     }
     createWebProxyRouters() {
@@ -209,8 +209,7 @@ class APIServer extends EventEmitter {
         let server;
 
         if (mode) {
-            server = this.serverRouter(mode);
-            console.log(`connect => ${mode}`, server.constructor.name);
+            server = this.targetServer(mode);
         }
         if (evt === 'c_init2') {
             let socket = new net.Socket({
@@ -254,7 +253,7 @@ class APIServer extends EventEmitter {
             NSLog.log("info",'out of hand. dismiss message [%s]', evt);
         }
     };
-    serverRouter(mode) {
+    targetServer(mode) {
         if (mode == 'http' || mode == 'web') {
             if (this.configure.wpc.proxyMode) return this.proxy.getServer();
             if (mode === 'http') return this.restManager.getServer();
