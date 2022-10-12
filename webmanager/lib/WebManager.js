@@ -90,7 +90,8 @@ class WebManager extends EventEmitter {
         app.get('/mgr/node', (req, res, next) => {
             if (!req.session.user) req.session.user = 'Guest';
             // console.log(`${req.sessionID} => req.session.user: ${req.session.user}`);
-            res.render('index', {sessionID: req.sessionID, user: req.session.user, mode: 'pug'});
+            let {token} = req.session;
+            res.render('index', {user: req.session.user, mode: 'pug'});
             return next();
         });
     }

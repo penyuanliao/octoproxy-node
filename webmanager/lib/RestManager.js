@@ -14,6 +14,7 @@ const corsMiddleware = require('restify-cors-middleware2');
 class RestManager extends EventEmitter {
     constructor(delegate) {
         super();
+        this.version = '2.0.1';
         this.delegate = delegate;
         this.route = '';//'octopus';
         this.visitorAPI = new Set([
@@ -40,7 +41,7 @@ class RestManager extends EventEmitter {
     createAPIServer() {
         const server = restify.createServer({
             name: 'manager.api',
-            version: '1.0.0'
+            version: this.version
         });
         const cors = corsMiddleware({
             preflightMaxAge: 5, //Optional
@@ -92,10 +93,11 @@ class RestManager extends EventEmitter {
                 }
             }
         });
-        server.get(`${route}/version`, function (req, res, next) {
+        server.get(`${route}/version`, (req, res, next) => {
             res.send({
                 result: true,
-                version: this.version
+                version: this.version,
+                node: process.versions.node
             });
             return next();
         })

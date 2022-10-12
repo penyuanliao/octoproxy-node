@@ -12,6 +12,31 @@ var componentKit = (function ()
                 version: '',
                 value: ''
             };
+            this.tmp = this.cookie;
+            this.change = null;
+        }
+        get cookie() {
+            let value;
+            let str = $.cookie(this.id);
+            try {
+                if (str) {
+                    value = JSON.parse(str);
+                    return value;
+                } else {
+                    return;
+                }
+            } catch (e) {
+                return str;
+            }
+        };
+        set cookie(value) {
+            let str;
+            if (typeof value == "object") {
+                str = JSON.stringify(value);
+            } else {
+                str = value;
+            }
+            $.cookie(this.id, str);
         }
         get selected() {
             // return document.getElementById(this.id).value.split(":")[0];
@@ -19,39 +44,59 @@ var componentKit = (function ()
         }
         set selected({id, title}) {
             this.choose.value = id;
-            this.choose.title = title;
-            console.log(`value -> `, this.choose);
+            this.choose.version = title;
+            if (this.change && title != 'v2') {
+                this.change(this.choose).then((data) => {
+                    this.choose.value = data.value;
+                    this.choose.version = data.version || "v1";
+
+                    this.cookie = data;
+                })
+            } else {
+                this.cookie = this.choose;
+            }
         }
         get version() {
-            return this.choose.title;
+            return this.choose.version;
         }
         get chose() {
-            return (typeof $.cookie(this.id) != "undefined");
+            return (typeof this.cookie != "undefined");
         }
         create(selectOptions) {
-            let { iSelect, id } = this;
+            let { iSelect } = this;
             let customize = true;
-            let cookie = $.cookie(id);
+            let cookie = this.cookie;
             let el;
             for (let [cls, {label, data}] of selectOptions.entries()) {
                 el = iSelect.append(this.createOptgroup(cls, label));
                 data.forEach((item) => {
                     let op = new Option(item[0], item[1], false);
                     op.title = item[2] || "v1";
+                    if (typeof cookie == "string") {
+                        if (item[1] == cookie) customize = false;
+                    } else {
+                        if (item[1] == cookie.value) {
+                            op.title = cookie.version;
+                            customize = false;
+                        }
+                    }
                     el.append(op);
-                    if (item[1] == cookie) customize = false;
                 })
             }
             if (this.chose && customize) {
-                this.addOption($.cookie(id));
+                if (typeof cookie == "string") {
+                    this.addOption(cookie);
+                } else {
+                    this.addOption(cookie.value, cookie.version);
+                }
             }
             return this;
         }
-        addOption(value) {
+        addOption(value, version) {
             let { iSelect } = this;
             let el = iSelect.append(this.createOptgroup('Customize', 'Customize'));
             let op = new Option(value, value, false);
-            op.title = 'v1';
+            op.title = (version || 'v1');
             el.append(op);
             return this;
         };
@@ -59,20 +104,32 @@ var componentKit = (function ()
             return `<optgroup class="${cls}" label="${label}"></optgroup>`
         };
         load() {
-            let { iSelect, id } = this;
+            let { iSelect } = this;
             iSelect.select2({tags: true}).on('select2:select', (e) => {
-                var data = e.params.data;
-                var videoSrv = (data.text.indexOf("HK") != -1 || data.text.indexOf("TPE") != -1);
-                $.cookie("videoSrv", videoSrv);
-                this.selected = data;
-                $.cookie(id, data.id);
+                let input = e.params.data;
+                let text = (input.id || '');
+                let [id, arg2] = text.split("#");
+                let title = (input.title || arg2) || 'v1';
+                this.selected = {
+                    id,
+                    title
+                };
             });
             if (this.chose) {
-                iSelect.val($.cookie(id)).change();
+                let cookie = this.cookie;
+                if (typeof cookie == "string") {
+                    iSelect.val(cookie).change();
+                } else {
+                    iSelect.val(cookie.value).change();
+                }
                 this.selected = iSelect.select2('data')[0];
             }
             return this;
         };
+        onDidChange(cb) {
+            this.change = cb;
+            return this;
+        }
     }
     class IDispatch {
         constructor () {
@@ -85,7 +142,7 @@ var componentKit = (function ()
             this._listeners[type].push(listener);
         }
         dispatchEvent(event, data) {
-            if (typeof event == "string"){
+            if (typeof event == "string") {
                 event = { type: event };
             }
             if (!event.target){
@@ -99,7 +156,7 @@ var componentKit = (function ()
             if (this._listeners[event.type] instanceof Array){
                 var listeners = this._listeners[event.type];
                 for (var i=0, len=listeners.length; i < len; i++){
-                    listeners[i].call(this, event);
+                    listeners[i].call(this, event, data);
                 }
             }
         }
@@ -133,14 +190,14 @@ var componentKit = (function ()
             this.__types    = this.__enums({});
             this.status     = this.StatusTypes.unknown;
         };
-        static regularIPv4(input) {
-            let accept = input.match(/^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g);
-            if (accept != null) {
-                return accept.toString();
-            } else {
-                return '';
-            }
-        }
+        // static regularIPv4(input) {
+        //     let accept = input.match(/^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g);
+        //     if (accept != null) {
+        //         return accept.toString();
+        //     } else {
+        //         return '';
+        //     }
+        // }
         /**
          *
          * @param types
@@ -198,7 +255,7 @@ var componentKit = (function ()
                     resolve(false);
                     this.onClosed(err);
                 }
-                ws.onerror = (err) => {
+                ws.onerror = () => {
                     resolve(false);
                 }
                 ws.onmessage = this.onMessage.bind(this);
@@ -275,13 +332,14 @@ var componentKit = (function ()
         };
         async start() {
             let res = await this.createConnect();
+            let btn = $("#srvConnect");
             if (res == false) {
-                $("#srvConnect").attr('class', 'btn btn-danger');
-                $("#srvConnect").prop( "disabled", false );
+                btn.attr('class', 'btn btn-danger');
+                btn.prop( "disabled", false );
                 return false;
             } else {
-                $("#srvConnect").attr('class', 'btn btn-success');
-                $("#srvConnect").prop( "disabled", true );
+                btn.attr('class', 'btn btn-success');
+                btn.prop( "disabled", true );
                 this.ws = res;
                 return true;
             }
@@ -590,6 +648,27 @@ var componentKit = (function ()
                     break;
 
             }
+        };
+        async getVersion() {
+            const {host, port, scheme, appid, route} = this.options;
+            let path = `${scheme}://${host}:${port}${route}/version`;
+            const authorization = this.getBearerToken();
+            const resolve = await fetch(path, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    appid: appid,
+                    authorization
+                }
+            }).catch(() => {
+                return false;
+            });
+            if (resolve === false) {
+                return {result: false};
+            } else {
+                return await resolve.json();
+            }
+
         }
         getServiceInfo() {
 
@@ -1050,9 +1129,10 @@ var componentKit = (function ()
             this.token = null;
             this.delegate = delegate;
             this.infoSample = undefined;
+            let [host, port] = $(location).attr('host');
             this.iFetchManger = new IFetcher(this, {
-                host: "127.0.0.1",
-                port: 8000,
+                host: host || "127.0.0.1",
+                port: port || 8000,
                 appid: '284vu86'
             });
             this.target = null;
@@ -1235,6 +1315,9 @@ var componentKit = (function ()
         setOptions({host, port}) {
             this.iFetchManger.setupConnect({host, port});
         };
+        async version() {
+            return await this.iFetchManger.getVersion();
+        }
         async appSettingsFolder(folder) {
             return await this.iFetchManger.appSettingsDir(folder);
         }

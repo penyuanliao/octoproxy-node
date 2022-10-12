@@ -132,7 +132,7 @@ class IConfig {
                 router: ['/octopus'],
 
                 pathRewrite: function (pathname, req) {
-                    return pathname.replace('/octopus', '/');
+                    return pathname.replace('/octopus', '');
                 }
             },
             /**
@@ -146,8 +146,12 @@ class IConfig {
 
                 router: ['/mgr']
             },
-
-            udp: {port: 8080},
+            /**
+             *
+             */
+            udp: {
+                port: 8080
+            },
 
             debug: false,
 

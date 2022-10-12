@@ -73,7 +73,16 @@ function load(info) {
     //IP選單
     let addrSelect = new ISelect2('ipAddress')
         .create(selectOptions)
-        .load();
+        .load()
+        .onDidChange(async ({value, version}) => {
+            let [host, port] = value.split(":");
+            viewCtrl.setOptions({host, port: (port || 80)});
+            let data = await viewCtrl.version();
+            if (data.result) {
+                version = 'v2';
+            }
+            return {value, version};
+        });
     let proTable = new IDataTable(this)
         .create('#process-content')
         .filterButton($("#proc-filter"))

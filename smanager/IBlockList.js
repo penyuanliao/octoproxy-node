@@ -18,15 +18,17 @@ class IBlockList extends events.EventEmitter {
         if (this.blockList) {
             return this.blockList.check(address, type);
         } else {
-            let { enabled, startTime, endTime} = this.deny[address];
+            if (!this.deny[address]) return false;
+            let { enabled, startTime, endTime} = (this.deny[address]);
             if (endTime && ((startTime + endTime) - Date.now() < 0)) {
-
+                return false;
             }
             return enabled;
         }
     };
     create(deny) {
         let blockList = this.setup();
+        if (!blockList) return false;
         let keys = Object.keys(deny);
         const ipVersion = ['ipv4', 'ipv6'];
         for (let address of keys) {
@@ -34,7 +36,6 @@ class IBlockList extends events.EventEmitter {
             if (!enabled) continue;
             if (endTime && ((startTime + endTime) - Date.now() < 0)) continue;
             if (ipVersion.indexOf(type) == -1) type = ipVersion[0];
-            console.log(subnet);
             if (subnet) {
                 if (type == 'ipv4' && subnet >= 0 && subnet <= 32) {
                     blockList.addSubnet(address, subnet, type);
