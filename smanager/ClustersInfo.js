@@ -52,7 +52,8 @@ class ClustersInfo extends EventEmitter {
         if (lb) services.push(lb);
         if (services.length != 0) {
             services[0].count = this.octoProxyCount;
-            this.info = this.info.concat(services, trash);
+            services[0].payload = Math.max(this.octoProxyCount, services[0].count);
+            this.info = services.concat(trash);
             this.emit("refresh", this.info);
         }
     }
@@ -80,7 +81,8 @@ class ClustersInfo extends EventEmitter {
             "lv": NSLog.level,
             "uptime": this.uptime,
             "cpuUsage": this.delegate.getCPU(process.pid),
-            "tags": [...this.tags]
+            "tags": [...this.tags],
+            "payload": 0
         }];
 
         keys.forEach((key) => {
@@ -136,7 +138,7 @@ class ClustersInfo extends EventEmitter {
      * @return {{}}
      */
     unifyData(cluster, obj) {
-        if (!obj) obj = {lv: 'none'};
+        if (!obj) obj = {lv: 'none', payload: 0};
 
         if (!cluster) return obj;
 
@@ -150,9 +152,10 @@ class ClustersInfo extends EventEmitter {
             assign2syntax
         } = cluster;
         const { connections, memoryUsage } = nodeInfo;
-        obj.mxoss = mxoss;
-        obj.pid   = pid;
+        obj.file = _modulePath;
         obj.name  = name;
+        obj.pid   = pid;
+        obj.mxoss = mxoss;
         obj.count = connections;
         obj.lock  = _dontDisconnect;
         obj.complete = creationComplete;
@@ -163,6 +166,7 @@ class ClustersInfo extends EventEmitter {
         obj.env  = optConf.env;
         obj.assign2syntax  = assign2syntax;
         obj.cpuUsage  = this.delegate.getCPU(pid);
+        obj.payload = Math.max((obj.payload || 0), connections);
         let hashtag;
         if (!Array.isArray(tags)) {
             hashtag = (tags || "").split(",")
@@ -186,7 +190,6 @@ class ClustersInfo extends EventEmitter {
         }
         obj.bitrates = nodeInfo.bitrates;
         if (monitor) obj.monitor = monitor;
-        obj.file = _modulePath;
         if (rules) obj.rules = rules;
         if (typeof cmd == "string" && cmd != false || !obj.lookout) this.commandMap.add(pid);
 
@@ -283,7 +286,7 @@ ClustersInfo.prototype.clean = function () {
     this.octoProxyCount = 0;
     this.procCount = [];
     this.procKeys = [];
-    this.info = [];
+    // this.info = [];
     this.pids = new Set([process.pid]);
 };
 ClustersInfo.prototype.release = function () {

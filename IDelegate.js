@@ -297,7 +297,7 @@ class IDelegate extends events.EventEmitter {
         let mode = "";
         let namespace = undefined;
         let hack = false;
-        if (typeof headers["x-forwarded-for"] != "undefined") getSockInfos.xff = headers["x-forwarded-for"];
+        if (typeof headers["x-forwarded-for"] != "undefined") getSockInfos.xff = Dashboard.parseForwarded(headers["x-forwarded-for"]);
         else handle.getSockInfos.xff = null;
         const host = (typeof getSockInfos.xff == "string") ? getSockInfos.xff : getSockInfos.address;
         if (this.mgmtSrv.checkedIPDeny(host)) {
