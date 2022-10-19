@@ -1,0 +1,11 @@
+nav.navbar.navbar-default.no-radius
+    div.container-fluid
+        div.navbar-header
+            a.navbar-brand(href="javascript:;")
+                span(style="color: #555") Manager
+                span.text-muted Server
+        ul.nav.navbar-nav
+            li(class=`${pathname == '/mgr/node' ? 'active' : ''}`): a(href=`${pathname != '/mgr/node' ? '/mgr/node' : 'javascript:;'}`) Home
+            if user.status == 'authorized'
+                li(class=`${pathname == '/mgr/dashboard' ? 'active' : ''}`): a(href=`${pathname != '/mgr/dashboard' ? '/mgr/dashboard' : 'javascript:;'}`) Dashboard
+                li(class=`${pathname == '/mgr/commands' ? 'active' : ''}`): a(href=`${pathname != '/mgr/commands' ? '/mgr/commands' : 'javascript:;'}`) Commands

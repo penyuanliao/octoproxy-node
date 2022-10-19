@@ -1,11 +1,12 @@
 "use strict";
-// const Path          = require("path");
-// const util          = require("util");
+const Path          = require("path");
+const http          = require("http");
+// const https         = require("https");
 const EventEmitter  = require("events").EventEmitter;
-const NSLog         = require('fxNetSocket').logger.getInstance();
+// const NSLog         = require('fxNetSocket').logger.getInstance();
 const express       = require("express");
 const session       = require('express-session');
-const bodyParser    = require('body-parser');
+// const bodyParser    = require('body-parser');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 /**
  * express proxy
@@ -20,8 +21,12 @@ class WebMiddleware extends EventEmitter {
     }
     listen() {
         let { app } = this;
-        return app.listen().close();
+        return this.createHttpServer(app);
     };
+    readCertificate(filename) {
+        let desc = Path.resolve(process.cwd(), `./webmanager/certificate/${filename}.pem`);
+        return fs.readFileSync(desc);
+    }
     createProxyServer(store) {
          //建立Express個體
         let app = express();
@@ -43,6 +48,12 @@ class WebMiddleware extends EventEmitter {
         });
         return app;
     };
+    createHttpsServer() {
+
+    }
+    createHttpServer(app) {
+        return http.createServer(app);
+    }
     /**
      * 設定檔案建立
      * @param routers
@@ -116,6 +127,7 @@ class WebMiddleware extends EventEmitter {
         proxyReq.setHeader('proxy-session-id', req.sessionID);
         if (!req.session.user) {
             req.session.user = 'Guest';
+            req.session.status = 'not_authorized';
             req.session.save();
         }
     };

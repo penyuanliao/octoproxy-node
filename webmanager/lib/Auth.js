@@ -1,6 +1,4 @@
 "use strict";
-const net           = require("net");
-const util          = require("util");
 const EventEmitter  = require("events");
 const crypto        = require('crypto');
 const bcrypt        = require('bcryptjs');
@@ -29,12 +27,12 @@ class Auth extends EventEmitter {
      * 初始化
      * @return {Auth}
      */
-    init() {
+    async init() {
         try {
             const IConfig = require('../../IConfig.js');
             let { authorization } = IConfig.ManagerAccounts();
             let { accounts, enabled, secret, expiry } = authorization;
-            if (accounts) this.createUsers(accounts);
+            if (accounts) await this.createUsers(accounts);
             this.enabled = enabled;
             this.secret  = secret;
             if (expiry) this.expiry = expiry;
@@ -76,7 +74,7 @@ class Auth extends EventEmitter {
         let {result, data} = await this.jwtVerify(authorization);
         if (!result || newPassword.length < 8) return false;
         let { username } = data;
-        let {valid, user, twoFactor} = this.verify({username, password})
+        let {valid} = this.verify({username, password}); //valid, user, twoFactor
         if (valid) {
             return await this.db.updateAccount({
                 username: username,
@@ -97,7 +95,7 @@ class Auth extends EventEmitter {
      */
     async login({username, password}) {
         password = this.decryption(password, this.aes);
-        let {valid, user, twoFactor} = await this.verify({username, password});
+        let {valid, twoFactor} = await this.verify({username, password});
 
         if (valid) {
             const payload = {
@@ -179,7 +177,7 @@ class Auth extends EventEmitter {
      * @return {Promise}
      */
     jwtVerify(token) {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             jwt.verify(token, this.secret, (err, decoded) => {
 
                 if (err) {

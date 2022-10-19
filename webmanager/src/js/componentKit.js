@@ -608,19 +608,15 @@ var componentKit = (function ()
         }
     }
     class IFetcher {
-        static login_token() {
-            let token = $.cookie("token");
-
-            if (token) {
-                return token;
-            } else {
-                return "";
-            }
-        }
         constructor(delegate, options) {
             this.delegate = delegate;
+            this.info = this.delegate.info;
+            console.log(`this.info`, this.delegate.info);
             this.options = { appid: '284vu86', scheme: 'http', port: 80, host: '127.0.0.1', route: '/octopus'};
             this.setupConnect(options);
+        }
+        get token() {
+            return this.info.token;
         }
         setup({control}) {
             this.control = control;
@@ -641,7 +637,7 @@ var componentKit = (function ()
         }
         completionHandler(d) {
             if (!d) return false;
-            let {event, data} = d;
+            let {event} = d;
             switch (event) {
                 case "getServiceInfo":
                 case "getClusterInfos":
@@ -674,7 +670,7 @@ var componentKit = (function ()
 
         }
         getBearerToken() {
-            let token = IFetcher.login_token();
+            let token = this.token;
             console.log(`token =>`, token);
             if (token) {
                 return `Bearer ${token}`;
@@ -684,9 +680,9 @@ var componentKit = (function ()
         }
         //讀取資料夾清單
         async appSettingsDir(folder) {
-            const {host, port, appid, route} = this.options;
+            const {scheme, host, port, appid, route} = this.options;
             if (!folder) folder = '';
-            let path = `http://${host}:${port}${route}/dir/${folder}`;
+            let path = `${scheme}://${host}:${port}${route}/dir/${folder}`;
             const authorization = this.getBearerToken();
             const resolve = await fetch(path, {
                 method: 'GET',
@@ -700,14 +696,14 @@ var componentKit = (function ()
         };
         //讀取檔案
         async appSettingsFile({filename, folder}) {
-            const {host, port, appid, route} = this.options;
+            const {scheme, host, port, appid, route} = this.options;
             if (filename) {
                 filename = `/${filename}`;
             } else {
                 filename = ""
             }
             if (!folder) folder = '';
-            let path = `http://${host}:${port}${route}/dir/${folder}${filename}`;
+            let path = `${scheme}://${host}:${port}${route}/dir/${folder}${filename}`;
             const authorization = this.getBearerToken();
             const resolve = await fetch(path, {
                 method: 'GET',
@@ -721,14 +717,14 @@ var componentKit = (function ()
         };
         //儲存檔案
         async appSettingsSave({filename, folder}, data) {
-            const {host, port, appid, route} = this.options;
+            const {scheme, host, port, appid, route} = this.options;
             if (filename) {
                 filename = `/${filename}`;
             } else {
                 filename = ""
             }
             if (!folder) folder = 'appsettings';
-            let path = `http://${host}:${port}${route}/dir/${folder}${filename}`;
+            let path = `${scheme}://${host}:${port}${route}/dir/${folder}${filename}`;
             const authorization = this.getBearerToken();
             const resolve = await fetch(path, {
                 method: 'POST',
@@ -854,11 +850,6 @@ var componentKit = (function ()
                 return false;
             }
         }
-        initLoadConfig() {
-            // ==== init load config ==== //
-            this.getSysInfo();
-            // ========================== //
-        };
         startHeartbeat() {
             if (this.clockTimer) clearInterval(this.clockTimer);
             this.clockTimer = setInterval(() => {
@@ -980,7 +971,7 @@ var componentKit = (function ()
                 if (this.completed) this.completed(data);
             }
         }
-        async blockAll(lock, pid) {
+        async blockAll(lock) {
             if (this.version === "v1") {
                 this.admin.lockConnection(lock);
             } else {
@@ -1126,10 +1117,9 @@ var componentKit = (function ()
     }
     class IViewControl {
         constructor(delegate) {
-            this.token = null;
             this.delegate = delegate;
             this.infoSample = undefined;
-            let [host, port] = $(location).attr('host');
+            let [host, port] = $(location).attr('host').split(':');
             this.iFetchManger = new IFetcher(this, {
                 host: host || "127.0.0.1",
                 port: port || 8000,
@@ -1140,6 +1130,9 @@ var componentKit = (function ()
             this.currentFile = null;
             this.mAdapter = null;
             this.setup();
+        }
+        get info() {
+            return this.delegate.info;
         }
         popup({icon, title, text}) {
             const Toast = Swal.mixin({
@@ -1251,8 +1244,17 @@ var componentKit = (function ()
 
         }
         loginBtn(mAdapter) {
-            $("#btn-logout").hide();
-            $.cookie("token", '');
+            if (this.info.mode == 'pug') {
+                if (this.info.user != 'Guest') {
+                    $("#btn-login").hide();
+                    $("#btn-logout").show();
+                } else {
+                    $("#btn-logout").hide();
+                    $("#btn-login").show();
+                }
+            } else {
+                $("#btn-logout").hide();
+            }
             $("#btn-login").click(async () => {
                 $("#user_login").modal("show");
             });
@@ -1262,7 +1264,6 @@ var componentKit = (function ()
                 });
                 $("#btn-logout").hide();
                 $("#btn-login").show();
-                $.cookie("token", '');
                 // location.reload();
             });
 
@@ -1286,12 +1287,13 @@ var componentKit = (function ()
                     //     text: 'Invalid login name or password'
                     // });
                 } else {
-
-                    this.token = respond.data.token;
+                    this.info.token = respond.data.token;
+                    this.info.user = username;
+                    this.info.status = 'authorized';
                     $("#user_login").modal("hide");
                     $("#btn-login").hide();
-                    $.cookie("token", this.token);
-                    $.cookie("username", username);
+                    // $.cookie("token", this.token);
+                    // $.cookie("username", username);
 
                     this.popup({
                         icon: 'success',
@@ -1301,7 +1303,7 @@ var componentKit = (function ()
                     $("#btn-logout").attr('title', $('#username').val());
                     if (mAdapter) {
                         if (mAdapter.isAuthEnabled && mAdapter.status == 'not_authorized') {
-                            mAdapter.startAuthenticate({onComplete: mAdapter.completed, token: this.token})
+                            mAdapter.startAuthenticate({onComplete: mAdapter.completed, token: this.info.token})
                         }
                         console.log(`isAuthEnabled: ${mAdapter.isAuthEnabled} status: ${mAdapter.status}`);
                     }
@@ -2043,12 +2045,12 @@ var componentKit = (function ()
         };
         setCount(el, count, payload) {
             let text = el;
-            text.attr('title', `payload: ${payload}`);
+            text.attr('title', `payload: ${payload || 0}`);
             if (text.html() == count) return;
             // if (count > 500) {}
             text.html(count);
             if (count > 0 && count < 500) {
-                text.attr("class", "text");
+                text.attr("class", "text text-start");
             } else if (count >= 500 && count < 1000) {
                 text.attr("class", "text text-info");
             } else if (count >= 1000 && count < 1600) {
@@ -2150,8 +2152,14 @@ var componentKit = (function ()
             });
         };
         setHostInfo(el, host) {
-            if (host) el.text(host);
-            else el.text('NONE');
+            if (host) {
+                el.removeClass('text-muted')
+                el.text(host);
+            }
+            else {
+                el.text('NONE');
+                el.addClass('text-muted')
+            }
         }
         setBitRates(el, {title, values}) {
             if (typeof values == "undefined") return;

@@ -38,7 +38,7 @@ class APIServer extends EventEmitter {
             port: wpc.rest.port});
         this.httpServer  = this.createHTTPServer({
             listen: (wpc.http.listen ? true : listen),
-            port: wpc.http.port});
+            port: wpc.http.port, options: wpc.http.session});
         this.proxy       = this.createWebProxyServer();
         this.manager     = new RemoteClient(); //連線到服務窗口
         this.logServer   = this.createLiveLogServer(wpc.logging.port);
@@ -74,8 +74,9 @@ class APIServer extends EventEmitter {
      * HTTP SERVER
      * @param listen
      * @param port
+     * @param options
      */
-    createHTTPServer({listen, port}) {
+    createHTTPServer({listen, port, options}) {
         // const web = http.createServer((req, res) => {});
         // web.on('upgrade', (request, socket, head) => {
         //     NSLog.log(request.url, request.method, request.upgrade, request.client);
@@ -84,7 +85,7 @@ class APIServer extends EventEmitter {
         //     NSLog.log("info",'Web Service start listening port %s.', port);
         // });
         const WebManager = require('./WebManager.js');
-        const web = new WebManager({delegate: this, listen, port});
+        const web = new WebManager({delegate: this, listen, port, options});
         web.on('listen', (element) => {
 
         });

@@ -1,7 +1,7 @@
 "use strict";
 
-const net           = require("net");
-const util          = require("util");
+// const fs            = require("fs");
+// const nPath         = require("path");
 const EventEmitter  = require("events");
 const NSLog         = require('fxNetSocket').logger.getInstance();
 const restify       = require('restify');
@@ -31,13 +31,6 @@ class RestManager extends EventEmitter {
         this.accept = new Set(['appsettings', 'configuration']);
         this.server = this.createAPIServer();
     };
-    ssl() {
-        var options = {
-            key: fs.readFileSync('./server-key.pem'),
-            ca: [fs.readFileSync('./cert.pem')],
-            cert: fs.readFileSync('./server-cert.pem')
-        };
-    }
     createAPIServer() {
         const server = restify.createServer({
             name: 'manager.api',
@@ -113,17 +106,26 @@ class RestManager extends EventEmitter {
             let sessionID = req.header('proxy-session-id');
             let session = await this.delegate.httpServer.getSession(sessionID);
             let user = await this.login({username, password});
-            if (user.result) {
+            if (user != false) {
                 session.user = username;
+                session.status = 'authorized';
                 await this.delegate.httpServer.setSession(sessionID, session);
+                res.send({result: true, data: { token: user.token }});
+            } else {
+                res.send({result: false});
             }
-            res.send(user);
+
             return next();
         });
+        //登出
         server.post(`${route}/user/logout`, async (req, res, next) => {
             let { username } = req.body;
-            NSLog.info(`${req.url} user: ${username}`);
+            NSLog.info(`${req.url} user: ${username} logout`);
+            let sessionID = req.header('proxy-session-id');
+            let session = await this.delegate.httpServer.getSession(sessionID);
             let logout = await this.delegate.auth.logout({ username });
+            session.user = 'Guest';
+            session.status = 'not_authorized'
             res.send({ result: logout });
             return next();
         })
@@ -631,16 +633,9 @@ class RestManager extends EventEmitter {
     async login({username, password}) {
         let login = await this.delegate.auth.login(arguments[0])
         if (login === false) {
-            return {
-                result: false
-            };
+            return false;
         } else {
-            return {
-                result: true,
-                data: {
-                    token: login
-                }
-            };
+            return login;
         }
     }
     clean() {

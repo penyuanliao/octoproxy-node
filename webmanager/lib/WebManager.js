@@ -1,24 +1,38 @@
 "use strict";
 const Path          = require("path");
-const util          = require("util");
+// const util          = require("util");
 const EventEmitter  = require("events").EventEmitter;
-const NSLog         = require('fxNetSocket').logger.getInstance();
+// const NSLog         = require('fxNetSocket').logger.getInstance();
 const express       = require("express");
 const session       = require('express-session');
 const bodyParser    = require('body-parser');
-const ejs = require('ejs');
+const {nanoid}      = require('nanoid');
+// const ejs = require('ejs');
 /**
  * 
  * @constructor
  */
 class WebManager extends EventEmitter {
-    constructor({delegate, listen, port}) {
+    constructor({delegate, listen, port, options}) {
         super();
         this.delegate = delegate;
+        this.options = this.setupOptions(options);
         this.store = new session.MemoryStore();
         this.app = this.createHttpServer();
         this.server = this.listen({ listen, port });
     }
+    setupOptions(options) {
+        if (options) {
+            return Object.assign({}, options);
+        } else {
+            return {
+                secret: nanoid(12),
+                name: 'user',
+                saveUninitialized: false,
+                resave: true
+            };
+        }
+    };
     listen({listen, port}) {
         let { app } = this;
         let server;
@@ -48,22 +62,16 @@ class WebManager extends EventEmitter {
             res.setHeader('connection', 'close');
             next();
         });
-        app.use(session({
-            store: this.store,
-            secret: 'sidonia_shizuka',
-            name: 'user', // optional
-            saveUninitialized: false,
-            resave: true,
-        }));
-        app.get('/mgr/test', (req, res) => {
-
-            console.log(req.session)
-            console.log(req.sessionID)
-            console.log(req.session.user, req.headers.cookie)
-            req.session.user = '1234'
-            res.send('Hello World!')
-
-        });
+        app.use(session(this.options));
+        // app.get('/mgr/test', (req, res) => {
+        //
+        //     console.log(req.session)
+        //     console.log(req.sessionID)
+        //     console.log(req.session.user, req.headers.cookie)
+        //     req.session.user = '1234'
+        //     res.send('Hello World!')
+        //
+        // });
         /*
         //ejs
         app.set("view options", {
@@ -87,20 +95,53 @@ class WebManager extends EventEmitter {
     setPug(app) {
         app.set('view engine', 'pug');
         app.set('views', Path.resolve(__dirname, '../src/html'));
-        app.get('/mgr/node', (req, res, next) => {
-            if (!req.session.user) req.session.user = 'Guest';
+        app.get(['/mgr/node'], (req, res, next) => {
+            if (!req.session.user) {
+                req.session.user = 'Guest';
+                req.session.status = 'not_authorized';
+            }
+            console.log(req.session);
             // console.log(`${req.sessionID} => req.session.user: ${req.session.user}`);
-            let {token} = req.session;
-            res.render('index', {user: req.session.user, mode: 'pug'});
+            // let {token} = req.session;
+            res.render('index', {
+                pathname: req.url,
+                user: {
+                    name: req.session.user,
+                    status: req.session.status
+                },
+                mode: 'pug'});
             return next();
         });
-    }
+        app.get('/mgr/dashboard', (req, res, next) => {
+            console.log(req.url);
+
+            res.render('dashboard', {
+                pathname: req.url,
+                user: {
+                    name: req.session.user,
+                    status: req.session.status
+                },
+                mode: 'pug'});
+            return next();
+        });
+    };
+    /**
+     * 取得session資訊
+     * @param sessionID
+     * @return {Promise}
+     */
     getSession(sessionID) {
         return new Promise((resolve) => {
             let { store } = this;
             store.get(sessionID, (err, sess) => resolve(sess));
         });
     };
+    /**
+     * 寫入session資訊
+     * @param sessionID
+     * @param session
+     * @return {Promise}
+     */
     setSession(sessionID, session) {
         return new Promise((resolve) => {
             let { store } = this;
@@ -109,7 +150,6 @@ class WebManager extends EventEmitter {
             });
         })
     };
-    setup() {}
     clean() {}
     release() {}
 }

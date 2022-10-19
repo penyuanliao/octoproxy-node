@@ -92,8 +92,8 @@ function load(info) {
         .setupGeneralHead()
         .refresh();
 
-    let viewCtrl = new IViewControl({ alert })
-        .loginBtn(mAdapter, info)
+    let viewCtrl = new IViewControl({ alert, info })
+        .loginBtn(mAdapter)
         .f2dbInfo(proTable);
     //init hidden
     var projects =  $("#node-service").parents(".block").first();
@@ -146,7 +146,7 @@ function load(info) {
             let res_login = await manager.startAuthenticate(
                 {
                     onComplete,
-                    token: IFetcher.login_token()
+                    token: info.token
                 });
             if (!res_login) {
                 IButton.alertAuthenticationRequired();
@@ -187,9 +187,9 @@ function load(info) {
         mAdapter.start();
 
         //# Projects Refresh Click Event
-        projects.find(".block-refresh").click(() => {
-            mAdapter.getClusterInfos();
-            mAdapter.getSysInfo();
+        projects.find(".block-refresh").click(async () => {
+            await mAdapter.getClusterInfos();
+            await mAdapter.getSysInfo();
         });
         $("#loadList").click(async () => {
             let ts = Date.now();
@@ -198,9 +198,9 @@ function load(info) {
             if (Date.now() - ts < 1000) await mAdapter.wait(1);
             $('#loadList').find(".fa-refresh").removeClass("run-animation").addClass("paused-animation");
         });
-        $("#sysInfoBtn").click(() => {
-            mAdapter.getSysInfo();
-            mAdapter.getDashboardInfo();
+        $("#sysInfoBtn").click(async () => {
+            await mAdapter.getSysInfo();
+            await mAdapter.getDashboardInfo();
         })
 
         //排程更新

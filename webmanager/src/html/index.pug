@@ -73,22 +73,14 @@ html
         script.
             $(document).ready(() => {
                 let info = {
-                    user: "#{user}",
-                    mode: ("#{mode}" || '')
+                    user: "#{user.name}",
+                    mode: "#{mode}",
+                    status: "#{user.status}"
                 }
-                console.log(info);
                 load(info);
             });
     body
-        nav.navbar.navbar-default.no-radius
-            div.container-fluid
-                div.navbar-header
-                    a.navbar-brand(href="javascript:;")
-                        span(style="color: #555") Manager
-                        span.text-muted Server
-                ul.nav.navbar-nav
-                    li.active: a(href="javascript:;") Home
-                    li: a(href="/mgr/test") Dashboard
+        include includes/navbar.pug
         div(id="wrapper" class="context-box")
             div.page-navigation
             div.right-content
@@ -296,6 +288,7 @@ html
                                                     a.pro-assign(href="javascript:;" data-toggle="tooltip") octoproxy
                                             div.list-item-container.col-sm-1.col-xs-12
                                                 span.fa.fa-user
+                                                | &nbsp;
                                                 span.pro-count.text(style="font-weight: bolder" data-toggle="tooltip" data-placement="top" title="0")  10000
                                                 p
                                                     i.fa-solid.fa-tags &nbsp;

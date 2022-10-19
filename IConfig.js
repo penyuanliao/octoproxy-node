@@ -144,7 +144,14 @@ class IConfig {
 
                 port: 10084,
 
-                router: ['/mgr']
+                router: ['/mgr'],
+
+                session: {
+                    secret: '',
+                    name: 'user',
+                    saveUninitialized: false,
+                    resave: true
+                }
             },
             /**
              *

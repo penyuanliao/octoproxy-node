@@ -1148,6 +1148,10 @@ blockquote.pull-right {
 .text-info {
     color: #4fc1e9;
 }
+
+.text-start {
+    color: #0387B1;
+}
 .text-success {
     color: #8cc152;
 }
