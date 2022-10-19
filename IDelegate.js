@@ -454,7 +454,7 @@ class IDelegate extends events.EventEmitter {
         const { assign, enabled, videoEnabled, vPrefix } = gamSLB;
         const chk_assign = (assign == namespace);
         if (enabled && chk_assign || (videoEnabled && typeof url_args != "undefined" && typeof url_args.stream != "undefined")) {
-            let lbtimes;
+            let lbTimes;
             let kickOut = false;
             let tokencode = this.gameLBSrv.getLoadBalancePath(url_args, params, (action, json) => {
                 NSLog.log('trace','--------------------------');
@@ -463,8 +463,8 @@ class IDelegate extends events.EventEmitter {
                 let src;
                 if (kickOut) { return false; }
                 if (json.action == this.gameLBSrv.LBActionEvent.ON_GET_PATH) {
-                    if (typeof lbtimes != 'undefined') clearTimeout(lbtimes);
-                    lbtimes = undefined;
+                    if (typeof lbTimes != 'undefined') clearTimeout(lbTimes);
+                    lbTimes = undefined;
                     if (typeof json.path == "undefined") json.path = "";
                     namespace = json.path.toString();
                     var src_string;
@@ -473,7 +473,7 @@ class IDelegate extends events.EventEmitter {
                     } else {
                         src_string = source.toString().replace(originPath, namespace);
                     }
-                    // var indx = source.indexOf(originPath);
+
                     if (typeof handle.getSockInfos != "undefined" && handle.getSockInfos != null && namespace != null && typeof namespace != "undefined") {
                         handle.getSockInfos.lbPath = namespace;
                     }
@@ -482,8 +482,8 @@ class IDelegate extends events.EventEmitter {
                     this.clusterEndpoint({namespace, source:src, originPath, mode}, handle).then(() => {});
 
                 } else if (json.action == this.gameLBSrv.LBActionEvent.ON_BUSY) {
-                    if (typeof lbtimes != 'undefined') clearTimeout(lbtimes);
-                    lbtimes = undefined;
+                    if (typeof lbTimes != 'undefined') clearTimeout(lbTimes);
+                    lbTimes = undefined;
                     namespace = '/godead';
                     handle.getSockInfos.lbPath = namespace;
                     this.rejectClientException(handle, "CON_DONT_CONNECT");
@@ -553,7 +553,12 @@ class IDelegate extends events.EventEmitter {
         source = null;
     };
 
-    /** reload request rtmp/tcp **/
+    /**
+     * reload request rtmp/tcp
+     * @param {*} handle
+     * @param buffer
+     * @return {MediaClientBinder}
+     */
     onread_rtmp_param(handle, buffer) {
         NSLog.log("info", "Parse and respond RTMP/TCP handshake.");
         const MediaClientBinder = require("./Framework/FlServer/MediaClientBinder.js");
