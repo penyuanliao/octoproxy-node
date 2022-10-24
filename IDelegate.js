@@ -757,11 +757,11 @@ class IDelegate extends events.EventEmitter {
                 }, handle, { keepOpen:false }, (json) => {
                     if (!json.event) return false;
                     clearTimeout(socket_timer);
-                    this.admin_free({handle, name, exception, mode});
+                    this.admin_free({handle, name, exception, mode, skip: true});
                 });
             }
             let socket_timer = setTimeout(() =>
-                this.admin_free({handle, name, exception, mode}), sendWaitClose);
+                this.admin_free({handle, name, exception, mode, skip: true}), sendWaitClose);
             return true;
         }
         return false;
@@ -830,8 +830,12 @@ class IDelegate extends events.EventEmitter {
         }
         if (cb) cb(req);
     };
-    /** close complete **/
-    close_callback(mode) {
+    /**
+     * close complete
+     * @param arg
+     * @param {boolean} skip skip record count
+     */
+    close_callback(arg, skip) {
         let handle, endpoint;
         if (arguments[0] instanceof IDelegate) {
             endpoint = arguments[0];
@@ -853,8 +857,7 @@ class IDelegate extends events.EventEmitter {
             } else {
                 message = "Reject the currently connecting client.";
             }
-
-            if (recordEnabled && !_lockdown) recordDashboard.record(getSockInfos);
+            if (recordEnabled && !_lockdown && skip != true) recordDashboard.record(getSockInfos);
 
             if (TRACE_SOCKET_IO) {
                 let ts = endpoint.dateFormat();
@@ -903,11 +906,11 @@ class IDelegate extends events.EventEmitter {
         handle = null;
         return true;
     };
-    admin_free({handle, name, exception, mode}) {
+    admin_free({handle, name, exception, mode, skip}) {
         handle.getSockInfos.path = name;
         handle.getSockInfos.mode = mode;
         this.rejectClientException(handle, exception);
-        handle.close(this.close_callback.bind(handle, this, mode));
+        handle.close(this.close_callback.bind(handle, this, skip));
         this.handleRelease(handle);
         handle = null;
     }
