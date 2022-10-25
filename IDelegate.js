@@ -111,8 +111,6 @@ class IDelegate extends events.EventEmitter {
         /** casino load balance **/
         this.gameLBSrv       = new GLBSrv(iConfig.gamSLB, this);
         this.mgmtSrv         = undefined;
-        /** record visitor remote address **/
-        this.recordDashboard = new Dashboard(Dashboard.loadFile("./historyLog/Dashboard.json"));
         this.recordEnabled   = true;
         this.tokenId = 0;
         NSLog.log('info','lockdown:[%s]', this._lockdown);
@@ -120,6 +118,9 @@ class IDelegate extends events.EventEmitter {
         NSLog.log("debug", " > Frontend support listens for RTMP/TCP requests to enabled: [%s]", iConfig.gamSLB.rtmpFrontendEnabled);
         this.init();
     };
+    get dashboard() {
+        return this.mgmtSrv.dashboard;
+    }
     init() {
         utilities.autoReleaseGC(); //** 手動 1 sec gc
         NSLog.log('info' , 'Game server load balance enabled: [%s]', iConfig.gamSLB.enabled);
@@ -191,7 +192,7 @@ class IDelegate extends events.EventEmitter {
             }
             if (err) {
                 NSLog.log('error','tcp_handle Bind:',err , opt.host, opt.port);
-                tcp_handle.close(() => this.close_callback());
+                tcp_handle.close(() => this.close_callback(tcp_handle));
                 return null;
             }
 
@@ -200,7 +201,7 @@ class IDelegate extends events.EventEmitter {
             if (err) {
                 NSLog.log('error', util._exceptionWithHostPort(err, 'listen', opt.host, opt.port));
 
-                tcp_handle.close(() => this.close_callback());
+                tcp_handle.close(() => this.close_callback(tcp_handle));
                 return null;
             } else {
                 NSLog.info(`Start listening on ${opt.host}:${opt.port} backlog:${opt.backlog}`);
@@ -267,7 +268,7 @@ class IDelegate extends events.EventEmitter {
             // Error, end of file. -4095
             if (nread === uv.UV_EOF) {
                 this.rejectClientException(handle ,"UV_EOF");
-                handle.close(this.close_callback.bind(handle, this));
+                handle.close();
                 this.handleRelease(handle);
                 clearTimeout(handle.closeWaiting);
                 handle.closeWaiting = undefined;
@@ -845,7 +846,7 @@ class IDelegate extends events.EventEmitter {
             handle = arguments[0];
         }
         if (handle && handle.getSockInfos) {
-            const { recordEnabled, _lockdown, recordDashboard } = endpoint;
+            const { recordEnabled, _lockdown, dashboard } = endpoint;
             let message;
             let status = 'error';
             let { getSockInfos } = handle;
@@ -857,7 +858,7 @@ class IDelegate extends events.EventEmitter {
             } else {
                 message = "Reject the currently connecting client.";
             }
-            if (recordEnabled && !_lockdown && skip != true) recordDashboard.record(getSockInfos);
+            if (recordEnabled && !_lockdown && skip != true) dashboard.record(getSockInfos);
 
             if (TRACE_SOCKET_IO) {
                 let ts = endpoint.dateFormat();

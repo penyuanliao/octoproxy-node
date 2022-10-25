@@ -161,7 +161,7 @@ class IConfig {
             },
 
             debug: false,
-
+            // http proxy mode
             proxyMode: true
         }
 

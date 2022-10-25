@@ -23,7 +23,7 @@ class APIClient extends EventEmitter {
         this.udpPort  = delegate.configure.wpc.udp.port;
         this.udp      = null; //視訊專用
         this.viewer   = new Set();
-        this.logSkip  = new Set(['getServiceInfo', 'getSysInfo']);
+        this.logSkip  = new Set(['getServiceInfo', 'getSysInfo', 'getDashboardInfo']);
     }
     get delegate() {
         if (this.wDelegate.has(this))

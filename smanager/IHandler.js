@@ -44,7 +44,7 @@ const ManagerEvents = new Set([
     "blockAll",
     "readIPBlockList",
     "addIPBlockList",
-    "warpTunnel"
+    "warpTunnel",
 ]);
 /**
  * 控制端事件

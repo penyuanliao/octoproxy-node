@@ -74,7 +74,7 @@ var componentKit = (function ()
                     op.title = item[2] || "v1";
                     if (typeof cookie == "string") {
                         if (item[1] == cookie) customize = false;
-                    } else {
+                    } else if (cookie) {
                         if (item[1] == cookie.value) {
                             op.title = cookie.version;
                             customize = false;
@@ -611,7 +611,6 @@ var componentKit = (function ()
         constructor(delegate, options) {
             this.delegate = delegate;
             this.info = this.delegate.info;
-            console.log(`this.info`, this.delegate.info);
             this.options = { appid: '284vu86', scheme: 'http', port: 80, host: '127.0.0.1', route: '/octopus'};
             this.setupConnect(options);
         }
@@ -666,12 +665,23 @@ var componentKit = (function ()
             }
 
         }
-        getServiceInfo() {
-
+        async getDashboard() {
+            const {host, port, scheme, appid, route} = this.options;
+            let path = `${scheme}://${host}:${port}${route}/service/dashboard/info`;
+            const authorization = this.getBearerToken();
+            const resolve = await fetch(path, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    appid: appid,
+                    authorization
+                }
+            });
+            return await resolve.json();
         }
         getBearerToken() {
             let token = this.token;
-            console.log(`token =>`, token);
+            console.log(`token =>`, typeof token);
             if (token) {
                 return `Bearer ${token}`;
             } else {
@@ -1264,7 +1274,8 @@ var componentKit = (function ()
                 });
                 $("#btn-logout").hide();
                 $("#btn-login").show();
-                // location.reload();
+                if (this.info.mode == 'pug') location.reload();
+
             });
 
             $("#btn-login-submit").click(async () => {
@@ -1311,6 +1322,7 @@ var componentKit = (function ()
 
                 $('#username').val('');
                 $('#password').val('');
+                if (this.info.mode == 'pug') location.reload();
             });
             return this;
         };
@@ -1444,7 +1456,7 @@ var componentKit = (function ()
         previousButton() {
             return `
             <li class="page-item">
-                <a class="page-link" href="#" aria-label="Previous">
+                <a class="page-link" href="javascript:" aria-label="Previous">
                     <span aria-hidden="true">&laquo;</span>
                     <span class="sr-only">Previous</span>
                 </a>
@@ -1453,7 +1465,7 @@ var componentKit = (function ()
         nextButton() {
             return `
             <li class="page-item">
-                <a class="page-link" href="#" aria-label="Next">
+                <a class="page-link" href="javascript:" aria-label="Next">
                     <span aria-hidden="true">&raquo;</span>
                     <span class="sr-only">Next</span>
                 </a>
@@ -1462,13 +1474,13 @@ var componentKit = (function ()
         };
         pageButton(value) {
             return `
-                <li class="page-item ${this.pageNumber == value ? 'active': ''}"><a class="page-link" href="#" aria-label="${value}">${value}</a></li>
+                <li class="page-item ${this.pageNumber == value ? 'active': ''}"><a class="page-link" href="javascript:" aria-label="${value}">${value}</a></li>
             `;
         };
     };
 
     class IDataTable {
-        constructor(delegate) {
+        constructor({delegate, rows}) {
             this.delegate = delegate;
             this._manager = null;
             this.oPrefSettings = {
@@ -1484,7 +1496,7 @@ var componentKit = (function ()
             this.fl2dbArray = [];
             this.hashTables = new Map();
             this.metadata = new Map();
-            this.rows = 20;
+            this.rows = rows || 20;
             this.index = 0;
             this.history = new Map([
                 ['cpu', []],
@@ -2678,14 +2690,32 @@ var componentKit = (function ()
                 this.incoming.info = el.find(".widget-pie-info-num");
                 this.incoming.text = el.find(".widget-pie-info-text");
             }
+            let labels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Tri', 'Sat'];
             var week = new Date().getDay();
             var total = 0;
+            let weekIncoming;
+            if (Array.isArray(data.incomeCount)) {
+                // let incomeCount = new Map(data.incomeCount);
+                // if (incomeCount.has(labels[week])) {
+                //     weekIncoming = incomeCount.get(labels[week]);
+                //     total = weekIncoming.reduce((prev, current) => (prev + current));
+                // }
+                let label, daily;
+                for (let j = 0; j < data.incomeCount.length; j++) {
+                    [label, daily] = data.incomeCount[j];
+                    if (label == labels[week]) {
+                        total = daily.reduce((prev, current) => (prev + current));
+                        break;
+                    }
+                }
 
-            var weekIncoming = data.incomeCount[week];
-            if (typeof weekIncoming == "undefined") weekIncoming = {};
-            var keys = Object.keys(weekIncoming);
-            for (var i = 0; i < keys.length; i++) {
-                total += weekIncoming[keys[i]];
+            } else {
+                weekIncoming = data.incomeCount[week];
+                if (typeof weekIncoming == "undefined") weekIncoming = {};
+                var keys = Object.keys(weekIncoming);
+                for (var i = 0; i < keys.length; i++) {
+                    total += weekIncoming[keys[i]];
+                }
             }
             var success = data.visitors.success;
             var percent = Math.floor(((total/success) * 100));
@@ -3303,6 +3333,7 @@ var componentKit = (function ()
 
                 const tag = $("#sch-pan-tabs .active a").attr("href");
                 console.log(`tag ---->`, tag);
+                panelSchedule.find('.block-toggle').children("span").removeClass("fa fa-chevron-up").addClass("fa fa-chevron-down");
                 switch (tag) {
                     case "#tab-task":
                         mAdapter.getSchedule();
@@ -3481,7 +3512,7 @@ var componentKit = (function ()
             return `
             <td>
                 <a class="${this.id}-${key}" 
-                href="#"
+                href="javascript:"
                 style="word-break: break-all;"
                 data-type="${type || "text" }"
                 data-placement="right"
@@ -3747,6 +3778,126 @@ var componentKit = (function ()
         }
     }
     
+    class ISettings {
+        constructor() {
+            this.settings = {
+                memState: true,
+                cpuState: true,
+                connPanel: false,
+                mgmtReLoad: false,
+                rowsPerPage: 25
+            };
+        }
+        set memState (value) {
+            this.settings.memState = value;
+        }
+        get memState () {
+            return this.settings.memState;
+        }
+        get cpuState () {
+            return this.settings.cpuState;
+        }
+        get connPanel () {
+            return this.settings.connPanel;
+        }
+        get mgmtReLoad () {
+            return this.settings.mgmtReLoad;
+        }
+        get rowsPerPage () {
+            return this.settings.rowsPerPage;
+        }
+        load() {
+            let text = $.cookie("settings");
+            if (!text) return this;
+            let {
+                rowsPerPage,
+                connPanel,
+                mgmtReLoad,
+                memState,
+                cpuState,
+            } = JSON.parse(text);
+
+            if (rowsPerPage) this.settings.rowsPerPage = rowsPerPage;
+            if (typeof connPanel == "boolean") this.settings.connPanel = connPanel;
+            if (typeof mgmtReLoad == "boolean") this.settings.mgmtReLoad = mgmtReLoad;
+            if (typeof memState == "boolean") this.settings.memState = memState;
+            if (typeof cpuState == "boolean") this.settings.cpuState = cpuState;
+            return this;
+        }
+        save() {
+            $.cookie("settings", JSON.stringify(this.settings, null, '\t'));
+        }
+        setup() {
+            let settings = JSON.parse($.cookie("settings") || "{}");
+
+            if (typeof settings.cpuState != "undefined") {
+                $("#cpuState").prop("checked", settings.cpuState);
+            }
+            if (typeof settings.memState != "undefined") {
+                $("#memState").prop("checked", settings.memState);
+            }
+            if (typeof settings.mgmtReLoad == "undefined" || settings.mgmtReLoad == false) {
+                document.getElementById('btn-mgmtReLoad').style.visibility = 'hidden';
+            } else {
+                document.getElementById('btn-mgmtReLoad').style.visibility = 'visible';
+            }
+            $("#consoleReload").prop("checked", settings.mgmtReLoad);
+
+            if (typeof settings.connPanel == "undefined" || settings.connPanel == false) {
+                $(".connectionsPanel").hide();
+            } else {
+                $(".connectionsPanel").show();
+            }
+            $("#ipPanelState").prop("checked", settings.connPanel);
+
+            $("#rowsPerPage").val(String(settings.rowsPerPage || 25));
+            $("#rowsPerPage").trigger('change');
+
+            return this;
+        }
+        addEvent() {
+            $("#pref-settings").click(function () {
+                $("#modal_pref_settings").modal("show");
+            });
+
+            $("#cpuState").change(() => {
+                this.settings.cpuState = document.getElementById("cpuState").checked;
+                this.save();
+            });
+
+            $("#memState").change(() => {
+                this.settings.memState = document.getElementById("memState").checked;
+                this.save();
+            });
+
+            $("#consoleReload").change(() => {
+                let check = document.getElementById("consoleReload").checked;
+                this.settings.mgmtReLoad = check;
+                document.getElementById('btn-mgmtReLoad').style.visibility = (check ? 'visible' : 'hidden');
+                this.save();
+            });
+
+            $("#ipPanelState").change(() => {
+                let check = document.getElementById("ipPanelState").checked;
+                this.settings.connPanel = check;
+                if (check) $(".connectionsPanel").show();
+                else $(".connectionsPanel").hide();
+                this.save();
+            });
+
+            $("#rowsPerPage").select2({minimumResultsForSearch: Infinity}).on('select2:select', (e) => {
+                let input = e.params.data;
+                this.settings.rowsPerPage = Number.parseInt(input.id);
+                this.save();
+            });
+
+            return this;
+        };
+        start() {
+            this.load().setup().addEvent();
+        }
+    }
+    
     return {
         IConnect: IConnect,
         IConnectAdapter: IConnectAdapter,
@@ -3764,6 +3915,7 @@ var componentKit = (function ()
         IEditTables,
         IEditTablesDB,
         IEncoder,
-        ITesting
+        ITesting,
+        ISettings
     }
 })();

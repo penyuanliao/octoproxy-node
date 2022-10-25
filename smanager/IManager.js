@@ -5,6 +5,7 @@ const util          = require("util");
 const fs            = require("fs");
 const EventEmitter  = require("events");
 const {Server}      = require("../lib/RPCSocket.js");
+const Dashboard     = require("../lib/Dashboard.js");
 const IHandler      = require("./IHandler.js");
 const ClustersInfo  = require("./ClustersInfo.js");
 const CoreInfo      = require("./CoreInfo.js");
@@ -32,6 +33,8 @@ class IManager extends EventEmitter {
         super();
         this.delegate  = delegate;
         this.timer     = undefined;
+        /** record visitor remote address **/
+        this.dashboard = new Dashboard(Dashboard.loadFile("./historyLog/Dashboard.json"));
         this.nodesInfo = new ClustersInfo(this);
         this.coreInfo  = new CoreInfo(this);
         this.iHandler  = this.setupHandler();

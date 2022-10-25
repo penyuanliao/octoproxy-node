@@ -8,15 +8,16 @@ const express       = require("express");
 const session       = require('express-session');
 // const bodyParser    = require('body-parser');
 const { createProxyMiddleware } = require('http-proxy-middleware');
-/**
- * express proxy
- * @constructor
- */
+
 class WebMiddleware extends EventEmitter {
-    constructor(store) {
+    /**
+     * 跳轉
+     * @param {*|{saveUninitialized: boolean, name: string, store: *, secret: string, resave: boolean}} options
+     */
+    constructor(options) {
         super();
-        this.app = this.createProxyServer(store);
-        this.store = store //|| new session.MemoryStore();
+        this.app = this.createProxyServer(options);
+        this.store = (options) ? options.store : null; //|| new session.MemoryStore();
         this.day = 24 * 60 * 60 * 1000;
     }
     listen() {
@@ -27,19 +28,15 @@ class WebMiddleware extends EventEmitter {
         let desc = Path.resolve(process.cwd(), `./webmanager/certificate/${filename}.pem`);
         return fs.readFileSync(desc);
     }
-    createProxyServer(store) {
+    createProxyServer(options) {
          //建立Express個體
         let app = express();
         app.disable('x-powered-by')
         // app.use(bodyParser.json()); // support json encoded bodies
         // app.use(bodyParser.urlencoded({ extended: true })); // support encoded bodies
-        app.use(session({
-            store,
-            secret: 'sidonia_shizuka',
-            name: 'user', // optional
-            saveUninitialized: false,
-            resave: true,
-        }));
+        if (options) {
+            app.use(session(options));
+        }
         app.use(async (req, res, next) => {
             if (req.url == '/octopus/user/login') {
             }

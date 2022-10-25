@@ -14,12 +14,6 @@ function load(info) {
     let confTable = new component.lbTable("#srv-config > tbody:last", ["file","assign","mxoss","edit", "dead"]);
     let iptable   = new component.lbTable("#ip-address-blocking > tbody:last", ["ip", "dead"]);
     let ipDataTable;
-    let oPrefSettings = {
-        cpuState:   true,
-        memState:   true,
-        mgmtReLoad: false,
-        connPanel:  false
-    };
     let parser = new UAParser();
     // console.log(JSON.stringify(parser.getResult(), null, '\t'));
 
@@ -83,7 +77,7 @@ function load(info) {
             }
             return {value, version};
         });
-    let proTable = new IDataTable(this)
+    let proTable = new IDataTable({delegate: this, rows: 20})
         .create('#process-content')
         .filterButton($("#proc-filter"))
         .appendPagination()
@@ -118,6 +112,11 @@ function load(info) {
     const createConnection1 = function (url) {
         admin = new component.connect(url,[protocol], onConnect);
         admin.addListener("complete", onComplete);
+        //更新動畫
+        $(".pro-refresh").removeClass("paused-animation").addClass("run-animation");
+        proc_duration_time = setInterval(() => {
+            if (proc_duration > 0) $(".project-duration").html(--proc_duration);
+        }, 1000);
     };
     const createConnection2 = async function (url) {
         manager = new IConnect(url, [protocol]);
@@ -281,7 +280,7 @@ function load(info) {
                 break;
             case "getIPFilter":
             case "onGetIPFilter":
-                if (oPrefSettings.connPanel != true) break;
+                if (setting.connPanel != true) break;
                 var deny = Object.keys(d.data.deny);
                 iptable.update(deny, "blocking");
                 break;
@@ -367,78 +366,8 @@ function load(info) {
         $this.sparkline('html', $this.data());
     });
     //# setup cookie value
-    function setup() {
-        function iformat(icon, badge) {
-            var originalOption = icon.element;
-            var originalOptionBadge = $(originalOption).data('badge');
-
-            return $('<span><i class="fa ' + $(originalOption).data('icon') + '"></i> ' + icon.text + '<span class="badge">' + originalOptionBadge + '</span></span>');
-        }
-
-        var sState = JSON.parse($.cookie('cpuState') ? $.cookie('cpuState') : "true");
-        if (typeof sState != "undefined") {
-            $("#cpuState").prop("checked", sState);
-
-            oPrefSettings.cpuState = sState;
-        }
-        sState = JSON.parse($.cookie('memState') ? $.cookie('memState') : "true");
-        if (typeof sState != "undefined") {
-            $("#memState").prop("checked", sState);
-            oPrefSettings.memState = sState;
-        }
-        sState = JSON.parse($.cookie('mgmtReLoad') ? $.cookie('mgmtReLoad') : "false");
-        if (typeof sState == "undefined" || sState == false) {
-            document.getElementById('btn-mgmtReLoad').style.visibility = 'hidden';
-        } else {
-            document.getElementById('btn-mgmtReLoad').style.visibility = 'visible';
-        }
-        oPrefSettings.mgmtReLoad = sState;
-        $("#consoleReload").prop("checked", sState);
-
-        sState = JSON.parse($.cookie('connPanel') ? $.cookie('connPanel') : "false");
-        if (typeof sState == "undefined" || sState == false) {
-            $(".connectionsPanel").hide();
-        } else {
-            $(".connectionsPanel").show();
-        }
-        $("#ipPanelState").prop("checked", sState);
-        oPrefSettings.connPanel = sState;
-
-        // $("#node-tools-panel").hide();
-
-    }
-    function setupButton() {
-
-        $("#pref-settings").click(function () {
-            $("#modal_pref_settings").modal("show");
-        });
-
-        $("#cpuState").change(function () {
-            var check = document.getElementById("cpuState").checked;
-            $.cookie("cpuState", check);
-            oPrefSettings.cpuState = check;
-        });
-        $("#memState").change(function () {
-            var check = document.getElementById("memState").checked;
-            $.cookie("memState", check);
-            oPrefSettings.memState = check;
-        });
-        $("#consoleReload").change(function () {
-            var check = document.getElementById("consoleReload").checked;
-            $.cookie("mgmtReLoad", check);
-            oPrefSettings.mgmtReLoad = check;
-            document.getElementById('btn-mgmtReLoad').style.visibility = (check ? 'visible' : 'hidden');
-        });
-        $("#ipPanelState").change(function () {
-            var check = document.getElementById("ipPanelState").checked;
-            $.cookie("connPanel", check);
-            oPrefSettings.connPanel = check;
-            if (check) $(".connectionsPanel").show();
-            else $(".connectionsPanel").hide();
-        });
-    }
-    setup();
-    setupButton();
+    let setting = new componentKit.ISettings();
+    setting.start();
 
     // ip address blocking //
     delIPDenyClicked = function DelIPDenyClicked(id) {

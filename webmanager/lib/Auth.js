@@ -14,15 +14,19 @@ class Auth extends EventEmitter {
     constructor() {
         super();
         this.enabled = false;
-        this.db = new ManagerDB(process.cwd());
+        this.db = null;
         this.expiry = Math.floor(Date.now() / 1000) + (60 * 60);
         this.aes = {
             key: '2ccf858554a5f119f33516b514efa9d2',
             iv: 'c2e9d24aa29d125d'
         };
         this.init();
-    }
 
+    }
+    async initDB() {
+        let db = new ManagerDB(process.cwd());
+        return await db.start();
+    }
     /**
      * 初始化
      * @return {Auth}
@@ -32,6 +36,7 @@ class Auth extends EventEmitter {
             const IConfig = require('../../IConfig.js');
             let { authorization } = IConfig.ManagerAccounts();
             let { accounts, enabled, secret, expiry } = authorization;
+            this.db = await this.initDB();
             if (accounts) await this.createUsers(accounts);
             this.enabled = enabled;
             this.secret  = secret;

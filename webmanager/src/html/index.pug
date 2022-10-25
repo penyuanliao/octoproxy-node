@@ -99,7 +99,7 @@ html
                                     |  Network
                                 ul.buttons
                                     li
-                                        a.block-toggle(href='#')
+                                        a.block-toggle(href="javascript:")
                                             span.fa.fa-chevron-down
                             div#node-network-Monitor.block-content
                                 h5
@@ -173,7 +173,7 @@ html
                                     span.fa.fa-wifi
                                     |  Tools
                                 ul.buttons
-                                    li: a.block-toggle(href="javascript:;"): span.fa.fa-chevron-down
+                                    li: a.block-toggle(href="javascript:"): span.fa.fa-chevron-down
 
                             div.block-content.list
                                 ul.nav.nav-tabs
@@ -196,14 +196,14 @@ html
                                                 br
                                                 a#scheme-key ws
                                                 | ://
-                                                a#host-key(href="javascript:;") 127.0.0.1:8000
+                                                a#host-key(href="javascript:") 127.0.0.1:8000
                                                 | /
-                                                a#f5-key(href="javascript:;") fxLive
+                                                a#f5-key(href="javascript:") fxLive
                                                 | /fxLB?gameType=
-                                                a#game-key(href="javascript:;") test
+                                                a#game-key(href="javascript:") test
                                             div.form-group
                                                 label(for="sid-key") (options) SID:
-                                                a#sid-key(href="javascript:;") Identity
+                                                a#sid-key(href="javascript:") Identity
                                             div#btn-testing-start.btn.btn-default start
                                             div#btn-testing-stop.btn.btn-default stop
                                         div#test-log.row
@@ -237,26 +237,26 @@ html
                                                     input#proc-filter.form-control(type="text" placeholder="Search")
 
                                         li
-                                            a#btn-login(title="Login" href="javascript:;") Login
+                                            a#btn-login(title="Login" href="javascript:") Login
                                         li
-                                            a#btn-logout(title="Logout" href="javascript:;" style="display: none;")
+                                            a#btn-logout(title="Logout" href="javascript:" style="display: none;")
                                                 span.fa
                                                 | Logout
                                         li
-                                            a#btn-batch(href="javascript:;")
+                                            a#btn-batch(href="javascript:")
                                                 span.fa.fa-tasks
                                         li
-                                            a#f2dbInfo(href="javascript:;")
+                                            a#f2dbInfo(href="javascript:")
                                                 span.fa.fa-file-lines
                                         li
-                                            a.block-refresh(href="javascript:;")
+                                            a.block-refresh(href="javascript:")
                                                 span.pro-refresh.fa.fa-refresh.refresh-anim.paused-animation
                                                 span.project-duration.fa(style="padding-left: 2px;") 5
                                         li
-                                            a.block-toggle(href="javascript:;")
+                                            a.block-toggle(href="javascript:")
                                                 span.fa.fa-chevron-down
                                         li
-                                            a#pref-settings(href="javascript:;")
+                                            a#pref-settings(href="javascript:")
                                                 span.fa.fa-cog.fa-log
                                 div#node-service.block-content.list
                                     div.progress-tmp.list-item(hidden)
@@ -285,7 +285,7 @@ html
                                                     | &nbsp;
                                                     i.pro-lock.fa.fa-lock
                                                 p.text-muted-bold
-                                                    a.pro-assign(href="javascript:;" data-toggle="tooltip") octoproxy
+                                                    a.pro-assign(href="javascript:" data-toggle="tooltip") octoproxy
                                             div.list-item-container.col-sm-1.col-xs-12
                                                 span.fa.fa-user
                                                 | &nbsp;
@@ -310,7 +310,7 @@ html
                                                 p
                                                     span
                                                         b LogLevel&nbsp;
-                                                    a.pro-log-level(href="javascript:;" data-type="select" data-placement="right") Error
+                                                    a.pro-log-level(href="javascript:" data-type="select" data-placement="right") Error
                                                 p
                                                     span.fa-solid.fa-database &nbsp;
                                                     span.pro-db.text-muted NONE
@@ -379,10 +379,10 @@ html
                                         |  Load Balance
                                     ul.buttons
                                         li
-                                            a.block-refresh(href="javascript:;")
+                                            a.block-refresh(href="javascript:")
                                                 span.fa.fa-refresh
                                         li
-                                            a.block-toggle(href="javascript:;")
+                                            a.block-toggle(href="javascript:")
                                                 span.fa.fa-chevron-down
                                 div.block-content.list
                                 div.block-footer
@@ -404,10 +404,10 @@ html
                                         | &nbsp;ServerAPI Config
                                     ul.buttons
                                         li
-                                            a.block-refresh(href="javascript:;")
+                                            a.block-refresh(href="javascript:")
                                                 span.fa.fa-refresh
                                         li
-                                            a.block-toggle(href="javascript:;")
+                                            a.block-toggle(href="javascript:")
                                                 span.fa.fa-chevron-down
                                 div.block-content.list
                                 div.block-footer
@@ -428,9 +428,9 @@ html
                                         span.fa.fa-cubes
                                         | &nbsp;Settings
                                     ul.buttons
-                                        li: a#btn-insert-schedule.block-plus(href="javascript:;"): span.fa.fa-calendar-plus-o
-                                        li: a.block-refresh(href="javascript:;"): span.fa.fa-refresh
-                                        li: a.block-toggle(href="javascript:;"): span.fa.fa-chevron-down
+                                        li: a#btn-insert-schedule.block-plus(href="javascript:"): span.fa.fa-calendar-plus-o
+                                        li: a.block-refresh(href="javascript:"): span.fa.fa-refresh
+                                        li: a.block-toggle(href="javascript:"): span.fa.fa-chevron-down
                                 div#sch-pan-tabs.block-content.list(role="tablist")
                                     ul.nav.nav-tabs
                                         li.active: a(data-toggle="tab" href="#tab-task" aria-hidden="true")
@@ -515,8 +515,8 @@ html
                                         span.fa.fa-code-fork
                                         | &nbsp;Connection IP Address
                                     ul.buttons
-                                        li: a.block-refresh(href="javascript:;"): span.fa.fa-refresh
-                                        li: a.block-toggle(href="javascript:;"): span.fa.fa-chevron-down
+                                        li: a.block-refresh(href="javascript:"): span.fa.fa-refresh
+                                        li: a.block-toggle(href="javascript:"): span.fa.fa-chevron-down
                                 div.block-content.list
                                     div.dataTables_wrapper
                                         table#srv-connect.table.dataTable.table-bordered.table-striped.sortable_simple(style="width: 100%" role="grid")

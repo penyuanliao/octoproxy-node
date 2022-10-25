@@ -77,25 +77,24 @@ class APIServer extends EventEmitter {
      * @param options
      */
     createHTTPServer({listen, port, options}) {
-        // const web = http.createServer((req, res) => {});
-        // web.on('upgrade', (request, socket, head) => {
-        //     NSLog.log(request.url, request.method, request.upgrade, request.client);
-        // });
-        // if (listen) web.listen(port, () => {
-        //     NSLog.log("info",'Web Service start listening port %s.', port);
-        // });
         const WebManager = require('./WebManager.js');
         const web = new WebManager({delegate: this, listen, port, options});
-        web.on('listen', (element) => {
-
-        });
+        web.on('listen', () => {});
         return web;
     };
+    /**
+     * Web ProxyMode
+     * @return {WebMiddleware}
+     */
     createWebProxyServer() {
         const WebMiddleware = require('./WebMiddleware.js');
-        return new WebMiddleware(this.httpServer.store)
+        return new WebMiddleware(this.httpServer.options)
             .start(this.createWebProxyRouters());
     }
+    /**
+     * Web ProxyMode Routers
+     * @return {*[]}
+     */
     createWebProxyRouters() {
         const { wpc } = this.configure;
         let routers = [];

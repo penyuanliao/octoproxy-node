@@ -1,6 +1,6 @@
 "use strict";
 const Path          = require("path");
-// const util          = require("util");
+const util          = require("util");
 const EventEmitter  = require("events").EventEmitter;
 // const NSLog         = require('fxNetSocket').logger.getInstance();
 const express       = require("express");
@@ -8,24 +8,30 @@ const session       = require('express-session');
 const bodyParser    = require('body-parser');
 const {nanoid}      = require('nanoid');
 // const ejs = require('ejs');
-/**
- * 
- * @constructor
- */
+
 class WebManager extends EventEmitter {
+    /**
+     * Web服務
+     * @param {*} delegate 代理
+     * @param {Boolean} listen 監聽
+     * @param {Number} port 服務埠
+     * @param {Object} options session參數
+     */
     constructor({delegate, listen, port, options}) {
         super();
         this.delegate = delegate;
-        this.options = this.setupOptions(options);
         this.store = new session.MemoryStore();
+        this.options = this.setupOptions(options);
         this.app = this.createHttpServer();
         this.server = this.listen({ listen, port });
     }
     setupOptions(options) {
+        let {store} = this;
         if (options) {
-            return Object.assign({}, options);
+            return  Object.assign({store}, options);;
         } else {
             return {
+                store,
                 secret: nanoid(12),
                 name: 'user',
                 saveUninitialized: false,
@@ -100,7 +106,7 @@ class WebManager extends EventEmitter {
                 req.session.user = 'Guest';
                 req.session.status = 'not_authorized';
             }
-            console.log(req.session);
+            console.log(req.sessionID, req.session);
             // console.log(`${req.sessionID} => req.session.user: ${req.session.user}`);
             // let {token} = req.session;
             res.render('index', {
@@ -119,7 +125,8 @@ class WebManager extends EventEmitter {
                 pathname: req.url,
                 user: {
                     name: req.session.user,
-                    status: req.session.status
+                    status: req.session.status,
+                    token: req.session.token
                 },
                 mode: 'pug'});
             return next();

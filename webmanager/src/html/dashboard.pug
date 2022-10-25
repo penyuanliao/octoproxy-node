@@ -2,7 +2,110 @@ doctype html
 
 html
     include includes/head.pug
+    script(type="text/javascript" src="js/componentKit.js")
+    script(type="text/javascript" src="js/chart.js")
     script.
-        $(document).ready(() => {});
+        $(document).ready(() => {
+
+            let info = {
+                user: "#{user.name}",
+                mode: "#{mode}",
+                status: "#{user.status}",
+                token: "#{user.token}"
+            }
+
+            let [host, port] = $(location).attr('host').split(':');
+            let webApi = new componentKit.IFetcher({delegate: this, info}, {
+                host: host || "127.0.0.1",
+                port: port || 8000,
+                appid: '284vu86'
+            });
+
+            async function start() {
+                let {result, data} = await webApi.getDashboard();
+                if (result) {
+                    chartWeek(data);
+                }
+            }
+            function chartWeek({incomeCount}) {
+                let income = new Map(incomeCount);
+                let labels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Tri', 'Sat']
+                let datasets = {labels, data: new Array(labels.length).fill(0)};
+                labels.forEach((label, index) => {
+                    let sum = 0;
+                    if (income.has(label)) {
+                        sum = income.get(label).reduce((prev, current) => (prev + current))
+                    }
+                    console.log(label, sum);
+                    datasets.data[index] = sum;
+                })
+                createChart(datasets);
+            }
+            function createChart({labels, data}) {
+                let ctx = document.getElementById('chart-area').getContext('2d');
+
+                var myChart = new Chart(ctx, {
+                    type: 'bar', //圖表類型
+                    data: {
+                        //標題
+                        labels,
+                        datasets: [{
+                            data,
+                            fill: true,
+                            pointRadius: 0,
+                            radius: 3,
+                            borderColor: 'rgb(75, 192, 192, 0)',
+                            backgroundColor: `rgb(75, 192, 192, 0.5)`
+                        }]
+                    },
+
+                    options: {
+                        responsive: false,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false,
+                                position: 'top',
+                                align: 'start'
+                            },
+                            title: {
+                                display: false,
+                                text: 'Event Count'
+                            }
+                        },
+                        scales: {
+                            x: {
+                                display: true
+                            },
+                            y: {
+                                display: true
+                            }
+                        }
+                    }
+                });
+            }
+            start();
+
+
+        });
     body
         include includes/navbar.pug
+        div#wrapper.context-box
+            div.right-content.col-md-10
+                div.block
+                    div.block-head
+                        h2
+                            span.fa.fa-file
+                            |  Event Count
+                    div.block-content.list(style="height:200px;")
+                        canvas#chart-area(style="height:200px")
+                    div.block-footer
+            div.right-content.col-md-10
+                div.block
+                    div.block-head
+                        h2
+                            span.fa.fa-file
+                            |  Panel
+                    div.block-content.list
+                        canvas#chart-area2
+                    div.block-footer

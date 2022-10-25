@@ -66,7 +66,7 @@ class RestManager extends EventEmitter {
                 console.log(`auth => ${req.url}`);
                 console.log(auth);
 
-
+                result = 1;
                 if (result == false) {
                     next(new errors['UnauthorizedError']('Access is denied due to invalid credentials.'));
                 } else {
@@ -104,12 +104,13 @@ class RestManager extends EventEmitter {
         server.post(`${route}/user/login`, async (req, res, next) => {
             let {username, password} = req.body;
             let sessionID = req.header('proxy-session-id');
-            let session = await this.delegate.httpServer.getSession(sessionID);
+            let session = await this.userSession(sessionID);
             let user = await this.login({username, password});
             if (user != false) {
                 session.user = username;
+                session.token = user.token;
                 session.status = 'authorized';
-                await this.delegate.httpServer.setSession(sessionID, session);
+                await this.userSession(sessionID, session);
                 res.send({result: true, data: { token: user.token }});
             } else {
                 res.send({result: false});
@@ -122,13 +123,14 @@ class RestManager extends EventEmitter {
             let { username } = req.body;
             NSLog.info(`${req.url} user: ${username} logout`);
             let sessionID = req.header('proxy-session-id');
-            let session = await this.delegate.httpServer.getSession(sessionID);
+            let session = await this.userSession(sessionID);
             let logout = await this.delegate.auth.logout({ username });
             session.user = 'Guest';
-            session.status = 'not_authorized'
+            session.status = 'not_authorized';
+            await this.userSession(sessionID, session);
             res.send({ result: logout });
             return next();
-        })
+        });
         server.post(`${route}/user/password`, (req, res, next) => this.password(req, res, next));
         //二次驗證
         server.post(`${route}/user/2fa`, async (req, res, next) => {
@@ -636,6 +638,18 @@ class RestManager extends EventEmitter {
             return false;
         } else {
             return login;
+        }
+    };
+    async userSession(sessionID, data) {
+        let {delegate} = this;
+        if (delegate.httpServer) {
+            if (data) {
+                return await delegate.httpServer.setSession(sessionID, data);
+            } else {
+                return await delegate.httpServer.getSession(sessionID);
+            }
+        } else {
+            return false;
         }
     }
     clean() {

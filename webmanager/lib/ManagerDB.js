@@ -1,174 +1,116 @@
 "use strict";
-const net           = require("net");
-const util          = require("util");
-const EventEmitter  = require("events");
-const sqlite3       = require('sqlite3').verbose();
-const NSLog         = require('fxNetSocket').Logger.getInstance();
+const events = require("events");
+const lokijs = require('lokijs');
+const {nanoid} = require('nanoid');
+const NSLog  = require('fxNetSocket').Logger.getInstance();
 /**
- * Sql-lite資料庫
+ * 資料庫
  * @constructor
  */
-class ManagerDB extends EventEmitter {
+class ManagerDB extends events.EventEmitter {
     constructor(filepath) {
         super();
-        this.syntax = new Syntax();
-        this.db = this.setup(filepath);
+        this.filepath = filepath;
     }
-}
-/**
- * 初始化設定
- * @param filepath
- * @return {*}
- */
-ManagerDB.prototype.setup = function (filepath) {
-    if (!filepath) filepath = ".";
-    let src = `${filepath}/manager.db`;
-
-    NSLog.info(`ManagerDB src: ${src}`);
-    const db = new sqlite3.Database(src);
-    db.serialize(() => {
-        db.run(this.syntax.createTableAccount());
-    });
-    return db;
-};
-/**
- * 插入
- * @param json
- * @return {Promise<unknown>}
- */
-ManagerDB.prototype.insertAccount = async function (json) {
-    return await this.asyncRun(this.syntax.insertAccount(json));
-};
-
-ManagerDB.prototype.updateAccount = async function (json) {
-    return await this.asyncRun(this.syntax.updateAccount(json));
-};
-
-ManagerDB.prototype.flushToken = async function (json) {
-    return await this.asyncRun(this.syntax.updateToken(json));
-}
-
-ManagerDB.prototype.getAccounts = async function () {
-    return await this.asyncAll(this.syntax.selectAccounts());
-};
-
-ManagerDB.prototype.getUser = async function (username) {
-    const data = await this.asyncAll(this.syntax.selectAccounts(username));
-    if (!data.length) {
-        return false;
-    } else {
-        return data[0];
+    async test() {
+        console.log(`test => ${await this.getUser({username: 'newflash@mail.chungyo.net'})}`);
     }
-};
-ManagerDB.prototype.updateSecret = async function (username, otp) {
-    return await this.asyncRun(this.syntax.updateSecret({username, otp}));
-};
-ManagerDB.prototype.getSecret = async function (username) {
-    return await this.asyncGet(this.syntax.secret({username}));
-};
-ManagerDB.prototype.getPermission = async function (username) {
-    return await this.asyncGet(this.syntax.permission({username}));
-};
-ManagerDB.prototype.asyncRun = function (sql) {
-    return new Promise((resolve, reject) => {
-        this.db.run(sql, (err, res) => {
-            if (err) reject(err);
-            else {
-                resolve(res);
-            }
-        });
-    })
-};
-ManagerDB.prototype.asyncAll = function (sql) {
-    return new Promise((resolve, reject) => {
-        this.db.all(sql, (err, res) => {
-            if (err) reject(err);
-            else {
-                resolve(res);
-            }
-        });
-    })
-}
-ManagerDB.prototype.asyncEach = function (sql, {key, value}) {
-    return new Promise((resolve, reject) => {
-        this.db.each(sql, (err, row) => {
-            if (err) reject(err);
-            else {
-                if (value === row[key]) resolve(row);
-            }
-        });
-    })
-};
-ManagerDB.prototype.asyncGet = function (sql) {
-    return new Promise((resolve, reject) => {
-        this.db.get(sql, (err, res) => {
-            if (err) reject(err);
-            else {
-                resolve(res);
-            }
-        });
-    })
-}
-ManagerDB.prototype.clean = function () {
-
-};
-ManagerDB.prototype.release = function () {
-
-};
-class Syntax {
-    constructor() {
-    };
-    createTableAccount() {
-        return `
-        CREATE TABLE IF NOT EXISTS accounts (
-            id       INTEGER        NOT NULL PRIMARY KEY,
-            username varchar(50)    NOT NULL UNIQUE,
-            password TEXT           NOT NULL,
-            token    TEXT           NULL,
-            otp      TEXT           DEFAULT '',
-            permission INTEGER      DEFAULT 0 
-        )`;
-    };
-    insertAccount({username, password, permission}) {
-        return `INSERT INTO accounts VALUES (NULL, '${username}', '${password}', NULL, '', ${(permission ? permission : 0)} )`;
-    };
-    updateAccount({password, username}) {
-        return `UPDATE accounts SET password = '${password}' WHERE username = '${username}'`;
-    };
-    updatePermission({password, username, value}) {
-        return `UPDATE accounts SET permission = '${value}' WHERE username = '${username}' AND password = '${password}' `;
+    /**
+     * 初始化設定
+     * @return {*}
+     */
+    async start() {
+        let {filepath} = this;
+        if (!filepath) filepath = ".";
+        let src = `${filepath}/manager.db`;
+        NSLog.info(`ManagerDB lokijs src: ${src}`);
+        this.db = new lokijs(src, {autoload: true, autoloadCallback: (element) => {
+                console.log(`autoloadCallback`, element);
+            }});
+        await this.load();
+        this.accounts = this.createBucket(`accounts`);
+        return this;
     }
-    updateToken({username, token}) {
-        return `UPDATE accounts SET token = '${token}' WHERE username = '${username}'`;
-    };
-    updateSecret({username, otp}) {
-        return `UPDATE accounts SET otp = '${otp}' WHERE username = '${username}'`;
-    };
-    secret({username}) {
-        return `SELECT username, otp FROM accounts WHERE username = '${username}'`;
-    };
-    permission({username}) {
-        return `SELECT username, permission FROM accounts WHERE username = '${username}'`;
-    };
-    selectAccounts(username) {
-        if (username) {
-            return `SELECT * FROM accounts WHERE username = '${username}'`;
+    async load() {
+        let {db} = this
+        return new Promise((resolve) => {
+            db.loadDatabase({}, () => resolve());
+        })
+    }
+    createBucket(bucket) {
+        let {db} = this;
+        let collection = db.getCollection(bucket);
+        if (collection) {
+            return collection;
         } else {
-            return `SELECT * FROM accounts`;
+            collection = db.addCollection(bucket);
+            return collection;
         }
+    }
+    async insertAccount({username, password, permission}) {
+        const {accounts} = this;
+        let json = {
+            // id: nanoid(10),
+            username,
+            password,
+            permission,
+            token: '',
+            otp: '',
+        };
+        if (!accounts.findOne({username})) {
+            console.log(`insertAccount`, json);
 
-    };
-    createTableTokens() {
-        return `
-        CREATE TABLE IF NOT EXISTS tokens (
-            id       INTEGER        NOT NULL PRIMARY KEY,
-            username varchar(50)    NOT NULL
-            token    TEXT,
-            exp      INTEGER
-            invaild  BLOB
-        )`;
-    };
+            accounts.insert(json);
+            this.db.saveDatabase();
 
+        }
+    }
+    async updateAccount({password, username}) {
+        let user = await this.getUser(username);
+        user.password = password;
+        this.update(user);
+    }
+    async updatePermission({password, username, value}) {
+        let user = await this.getUser(username);
+        if (password == user.password) {
+            user.permission = value;
+            this.update(user);
+            return true;
+        } else {
+            return false;
+        }
+    }
+    async flushToken({username, token}) {
+        let user = await this.getUser(username);
+        user.token = token;
+        console.log('flushToken', user);
+        this.update(user);
+    }
+    async updateSecret(username, otp) {
+        let user = await this.getUser(username);
+        user.otp = otp;
+        this.update(user);
+    }
+    async getSecret(username) {
+        let user = await this.getUser(username);
+        return user.otp;
+    }
+    async getPermission(username) {
+        let user = await this.getUser(username);
+        return user.permission;
+    }
+    async getUser(username) {
+        const {accounts} = this;
+        return accounts.findOne({username});
+    };
+    update(user) {
+        const {accounts} = this;
+        accounts.update(user);
+        this.db.saveDatabase();
+    }
+    clean() {
+    }
+    release() {
+    }
 }
-
 module.exports = exports = ManagerDB;
