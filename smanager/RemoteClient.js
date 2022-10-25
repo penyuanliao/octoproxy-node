@@ -11,6 +11,8 @@ class RemoteClient {
         this.mode = IManagerConfig.client.mode;
         this.ctrl = undefined;
         this.progress = new Map();
+        this.storageInfo = new Map();
+        this.caches = new Set(['getServiceInfo', 'getSysInfo', 'getDashboardInfo']);
         this.setup();
     }
     /**
@@ -82,7 +84,37 @@ class RemoteClient {
 
     async send(params) {
         if (!this.ctrl) return false;
-        return await this.ctrl.callAsync("targetEvent", params);
+
+        let method = params.method;
+        if (this.caches.has(method)) {
+            let cache = this.getCache(method);
+            if (cache) return cache;
+            let data = await this.ctrl.callAsync("targetEvent", params);
+            this.setCache(method, data);
+            return data;
+        } else {
+            return await this.ctrl.callAsync("targetEvent", params);
+        }
+    }
+    getCache(method) {
+        const {storageInfo} = this;
+        if (storageInfo.has(method)) {
+            let {time, data} = storageInfo.get(method);
+            let expired = Math.floor((Date.now() - time) / 1000 ) >= 5;
+            if (!expired) {
+                return data;
+            } else {
+                storageInfo.delete(method);
+            }
+        }
+        return null;
+    }
+    setCache(method, data) {
+        const {storageInfo} = this;
+        storageInfo.set(method, {
+            time: Date.now(),
+            data
+        });
     }
     joinSteps({method, show}) {
         this.progress.set(method, show);
