@@ -6,10 +6,12 @@ const fs            = require("fs");
 const EventEmitter  = require("events");
 const {Server}      = require("../lib/RPCSocket.js");
 const Dashboard     = require("../lib/Dashboard.js");
+const TelegramBot   = require("../lib/FxTelegramBot.js");
 const IHandler      = require("./IHandler.js");
 const ClustersInfo  = require("./ClustersInfo.js");
 const CoreInfo      = require("./CoreInfo.js");
 const IBlockList    = require("./IBlockList.js");
+const ReportTool    = require("./ReportTool.js");
 // const editor        = require('../lib/AssignEdittor.js');
 const IConfig       = require('../IConfig.js').getInstance();
 const {UDPClient}   = require("../lib/UDP.js");
@@ -46,6 +48,8 @@ class IManager extends EventEmitter {
         });
         this.blockIPs = new IBlockList()
             .load(this.readFile(IPFilterPath, {enabled:true, allow:{}, deny:{}}));
+        this.reporting = new ReportTool().start();
+        this.tgBot     = this.createTelegramBot(IConfig.IManagerConfig.telegram);
         //auto check
         this.autoTimes = 0;
         this.setupServerMode();
@@ -299,14 +303,15 @@ class IManager extends EventEmitter {
      */
     start() {
         if (this.timer) clearInterval(this.timer);
-        this.timer = setInterval(this.loops.bind(this), 5000);
+        this.timer = setInterval(() => this.loops(), 5000);
 
     };
     /**
      * 輪詢檢查服務
      */
-    loops() {
-        this.nodesInfo.refresh();
+    async loops() {
+        let info = await this.nodesInfo.refresh();
+        this.reporting.submit(info);
         if (++this.autoTimes >= 60) {
             this.autoTimes = 0; //重置
             this.automaticCheckCluster();
@@ -578,6 +583,25 @@ class IManager extends EventEmitter {
     getPath(pathname) {
         return xPath.resolve(process.cwd(), pathname);
     };
+    /**
+     * 建立通知系統
+     * @param {string} bot
+     * @param {string} token
+     * @param {boolean} enabled 啟用
+     * @param {object} proxyMode
+     * @param {string} proxyMode.host
+     * @param {number} proxyMode.port
+     * @param {boolean} proxyMode.enabled
+     * @return {FxTelegramBot.instance}
+     */
+    createTelegramBot({bot, token, enabled, proxyMode}) {
+        let tgBot = new TelegramBot(bot, token);
+        tgBot.enabled = (typeof enabled != "boolean") ? false : enabled;
+        if (proxyMode.enabled) {
+            tgBot.setProxy(proxyMode.host, proxyMode.port);
+        }
+        return tgBot;
+    }
     /**
      * 清除
      */

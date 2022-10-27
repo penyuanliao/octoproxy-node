@@ -201,7 +201,20 @@ class IConfig {
                     port: this.managePort
                 }
             },
-            SIGNATURE: "284vu86"
+            SIGNATURE: "284vu86",
+            telegram: {
+                bot: "",
+                token: "",
+                chats: {
+                    sys: "-1001314121392"
+                },
+                enabled: false,
+                proxyMode: {
+                    host: "",
+                    port: 0,
+                    enabled: false
+                }
+            }
         };
     };
     setupAppArguments(options) {

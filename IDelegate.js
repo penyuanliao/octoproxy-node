@@ -1113,7 +1113,7 @@ class IDelegate extends events.EventEmitter {
         child.emitter.on('status', (message) => NSLog.log('warning', message));
         child.emitter.on('unexpected', (err) => {
             NSLog.log('warning', "unexpected:", err.name);
-            //endpoint.tgBotTemplate("-1001314121392", "shutdown", [err.name]);
+            endpoint.tgBotTemplate(iConfig.IManagerConfig.telegram.chats.sys, "shutdown", [err.name]);
         });
         child.emitter.on('restart', () => endpoint.mgmtSrv.refreshClusterParams(child));
         return child;
@@ -1133,28 +1133,13 @@ class IDelegate extends events.EventEmitter {
         delete require.cache[require.resolve('./smanager/IManager.js')];
         this.management();
     };
-    /**
-     * create notify Telegram
-     * @param opt
-     * @param proxy
-     * @public
-     */
-    createTelegramBot(opt, proxy) {
-        this.tgBot = TelegramBot.getInstance();
-        this.tgBot.setBot(opt.bot, opt.token);
-        this.tgBot.setProxy(proxy.host, proxy.port);
-    };
     tgBotTemplate(chatID, type, args) {
-        if (typeof this.tgBot == "undefined") return false;
+        let {tgBot} = this.mgmtSrv;
+        if (typeof tgBot == "undefined") return false;
         if (type == "shutdown") {
-            this.tgBotSend(chatID, util.format("%s ❗️shutdown: reboot by \n<code>%s</code>|<b>%s</b>", hostname, TelegramBot.dateFormat(new Date()), args[0]));
+            tgBot.sendMessage(chatID, util.format("%s ❗️shutdown: reboot by \n<code>%s</code>|<b>%s</b>", hostname, TelegramBot.dateFormat(new Date()), args[0]));
         }
     };
-    tgBotSend(chatID, message) {
-        if (typeof this.tgBot != "undefined") {
-            this.tgBot.sendMessage(chatID, message);
-        }
-    }
     /**
      * //socket hot reload0
      * @param message

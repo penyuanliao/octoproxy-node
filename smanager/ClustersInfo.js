@@ -27,6 +27,7 @@ class ClustersInfo extends EventEmitter {
         this.metadata = [];
         this.commandMap = new Set();
         this._mxoss = -1;
+        this.updateTime = 0;
         setTimeout(() => this.refresh(), 1000);
     }
     get mxoss() {
@@ -40,11 +41,18 @@ class ClustersInfo extends EventEmitter {
             });
         }
         return this._mxoss;
+    };
+    get isRefresh() {
+        return (Date.now() - this.updateTime) < 1000;
     }
     /**
      * 刷新
      */
     async refresh() {
+        if (this.isRefresh) {
+            this.emit("refresh", this.info);
+            return this.info;
+        }
         this.clean();
         let services = await this.getProcessInfo();
         let trash = this.getTrashInfo();
@@ -56,6 +64,7 @@ class ClustersInfo extends EventEmitter {
             this.info = services.concat(trash);
             this.emit("refresh", this.info);
         }
+        return this.info;
     }
     /**
      * 目前程序的資訊
@@ -288,6 +297,7 @@ ClustersInfo.prototype.clean = function () {
     this.procKeys = [];
     // this.info = [];
     this.pids = new Set([process.pid]);
+    this.updateTime = Date.now();
 };
 ClustersInfo.prototype.release = function () {
     this.delegate = null;

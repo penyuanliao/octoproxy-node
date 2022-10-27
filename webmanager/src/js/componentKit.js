@@ -3334,6 +3334,7 @@ var componentKit = (function ()
                 const tag = $("#sch-pan-tabs .active a").attr("href");
                 console.log(`tag ---->`, tag);
                 panelSchedule.find('.block-toggle').children("span").removeClass("fa fa-chevron-up").addClass("fa fa-chevron-down");
+                panelSchedule.find('.block-content').slideDown(0);
                 switch (tag) {
                     case "#tab-task":
                         mAdapter.getSchedule();

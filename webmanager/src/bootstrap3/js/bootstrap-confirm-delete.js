@@ -117,7 +117,7 @@
                 debug: false,
                 heading: 'Delete',
                 message: 'Are you sure you want to delete this item?',
-                btn_ok_label: 'shutdown',
+                btn_ok_label: 'restart',
                 btn_gracefully_label: 'gracefully',
                 btn_cancel_label: 'Cancel',
                 data_type: null,

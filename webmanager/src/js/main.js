@@ -70,10 +70,12 @@ function load(info) {
         .load()
         .onDidChange(async ({value, version}) => {
             let [host, port] = value.split(":");
-            viewCtrl.setOptions({host, port: (port || 80)});
-            let data = await viewCtrl.version();
-            if (data.result) {
-                version = 'v2';
+            if (version == 'v1') {
+                viewCtrl.setOptions({host, port: (port || 80)});
+                let data = await viewCtrl.version();
+                if (data.result) {
+                    version = 'v2';
+                }
             }
             return {value, version};
         });
