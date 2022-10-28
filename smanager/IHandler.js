@@ -966,9 +966,14 @@ IHandler.prototype.ipcMessage = function ({params, pid}, client, callback) {
  * @param client
  * @param callback
  */
-IHandler.prototype.metadata = function (params, client, callback) {
+IHandler.prototype.metadata = function ({params}, client, callback) {
     const { nodesInfo } = this.delegate;
-    let metadata = nodesInfo.getMetadata();
+    let metadata;
+    if (params.pid) {
+        metadata  = nodesInfo.getMetadata(params.pid);
+    } else {
+        metadata  = nodesInfo.getMetadata();
+    }
     if (callback) {
         callback({data: metadata, result: true});
     }

@@ -651,15 +651,17 @@ class APIClient extends EventEmitter {
     };
     async getMetadata(json) {
         const { manager } = this;
+        let {pid} = json.data || json;
         let params = {
-            method: "metadata"
+            method: "metadata",
+            params: {pid}
         };
-        const {result} = await manager.send(params);
-
+        const {result, data} = await manager.send(params);
         let respond = {
             tokenId: json.tokenId,
             event: "getMetadata",
-            result
+            result,
+            data
         };
         this.write(respond);
     };

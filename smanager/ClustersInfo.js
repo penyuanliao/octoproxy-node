@@ -24,7 +24,7 @@ class ClustersInfo extends EventEmitter {
         this.uptime = Date.now();
         //記錄所有的tags
         this.tags = new Set();
-        this.metadata = [];
+        this.metadataMap = new Map();
         this.commandMap = new Set();
         this._mxoss = -1;
         this.updateTime = 0;
@@ -233,15 +233,19 @@ ClustersInfo.prototype.getTrashInfo = function () {
     return list;
 };
 ClustersInfo.prototype.updateMetadata = function (cluster) {
-    let data = [];
-    let { metadata, pid } = cluster;
+    let {metadataMap} = this;
+    let { metadata, pid, name } = cluster;
     if (metadata) {
-        data.push([pid, metadata]);
+        metadataMap.set(pid, metadata);
     }
-    this.metadata = data;
 };
-ClustersInfo.prototype.getMetadata = function () {
-    return Object.assign([], this.metadata);
+ClustersInfo.prototype.getMetadata = function (pid) {
+    if (pid) {
+        return this.metadataMap.get(pid);
+    } else {
+        return [...this.metadataMap];
+    }
+
 };
 /**
  * load balance
@@ -297,6 +301,7 @@ ClustersInfo.prototype.clean = function () {
     this.procKeys = [];
     // this.info = [];
     this.pids = new Set([process.pid]);
+    this.metadataMap.clear();
     this.updateTime = Date.now();
 };
 ClustersInfo.prototype.release = function () {

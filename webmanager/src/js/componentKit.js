@@ -252,8 +252,8 @@ var componentKit = (function ()
                     this.isClosed = false;
                 }
                 ws.onclose = (err) => {
+                    this.triggerClosed(err);
                     resolve(false);
-                    this.onClosed(err);
                 }
                 ws.onerror = () => {
                     resolve(false);
@@ -261,15 +261,19 @@ var componentKit = (function ()
                 ws.onmessage = this.onMessage.bind(this);
             });
         };
-        onClosed(error) {
-            console.log(`onClosed`, error);
+        onClosed() {
+            //interface
+        };
+        triggerClosed(err) {
+            console.log(`triggerClosed:`, err);
             if (this.isClosed == false) {
                 this.stopAuto();
                 this.alertDisconnect();
             }
             this.isClosed = true;
             this.ready = false;
-        };
+            this.onClosed(err);
+        }
         onMessage(event) {
             let json = JSON.parse(event.data);
             let tokenId = json.tokenId || -1;
@@ -318,7 +322,7 @@ var componentKit = (function ()
                     json = JSON.stringify(json);
                 }
                 if (this.ws.readyState == 3) {
-                    this.onClosed();
+                    this.triggerClosed();
                 } else {
                     this.ws.send(json);
                     this.responder.set(tokenId, function (result) { resolve(result); });
@@ -494,9 +498,12 @@ var componentKit = (function ()
                 }
             });
         };
-        async getMetadata() {
+        async getMetadata({pid}) {
             return await this.send({
-                action: 'getMetadata'
+                action: 'getMetadata',
+                data: {
+                    pid
+                }
             });
         };
         /** 讀取pid服務log資訊 **/
@@ -1116,6 +1123,13 @@ var componentKit = (function ()
                 return await this.manager.createSmsManager();
             }
         }
+        async loadMetadata(values) {
+            if (this.version === 'v1') {
+
+            } else {
+                return await this.manager.getMetadata(values);
+            }
+        }
         async wait(sec) {
             return new Promise((resolve) => {
                 setTimeout(() => {
@@ -1496,6 +1510,7 @@ var componentKit = (function ()
             this.fl2dbArray = [];
             this.hashTables = new Map();
             this.metadata = new Map();
+            this.mdUpTime = 0;
             this.rows = rows || 20;
             this.index = 0;
             this.history = new Map([
@@ -1650,7 +1665,7 @@ var componentKit = (function ()
             if (history.length > 8) history.shift();
             history.push(value);
         };
-        change(page) {
+        async change(page) {
             if (page) this.index = (page - 1);
             let { rows, src, index } = this;
             let start = index * rows;
@@ -1699,13 +1714,33 @@ var componentKit = (function ()
                         values: bitrates
                     });
                     this.setSubInfo(el_monitor, monitor);
-                    this.setSubInfo(el_metadata, this.metadata.get(pid));
+                    this.setSubInfo(el_metadata, await this.getMetadata(pid));
                     this.setLogLevel(row, {lv}, this.manager);
                     this.setHostInfo(el_db, f2db);
                     this.ctrlButton(row);
                 }
             }
         };
+        async getMetadata(pid) {
+            if (this.mdUpTime != 0) return this.metadata.get(pid);
+            await this.refreshMetadata();
+            this.mdUpTime = Date.now();
+            if (this.metadata) {
+                return this.metadata.get(pid);
+            }
+        }
+        async refreshMetadata(pid) {
+            const { manager } = this;
+            let {result, data} = await manager.loadMetadata({pid});
+            if (result) {
+                if (pid) {
+                    this.metadata.set(pid, data);
+                } else {
+                    this.updateMetadata(data);
+                }
+
+            }
+        }
         event(el, item) {
             const self = this;
 
@@ -1733,7 +1768,7 @@ var componentKit = (function ()
                 }
             });
             let monitorBtn = el.find('.list-item-monitor');
-            monitorBtn.click(() => {
+            monitorBtn.click(async () => {
                 let cMonitor = el.find('.pro-monitor');
                 if (cMonitor.attr("class").indexOf("monitor-toggle") == -1) {
                     cMonitor.css("height", "auto");
@@ -1757,6 +1792,12 @@ var componentKit = (function ()
                 }
                 cMetadata.toggleClass('metadata-toggle');
 
+            });
+            let mdRefresh = el.find('.md-refresh');
+            mdRefresh.click(async () => {
+                let index = el.attr("value");
+                var pid = self.src[index].pid;
+                console.log(`mdRefresh => ${pid}`, await this.refreshMetadata(pid));
             });
 
             el.find('.list-item-cmd').click(() => {
@@ -1958,7 +1999,7 @@ var componentKit = (function ()
         btnEnabled(el) {
             let index = el.attr('value');
             let {file, lock} = this.src[index];
-        }
+        };
         setStatus(el, status, trash) {
             el.children().attr('hidden', 'hidden');
             if (trash) status = 4;
@@ -2040,7 +2081,7 @@ var componentKit = (function ()
                         <div class="tooltip-inner" style="background-color: #757575; text-align: left; font-size: 14px;"></div>
                     </div>`
             });
-        }
+        };
         setText(el, str) {
             el.text(str);
         };
@@ -2218,15 +2259,15 @@ var componentKit = (function ()
                     str += '<br>';
                 })
             } else if (typeof data == "object") {
-                str = JSON.stringify(data, null, '\t');
+                str = "";
                 let keys = Object.keys(data);
                 keys.forEach((key) => {
-                    str += key;
-                    str += '<br>';
+                    str += `${key} => `;
                     if (typeof data[key] == "object") {
+                        str += '<br>';
                         str += JSON.stringify(data[key], null, '\t');
                     } else {
-                        str += data.toString();
+                        str += data[key].toString();
                     }
                     str += '<br>';
                 });
@@ -2237,7 +2278,7 @@ var componentKit = (function ()
             content.html(
                 `<p>${str}</p>`
             );
-        }
+        };
         addBadgeView({badge, value}) {
             let unit = "";
             let key = "";
