@@ -464,6 +464,7 @@ FxSocket.prototype.write = function (data, opcode) {
 FxSocket.prototype._createMessage = function (data, opcode) {
     let flushed = true;
     let len = 0;
+    if (typeof data == "undefined") data = Buffer.alloc(0);
     if (this.compressed && this.zlibDeflatedEnabled) {
         const info = {
             fin: true,
@@ -566,12 +567,12 @@ FxSocket.prototype.read = function (data, first) {
     }
 };
 /** 使用者斷線 */
-FxSocket.prototype.close = function () {
+FxSocket.prototype.close = function (data) {
     // debug('trace','FxSocket socket destroy :', this.name);
     if (this.mode === 'ws' && this.connecting) {
         try {
             if (this.baseEvtShow) this.write(WS_HANDLE_CLOSE);
-            this._createMessage(undefined, 8);
+            this._createMessage(data, 8);
         }
         catch (e) {
         }
@@ -583,6 +584,12 @@ FxSocket.prototype.close = function () {
         this.socket.destroy();
     }
 
+};
+FxSocket.prototype.createCloseStatusCode = function ({code, reason}) {
+    let codeBuf = Buffer.alloc(2);
+    codeBuf.writeUInt16BE(code);
+    let reasonBuf = Buffer.from((reason || ''));
+    return Buffer.concat([codeBuf, reasonBuf]);
 };
 /** 檢查完成四方交握 */
 FxSocket.prototype.checkFinishTCP = function () {

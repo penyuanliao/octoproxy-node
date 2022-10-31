@@ -103,8 +103,7 @@ function FxWebSocketClient(socket, option, cb) {
                 data = obj.msg;
                 if(obj.opcode == 8)
                 {
-                    self.destroy();
-                    return;
+                    return client.close(client.createCloseStatusCode({code: 1000, reason: ''}));
                 }
 
                 chunkBuffer = chunkBuffer.slice(client.protocol.total, chunkBuffer.length);

@@ -192,7 +192,7 @@ function FxConnection(port, option) {
                     data = obj.msg;
                     if(obj.opcode == 8)
                     {
-                        client.checkFinishTCP();
+                        client.close(client.createCloseStatusCode({code: 1000, reason: ''}));
                         return; // Event Data Close
                     }
                     chunkBuffer = chunkBuffer.slice(client.protocol.total, chunkBuffer.length);
