@@ -473,7 +473,7 @@ FxSocket.prototype._createMessage = function (data, opcode) {
     let flushed = true;
     let len = 0;
     if (typeof data == "undefined") data = Buffer.alloc(0);
-    if (this.compressed && this.zlibDeflatedEnabled) {
+    if (this.compressed && this.zlibDeflatedEnabled && opcode != 8) {
         const info = {
             fin: true,
             data: data,

@@ -306,8 +306,8 @@ FxWebSocketClient.prototype.destroy = function () {
  * 關閉連線
  * @public
  */
-FxWebSocketClient.prototype.close = function () {
-    if (this._client) this._client.apply(this._client, arguments);
+FxWebSocketClient.prototype.close = function (data) {
+    if (this._client) this._client.close(data);
 };
 /**
  * 設定連線資料模式
@@ -350,6 +350,12 @@ FxWebSocketClient.prototype.probeResult = function (obj) {
     } else {
         return -1;
     }
+};
+FxWebSocketClient.prototype.createCloseStatusCode = function ({code, reason}) {
+    let codeBuf = Buffer.alloc(2);
+    codeBuf.writeUInt16BE(code);
+    let reasonBuf = Buffer.from((reason || ''));
+    return Buffer.concat([codeBuf, reasonBuf]);
 };
 /**
  * @returns {Versions} 版本支援版號;

@@ -193,17 +193,18 @@ FxRevicer.prototype.emitMessage = function (data) {
 FxRevicer.prototype.emitClose = function () {
     if (this.isRelease) {
     } else if (this.client.constructor.name == "FxSocket") {
-        this.client.close();
+        this.client.close(client.createCloseStatusCode({code: 1001, reason: ''}));
     } else if (this.client.constructor.name == "FxWebSocketClient") {
-        this.client.close();
+        this.client._client.close(client.createCloseStatusCode({code: 1001, reason: ''}));
     }
 };
 FxRevicer.prototype.emitDestroy = function () {
+    const {client} = this;
     if (this.isRelease) {
     } else if (this.client.constructor.name == "FxSocket") {
-        this.client.checkFinishTCP();
+        client.close(client.createCloseStatusCode({code: 1000, reason: ''}));
     } else if (this.client.constructor.name == "FxWebSocketClient") {
-        this.client.destroy();
+        client._client.close(client.createCloseStatusCode({code: 1000, reason: ''}));
     }
 }
 
