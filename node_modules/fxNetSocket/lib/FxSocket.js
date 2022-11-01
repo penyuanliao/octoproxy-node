@@ -27,6 +27,7 @@ const WS_HANDLE_CLOSE = JSON.stringify({"NetStatusEvent":"NetConnection.Connect.
  * @param {Object} options.delegate
  * @param {FxEnum.Versions} options.baseVersion 版本設定
  * @param {Boolean} options.zlibDeflatedEnabled 啟動ws壓縮模式
+ * @param {Boolean} options.finTCP 結束是否處理四方交握協定
  * @description registered : change server to init ws use.
  * @version 1.0.0
  * @constructor
@@ -45,7 +46,7 @@ function FxSocket(socket, options) {
     /** @property {module:net.Socket} socket 網路傳輸socket */
     this.socket            = socket;
     /** @property {Boolean} finTCP 4向交握斷線 */
-    this.finTCP            = false; // four Way Handshake Enabled
+    this.finTCP            = (options.finTCP == true); // four Way Handshake Enabled
     /** @property {Boolean} isConnect 連線狀態 */
     this.isConnect         = false;
     /** @property {Boolean} isRelease 是否回收 */
@@ -114,7 +115,7 @@ function FxSocket(socket, options) {
     this.forcedBinary      = false;
     if (typeof this.registered == "undefined") this.registered = false;
     /** @property {Boolean} baseEvtShow 傳送連線初始化事件 */
-    this.baseEvtShow       = true;
+    this.baseEvtShow       = false;
     if (typeof socket.baseEvtShow != "undefined") this.baseEvtShow = socket.baseEvtShow;
     /** @property {boolean} replicated 處理第二次對接資料 */
     this.replicated        = false; //wrap_socket event
@@ -229,6 +230,13 @@ function FxSocket(socket, options) {
                 } else {
                     return socket.remoteAddress;
                 }
+            },
+            configurable: false,
+            enumerable: false
+        },
+        forwarded: {
+            get: () => {
+                return self.headers["forwarded"];
             },
             configurable: false,
             enumerable: false
@@ -568,7 +576,6 @@ FxSocket.prototype.read = function (data, first) {
 };
 /** 使用者斷線 */
 FxSocket.prototype.close = function (data) {
-    // debug('trace','FxSocket socket destroy :', this.name);
     if (this.mode === 'ws' && this.connecting) {
         try {
             if (this.baseEvtShow) this.write(WS_HANDLE_CLOSE);

@@ -54,6 +54,28 @@ FxUtility.prototype.findOutSocketConnected = function (client, chunk, self) {
         "X-ProxyUser-Ip": request_headers["x-proxyuser-ip"],
         "urlArgs": (Array.isArray(general)) ? querystring.parse(general[1].split("?")[1]) : []
     };
+    let forwarded = {};
+    let empty = true;
+    if (typeof request_headers["x-forwarded-for"] != "undefined" && request_headers["x-forwarded-for"] != "") {
+        forwarded["X-Forwarded-For"] = request_headers["x-forwarded-for"];
+        empty = false;
+    }
+    if (typeof request_headers["x-from-cdn"] != "undefined" && request_headers["x-from-cdn"] != "") {
+        forwarded["X-From-Cdn"] = request_headers["x-from-cdn"];
+        forwarded["Ali-CDN-Real-IP"] = request_headers["ali-cdn-real-ip"];
+        empty = false;
+    }
+    if (typeof request_headers["bb"] != "undefined" && request_headers["bb"] != "") {
+        forwarded["BB"] = request_headers["bb"];
+        forwarded["BB-FORWARDED"] = request_headers["bb-forwarded"];
+        empty = false;
+    }
+    if (empty == true) {
+        forwarded = null;
+    }
+
+    client.headers.forwarded = forwarded;
+
     if (typeof general!= "undefined") client.headers["Method"] = general[2];
     //debug('LOG::Data received: %s length:%d', content, chunk.byteLength);
     if (((chunk.byteLength == 0 || client.mode == fxStatus.socket || unicodeNull == null)) && !swfPolicy && typeof request_headers.general == "undefined")  {

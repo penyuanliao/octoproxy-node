@@ -17,6 +17,7 @@ util.inherits(FxWebSocketClient, events.EventEmitter); // 繼承事件
  * @param {module:net.Socket} socket
  * @param {Object|function} option 設定參數
  * @param {Object} option.zlibDeflatedEnabled 設定參數
+ * @param {Boolean} option.fourWayHandshake fin
  * @param {function=} cb 回傳連線成功事件
  * @exports FxWebSocketClient
  * @constructor
@@ -28,13 +29,14 @@ function FxWebSocketClient(socket, option, cb) {
     this.splitsReceiveLimitCount = 100;
     if (typeof cb == "undefined" && option instanceof Function) {
         cb = option;
-        option = undefined;
+        option = {};
     }
-
+    let fourWayHandshake = (option.fourWayHandshake == true);
     const client = new fxSocket(socket, {
         delegate: this,
         zlibDeflatedEnabled: option.zlibDeflatedEnabled,
-        baseVersion: option.baseVersion
+        baseVersion: option.baseVersion,
+        finTCP: fourWayHandshake
     });
     this._client = client;
 
@@ -43,7 +45,7 @@ function FxWebSocketClient(socket, option, cb) {
     if (typeof option == "object" && option instanceof Object) {
         if (typeof option["binaryType"] == "string") this.setBinaryType(option["binaryType"]);
         if (typeof option.binary == "boolean") this.forcedBinary = option.binary;
-        if (typeof option.baseEvtShow == "boolean") client.baseEvtShow = option.baseEvtShow;
+        if (typeof option.baseEvtShow == "boolean") client.baseEvtShow = (option.baseEvtShow == true);
         if (typeof option["splitsReceiveLimitCount"] == "number") this.splitsReceiveLimitCount = option.splitsReceiveLimitCount;
         else this.splitsReceiveLimitCount = 50;
         if (typeof option.nativePingPong == "boolean") this.nPingPong = option.nativePingPong;
@@ -191,6 +193,13 @@ FxWebSocketClient.prototype.setupProps = function () {
             configurable: false,
             enumerable: false
         },
+        "forwarded": {
+            get:function () {
+                return client.forwarded;
+            },
+            configurable: false,
+            enumerable: false
+        },
         "headers": {
             get:function () { return client.headers; },
             configurable: false,
@@ -298,7 +307,7 @@ FxWebSocketClient.prototype.destroy = function () {
  * @public
  */
 FxWebSocketClient.prototype.close = function () {
-    if (this._client) this._client.close();
+    if (this._client) this._client.apply(this._client, arguments);
 };
 /**
  * 設定連線資料模式
