@@ -81,7 +81,12 @@ class RemoteClient {
             ctrl.connect(socket);
         });
     };
-
+    /**
+     * 發送訊息
+     * @param params
+     * @param {string} [params.method]
+     * @return {Promise<*|boolean|*>}
+     */
     async send(params) {
         if (!this.ctrl) return false;
 
@@ -96,6 +101,12 @@ class RemoteClient {
             return await this.ctrl.callAsync("targetEvent", params);
         }
     }
+
+    /**
+     * @private
+     * @param method
+     * @return {null|*}
+     */
     getCache(method) {
         const {storageInfo} = this;
         if (storageInfo.has(method)) {
@@ -109,6 +120,11 @@ class RemoteClient {
         }
         return null;
     }
+    /**
+     * @private
+     * @param method
+     * @param data
+     */
     setCache(method, data) {
         const {storageInfo} = this;
         storageInfo.set(method, {
@@ -116,9 +132,18 @@ class RemoteClient {
             data
         });
     }
+    /**
+     * @private
+     * @param method
+     * @param show
+     */
     joinSteps({method, show}) {
         this.progress.set(method, show);
     };
+    /**
+     * @private
+     * @param msg
+     */
     progressSteps(msg) {
         const { method, step, done } = msg;
         if (this.progress.has(method)) {
