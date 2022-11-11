@@ -14,8 +14,7 @@ class ClustersInfo extends EventEmitter {
         this.delegate = delegate;
         /** total client count **/
         this.octoProxyCount = 0;
-        this.procCount = [];
-        this.procKeys = [];
+        this.activeCount = new Map();
         //記錄所有的process information
         this.info = [];
         //記錄所有pid
@@ -44,6 +43,9 @@ class ClustersInfo extends EventEmitter {
     };
     get isRefresh() {
         return (Date.now() - this.updateTime) < 1000;
+    }
+    get childActiveCount() {
+        return [...this.activeCount];
     }
     /**
      * 刷新
@@ -75,8 +77,6 @@ class ClustersInfo extends EventEmitter {
         if (!clusters) return [];
         let keys = Object.keys(clusters);
         let total = 0;
-        let procCount = this.procCount;
-        let procKeys  = this.procKeys;
         let pids = this.pids;
         let list = [{
             "pid": process.pid,
@@ -98,7 +98,7 @@ class ClustersInfo extends EventEmitter {
 
             let j     = 0;
             let group = clusters[key];
-            let obj, cluster;
+            let obj, cluster, count;
             while (j < group.length)
             {
                 cluster = group[j];
@@ -106,10 +106,10 @@ class ClustersInfo extends EventEmitter {
                 this.unifyData(cluster, obj);
                 this.updateMetadata(cluster);
                 list.push(obj);
-                procKeys.push(key);
-                procCount.push(cluster.nodeInfo.connections);
                 pids.add(cluster.pid);
-                total += cluster.nodeInfo.connections;
+                count = cluster.nodeInfo.connections || 0;
+                this.activeCount.set(cluster.name, count)
+                total += count;
                 j++;
             }
             group = null;
@@ -160,7 +160,7 @@ class ClustersInfo extends EventEmitter {
             optConf, cmd, rules,
             assign2syntax
         } = cluster;
-        const { connections, memoryUsage } = nodeInfo;
+        const { connections, memoryUsage, params, info } = nodeInfo;
         obj.file = _modulePath;
         obj.name  = name;
         obj.pid   = pid;
@@ -194,9 +194,10 @@ class ClustersInfo extends EventEmitter {
         if (typeof nodeConf != "undefined") {
             this.setNodeConf(nodeConf, obj);
         }
-        if (Array.isArray(nodeInfo.params)) {
+        if (Array.isArray(params)) {
             obj.params.forEach((item) => obj[item[0]] = item[1]);
         }
+        if (info) obj.info = info;
         obj.bitrates = nodeInfo.bitrates;
         if (monitor) obj.monitor = monitor;
         if (rules) obj.rules = rules;
@@ -297,9 +298,8 @@ ClustersInfo.prototype.clearTags = function () {
 };
 ClustersInfo.prototype.clean = function () {
     this.octoProxyCount = 0;
-    this.procCount = [];
-    this.procKeys = [];
     // this.info = [];
+    this.activeCount.clear();
     this.pids = new Set([process.pid]);
     this.metadataMap.clear();
     this.updateTime = Date.now();

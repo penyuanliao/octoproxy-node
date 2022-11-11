@@ -314,6 +314,17 @@ html
                                                 p
                                                     span.fa-solid.fa-database &nbsp;
                                                     span.pro-db.text-muted NONE
+                                            div.pro-info-show.list-item-container.col-sm-2.col-xs-3(hidden)
+                                                p
+                                                    span
+                                                        b.pro-info-key-1 Status&nbsp;
+                                                    span.text-muted.pro-info-value-1 Betting
+                                                p
+                                                    span
+                                                        b.pro-info-key-2 CD&nbsp;
+                                                    span.text-muted.pro-info-value-2 25
+                                                p
+
                                             div.list-item-right
                                                 div
                                                     button.list-item-info.btn.btn-default
@@ -365,6 +376,9 @@ html
                                         select#ipAddress(style="width: 200px;height: 34px; overflow: hidden; border: 1px solid #ccc;")
                                     div.btn-group(role="group" aria-label="ctrl-buttons")
                                     button#srvConnect.btn.btn-danger.btn-weight Connect
+                                    button#srvDisconnect.btn.btn-default.btn-weight(style="display: none")
+                                        span.fa.fa-stop(style="color:#d9534f;" title="斷線")
+                                        |
                                     button#loadList.btn.btn-default.btn-weight
                                         span.fa.fa-refresh.refresh-anim.paused-animation
                                         | &nbsp;Refresh

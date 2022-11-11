@@ -110,6 +110,7 @@ function load(info) {
             viewCtrl.setOptions({host, port: (port || 80)})
         }
     });
+    $( "#srvDisconnect" ).click(() => mAdapter.close());
     //#0 WebSocket //
     const createConnection1 = function (url) {
         admin = new component.connect(url,[protocol], onConnect);
@@ -162,23 +163,29 @@ function load(info) {
     };
 
     var onDisconnect = function () {
-        $("#srvConnect").attr('class', 'btn btn-danger');
-        $("#srvConnect").prop( "disabled", false );
+        $("#srvConnect").attr('class', 'btn btn-danger')
+            .prop( "disabled", false );
+        $( "#srvDisconnect" ).hide();
+        $( "#srvConnect" ).show();
         manager.stopAuto();
         dbTable.enabled = false;
         balanceTable.enabled = false;
+        addrSelect.enabled = true;
         clearInterval(proc_duration_time);
+        proTable.update([], mAdapter);
     };
     var onConnect = function () {
-
+        $( "#srvDisconnect" ).show();
+        // $( "#srvConnect" ).hide();
         mAdapter.setVersion({
             v1: admin,
             v2: manager,
             version: version,
             completed: onComplete
         });
-        $("#srvConnect").attr('class', 'btn btn-success');
-        $("#srvConnect").prop( "disabled", true );
+        addrSelect.enabled = false;
+        $("#srvConnect").attr('class', 'btn btn-success')
+            .prop( "disabled", true );
         viewCtrl.mAdapter = mAdapter;
         proTable.manager = mAdapter;
 

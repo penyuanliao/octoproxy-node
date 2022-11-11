@@ -100,7 +100,7 @@ class RemoteClient {
         const {storageInfo} = this;
         if (storageInfo.has(method)) {
             let {time, data} = storageInfo.get(method);
-            let expired = Math.floor((Date.now() - time) / 1000 ) >= 5;
+            let expired = Math.floor((Date.now() - time) / 1000 ) >= 1;
             if (!expired) {
                 return data;
             } else {

@@ -50,7 +50,7 @@ class ManagerDB extends events.EventEmitter {
     async insertAccount({username, password, permission}) {
         const {accounts} = this;
         let json = {
-            // id: nanoid(10),
+            id: nanoid(10),
             username,
             password,
             permission,
@@ -97,7 +97,7 @@ class ManagerDB extends events.EventEmitter {
     }
     async getPermission(username) {
         let user = await this.getUser(username);
-        return user.permission;
+        return {permission: user.permission};
     }
     async getUser(username) {
         const {accounts} = this;

@@ -62,6 +62,13 @@ var componentKit = (function ()
         get chose() {
             return (typeof this.cookie != "undefined");
         }
+        get enabled() {
+            return this.iSelect.attr('disabled') == 'disabled';
+        }
+        set enabled(bool) {
+            if (typeof bool == "boolean")
+                this.iSelect.attr('disabled', !bool);
+        }
         create(selectOptions) {
             let { iSelect } = this;
             let customize = true;
@@ -398,7 +405,7 @@ var componentKit = (function ()
                 Retrying in <b>${Math.floor(timer/1000)}</b> seconds`,
                 cancelButtonText: 'abort',
                 showCancelButton: true,
-                showConfirmButton: false,
+                showConfirmButton: true,
                 timerProgressBar: false,
                 timer: timer,
                 didOpen: () => {
@@ -840,6 +847,17 @@ var componentKit = (function ()
                 this.version = 'v1';
             }
         }
+        close() {
+            if (!this.isConnected) return this;
+            const {version} = this;
+            if (version == 'v1') {
+                this.admin.ws.close();
+            } else {
+                this.manager.stop();
+                this.manager.isClosed = true;
+            }
+            return this;
+        };
         stop() {
             const {version} = this;
             if (version === "v1") {
@@ -1125,7 +1143,7 @@ var componentKit = (function ()
         }
         async loadMetadata(values) {
             if (this.version === 'v1') {
-
+                return {result: false};
             } else {
                 return await this.manager.getMetadata(values);
             }
@@ -1546,7 +1564,7 @@ var componentKit = (function ()
             return [...this.hashTables.values()];
         }
         get totalPages() {
-            return Math.ceil(this.db.length / this.rows);
+            return Math.ceil(this.src.length / this.rows);
         }
         create(container) {
             this.root = $(container);
@@ -1569,6 +1587,12 @@ var componentKit = (function ()
                 let subview = row.find('.pro-subview');
                 let el_monitor = row.find('.pro-monitor');
                 let el_metadata = row.find('.pro-metadata');
+                let el_info_show = row.find('.pro-info-show');
+                let el_info_key1 = row.find('.pro-info-key-1');
+                let el_info_key2 = row.find('.pro-info-key-2');
+                let el_info_value1 = row.find('.pro-info-value-1');
+                let el_info_value2 = row.find('.pro-info-value-2');
+
                 let el_db = row.find('.pro-db');
                 let item = {
                     row,
@@ -1586,7 +1610,14 @@ var componentKit = (function ()
                     subview,
                     el_monitor,
                     el_metadata,
-                    el_db
+                    el_db,
+                    el_info: {
+                        show: el_info_show,
+                        key1: el_info_key1,
+                        key2: el_info_key2,
+                        value1: el_info_value1,
+                        value2: el_info_value2,
+                    }
                 };
                 this.items.set(`row-${i}`, item);
                 this.event(row, item);
@@ -1687,7 +1718,8 @@ var componentKit = (function ()
                     el_metadata,
                     el_tags,
                     el_db,
-                    subview
+                    subview,
+                    el_info
                 } = this.items.get(`row-${i}`);
                 if (start >= ended) {
                     row.attr('hidden', 'hidden');
@@ -1695,7 +1727,7 @@ var componentKit = (function ()
                     row.removeAttr('hidden');
                     let { pid, file, name, pkey, count, lock, complete, trash,
                         memoryUsage, uptime, cpuUsage, bitrates, lv,
-                        payload, monitor, tags, f2db, rules
+                        payload, monitor, tags, f2db, rules, info
                     } = src[start];
                     row.attr('value', start++);
                     this.setStatus(status, complete, trash);
@@ -1717,6 +1749,7 @@ var componentKit = (function ()
                     this.setSubInfo(el_metadata, await this.getMetadata(pid));
                     this.setLogLevel(row, {lv}, this.manager);
                     this.setHostInfo(el_db, f2db);
+                    this.setCustomKeyValue(el_info, info);
                     this.ctrlButton(row);
                 }
             }
@@ -2069,7 +2102,7 @@ var componentKit = (function ()
         };
         tooltip(el, assign, rules) {
             if (!Array.isArray(rules)) rules = [];
-            el.attr('title', `assign => ${assign}<br>rules => [${rules.toString()}]`);
+
             el.tooltip({
                 container: 'body',
                 placement: 'right',
@@ -2081,6 +2114,8 @@ var componentKit = (function ()
                         <div class="tooltip-inner" style="background-color: #757575; text-align: left; font-size: 14px;"></div>
                     </div>`
             });
+            el.attr('data-original-title', `assign => ${assign}<br>rules => [${rules.toString()}]`);
+
         };
         setText(el, str) {
             el.text(str);
@@ -2279,6 +2314,13 @@ var componentKit = (function ()
                 `<p>${str}</p>`
             );
         };
+        setCustomKeyValue({show, key1, key2, value1, value2}, info) {
+            if (info) {
+                show.show();
+            } else {
+                show.hide();
+            }
+        }
         addBadgeView({badge, value}) {
             let unit = "";
             let key = "";
@@ -3022,7 +3064,7 @@ var componentKit = (function ()
                 lookout: true,
                 assign2syntax: false
             };
-            data = {
+/*            data = {
                 file: "./test/webServer.js",
                 name: "http,http2",
                 mxoss: 2048,
@@ -3032,7 +3074,7 @@ var componentKit = (function ()
                 ats: false,
                 lookout: true,
                 assign2syntax: false
-            };
+            };*/
             const { target } = this.create(data);
             target.modal('show');
             $("#modal-submit").click(() => {
