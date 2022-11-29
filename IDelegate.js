@@ -1311,7 +1311,7 @@ class IDelegate extends events.EventEmitter {
         }
 
         if (typeof pkg == "boolean") options.pkg = pkg;
-        if (!options.pkg && file.indexOf(".js") == -1 && file.indexOf(".mjs") == -1 && cmd == '') {
+        if (!options.pkg && file.indexOf(".js") == -1 && file.indexOf(".mjs") == -1 && !cmd) {
             options.pkg = true;
         }
 
