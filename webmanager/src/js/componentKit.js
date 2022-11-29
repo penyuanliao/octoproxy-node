@@ -2314,9 +2314,22 @@ var componentKit = (function ()
                 `<p>${str}</p>`
             );
         };
-        setCustomKeyValue({show, key1, key2, value1, value2}, info) {
+        setCustomKeyValue(el, info) {
+            let {show, key1, key2, value1, value2} = el;
             if (info) {
                 show.show();
+                let keys = Object.keys(info);
+                for (let i = 0; i < 2; i++) {
+
+                    if (keys.length > i) {
+                        let key = keys[i];
+                        el[`key${i+1}`].html(key);
+                        el[`value${i+1}`].html(` ${info[key]}`);
+                    } else {
+                        el[`key${i+1}`].html('');
+                        el[`value${i+1}`].html('');
+                    }
+                }
             } else {
                 show.hide();
             }

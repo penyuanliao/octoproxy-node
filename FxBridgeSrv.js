@@ -47,19 +47,24 @@ function connect(uri, client) {
         NSLog.log('debug', "RTMPClient %s:%s Connected! (%s)", rtmp.socket.remoteAddress, rtmp.socket.remotePort, remoteAddress, client.headers);
         //#1-1 送給Client連線成功
         rtmp.on('status', function (cmd) {
-            if (client.isConnect) {
+            if (client.isConnect && client.flModule === "n/a") {
                 rtmp.fmsCall("setClientIP", [remoteAddress]);
+                client.write(JSON.stringify({"NetStatusEvent":"Connected.amfIsReady"}));
+            } else {
                 client.write(JSON.stringify({"NetStatusEvent":"Connected.amfIsReady"}));
             }
         });
         rtmp.connectResponse();
-
+        let args = undefined;
+        if (client.flModule === "sp1") {
+            args = ["aaa", "bbb"];
+        }
         //LNX 11,7,700,203
         //MAC 10,0,32,18
         //MAC 11,8,800,94
         //WIN 11,3,372,94
         //#2-1 告訴FMS進行connect連線
-        rtmp.sendInvoke('connect', 1, {
+        rtmp.sendInvoke2('connect', 1, {
             app: uri.app, //app name
             flashVer: "MAC 10,0,32,18", //flash version
             tcUrl: uri.path, //rtmp path
@@ -68,7 +73,7 @@ function connect(uri, client) {
             audioCodecs: 3191, // audio code
             videoCodecs: 252, // video code
             videoFunction: 1
-        });
+        }, args);
         NSLog.log('debug', 'sendInvoke FMS connect.');
 
         //完成後就可以自己送出要的事件
@@ -85,7 +90,7 @@ function connect(uri, client) {
             var argument = data.arguments;
             // debug('INFO :: cmd:%s, argument:%s', cmd, Object.keys(argument));
             //這邊暫時忽略_result訊息
-            if(cmd != '_result') {
+            if(cmd != '_result' || client.flModule == "sp1") {
                 NSLog.log("error", "rtmp(%s) > client | client status:%s %s %s, cmd:%s", uri, client.isConnect, client.socket.writable, !client.socket.destroyed, cmd);
                 if (client.isConnect && client.socket.writable && !client.socket.destroyed)
                     client.write(JSON.stringify({"NetStatusEvent":"Data","cmd":cmd, args:argument}));
@@ -126,10 +131,10 @@ function connect(uri, client) {
 
             NSLog.log('info','basicHeader fmt:%d, number:%d', header_size >> 6, chunk.readInt32BE(14));
 
-           var num = chunk.readInt32BE(14);
-           rtmp.pingResponse(num);
+            var num = chunk.readInt32BE(14);
+            rtmp.pingResponse(num);
 
-       }
+        }
     });
 
     return rtmp;
@@ -139,8 +144,19 @@ function connect(uri, client) {
  * @param client NetConnection自己封裝的Client
  */
 function setupFMSClient(client) {
+
+    const parser = parseNamespace(client.namespace);
     var _rtmp;
-    var bHost = getFMSServerIP(client);
+    var bHost;
+    if (parser != false) {
+        console.log(parser);
+        bHost = parser.host;
+        client.socket.namespace = parser.namespace;
+        client.flModule = "sp1";
+    } else {
+        bHost = getFMSServerIP(client);
+    }
+
     var uri = {
         host:bHost,
         port:config.bFMSPort,
@@ -156,6 +172,39 @@ function setupFMSClient(client) {
     //存在array裡面方便讀取
     connections[client.name] = {ws:client, fms:_rtmp};
     connsCount++;
+}
+function parseNamespace(namespace) {
+    console.log(namespace);
+    const path = (namespace || "").split("/");
+    if (path.indexOf("hk") == -1 && path.indexOf("tp") == -1) {
+        return false;
+    }
+    const args = path[3].split("-");
+    
+    let ns = ["", path[2], args[1]];
+    if (path.length >= 4) {
+        ns = ns.concat(path.slice(4));
+    }
+    return {
+        host: args[0],
+        namespace: ns.join("/")
+    };
+}
+function parseNamespace2(namespace) {
+    const path = (namespace || "").split("/");
+    if (path.indexOf("hk") == -1 && path.indexOf("tp") == -1) {
+        return false;
+    }
+    const args = path[2].split("-");
+
+    let ns = ["", args[1]];
+    if (path.length >= 3) {
+        ns = ns.concat(path.slice(3));
+    }
+    return {
+        host: args[0],
+        namespace: ns.join("/")
+    };
 }
 /**
  * config.bExceptions = [ {"Host":"127.0.0.1", "rules":["/BacPlayerLight/V"]}];
@@ -234,7 +283,7 @@ function createNodejsSrv(port) {
     var server = new FxConnection(port, {runListen: isMaster});
     var self = this;
     server.on('connection', function (client) {
-
+        client.flModule = "n/a";
         NSLog.log('info','Connection Clients name:%s(%s) (namespace %s)', client.name, client.originAddress, client.namespace);
         if(typeof client.namespace == "undefined" || client.namespace.indexOf("policy-file-request") != -1 ) {
             console.log('Clients is none rtmp... to destroy.');
@@ -414,7 +463,6 @@ process.on('disconnect', function () {
     process.exit(0);
 });
 process.on('message', function (data, handle) {
-    // console.log(data);
     var json = data;
     if (typeof json === 'string') {
 
@@ -432,7 +480,7 @@ process.on('message', function (data, handle) {
             socket.server = srv.app;
             srv.app.emit("connection", socket);
             socket.emit("connect");
-            socket.emit('data',new Buffer(data.data));
+            socket.emit('data',Buffer.from(data.data));
             socket.resume();
         } else if(data.evt == "kickUsersOut") {
             NSLog.log("warning", "start kick user out.", json.params);

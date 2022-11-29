@@ -25,6 +25,10 @@ class APIClient extends EventEmitter {
         this.viewer   = new Set();
         this.logSkip  = new Set(['getServiceInfo', 'getSysInfo', 'getDashboardInfo']);
     }
+    /**
+     *
+     * @return {null}
+     */
     get delegate() {
         if (this.wDelegate.has(this))
             return this.wDelegate.get(this);
@@ -32,6 +36,10 @@ class APIClient extends EventEmitter {
             return null;
         }
     }
+    /**
+     *
+     * @return {boolean}
+     */
     get authEnabled() {
         if (this.delegate.auth) {
             return false;
@@ -67,12 +75,15 @@ class APIClient extends EventEmitter {
             let ws = new WSClient(socket, {
                 ejection:"socket",
                 baseEvtShow: false,
-                zlibDeflatedEnabled: false
+                baseVersion: 'v2',
+                zlibDeflatedEnabled: true,
+                fourWayHandshake: true
             }, () => resolve(ws));
         });
     };
     /**
      * 初始化完成
+     * @private
      */
     ready() {
         let { ws } = this;
@@ -80,6 +91,11 @@ class APIClient extends EventEmitter {
             ws.write({event: 'ready', version: require('../package.json').version, isAuthEnabled: this.authEnabled});
         }
     };
+    /**
+     * 事件轉導
+     * @private
+     * @param data
+     */
     handle(data) {
         if (typeof data == "string") data = JSON.parse(data);
         const { authEnabled, signin } = this;

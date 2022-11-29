@@ -12,7 +12,6 @@ const ClustersInfo  = require("./ClustersInfo.js");
 const CoreInfo      = require("./CoreInfo.js");
 const IBlockList    = require("./IBlockList.js");
 const ReportTool    = require("./ReportTool.js");
-// const editor        = require('../lib/AssignEdittor.js');
 const IConfig       = require('../IConfig.js').getInstance();
 const {UDPClient}   = require("../lib/UDP.js");
 const NSLog         = require('fxNetSocket').logger.getInstance();
@@ -20,7 +19,7 @@ const hostname      = require("os").hostname();
 const IPFilterPath  = "../configuration/BlockList.json";
 const AssignPath    = "../configuration/Assign.json";
 const syncAssignFile = true;
-const saveHeapTime   = (10 * 60 * 1000);
+// const saveHeapTime   = (10 * 60 * 1000);
 /**
  * 管理器
  * @constructor
@@ -46,8 +45,16 @@ class IManager extends EventEmitter {
             AssignPath,
             syncAssignFile
         });
+        /**
+         * 白名單跟黑名單
+         * @type {IBlockList}
+         */
         this.blockIPs = new IBlockList()
             .load(this.readFile(IPFilterPath, {enabled:true, allow:{}, deny:{}}));
+        /**
+         * influx紀錄Log檔案
+         * @type {ReportTool}
+         */
         this.reporting = new ReportTool().start();
         this.tgBot     = this.createTelegramBot(IConfig.IManagerConfig.telegram);
         //auto check
@@ -69,9 +76,7 @@ class IManager extends EventEmitter {
      */
     setupHandler() {
         const handler = new IHandler(this);
-        handler.on('refresh', () => {
-            this.nodesInfo.refresh();
-        });
+        handler.on('refresh', () => this.nodesInfo.refresh());
         return handler;
     };
     /**
@@ -225,21 +230,30 @@ class IManager extends EventEmitter {
     };
     /**
      * 回收子程序
-     * @param name
      * @param pid
+     * @param name
+     * @return {boolean}
      */
-    freeCluster({pid}) {
+    freeCluster({pid, name}) {
+        let result = {
+            result: false,
+            pid
+        };
         if (typeof pid == "number") {
-            const cluster = this.findCluster(pid);
+            const cluster = this.findCluster(pid, name);
             if (cluster) {
+                name = (name) ? name : cluster.name;
                 cluster.stop();
                 cluster.stopHeartbeat();
                 cluster.isRelease = true;
-                return true;
-            } else {
-                return false;
+                let group = this.getClusters(name);
+                group.indexOf(group.indexOf(cluster), 1);
+                if (group.length == 0) this.rmCluster(name);
+                result.result = true;
+                result.name = name;
             }
         }
+        return result;
     };
     /**
      * 主服務關閉所有使用者進入
@@ -516,7 +530,7 @@ class IManager extends EventEmitter {
                     this.udp.record(util.format("restart %s %s %s", hostname, name, new Date().toDateString()), remoteInfo);
                 }
                 cluster.send({'evt':'ipcMessage', params: { action: "handoff", host, port }});
-                const wait = await this.waiting(1000);
+                await this.waiting(1000);
             }
         }
     };
@@ -526,7 +540,7 @@ class IManager extends EventEmitter {
      * @return {Promise<unknown>}
      */
     async waiting(millisecond) {
-        return new Promise(function (resolve, reject) {
+        return new Promise(function (resolve) {
             setTimeout(function () {
                 resolve();
             }, millisecond || 500);

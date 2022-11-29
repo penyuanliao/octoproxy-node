@@ -13,6 +13,18 @@ class webServer extends events {
         this.server = this.setup();
         // this.init();
         this.plugins(this.server);
+        console.log(`=> name:${process.argv[2]} pid: ${process.pid}`);
+        process.send({
+            evt: 'metadata',
+            data: {
+                'f2db': 'localhost',
+                'cacheSever': 'localhost'
+            }
+        });
+        let count = 0;
+        setInterval(() => {
+            this.info.betting = count++;
+        }, 1000)
     }
     init() {
         const {server} = this;
@@ -78,17 +90,24 @@ class webServer extends events {
         /** !! important !! The is tell parent yourself has complete. **/
         this.octoPlugins.makeSureComplete();
     }
-
+    get info() {
+        return this.octoPlugins.info;
+    }
     /**
      *
      * @return {net.Server}
      */
     setup() {
-        const server = http.createServer((req, res) => {
-            res.writeHead(200,{'Content-Type':'text/html'});
-            res.write('<html><body>This is student Page.</body></html>');
+        const server = http.createServer( (req, res) => {
+            req.setTimeout(0);
+            res.writeHead(200, {
+                'Content-Type':'text/html',
+                'Connection': 'close'
+            });
+            res.write('<html><body>This is student Page 1234.</body></html>');
             res.end();
         });
+        server.keepAliveTimeout = 0;
         return server;
     }
     clean() {

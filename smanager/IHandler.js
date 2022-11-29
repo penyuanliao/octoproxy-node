@@ -93,7 +93,7 @@ class IHandler extends events {
      * @return {boolean}
      */
     warpTunnel({params}, client, callback) {
-        let {from, togo, that, list} = params;
+        let {from, togo, that} = params;
         //togo assign;
         //that pid
         if (from == that) {
@@ -114,7 +114,7 @@ class IHandler extends events {
         NSLog.info(`warpTunnel => ${JSON.stringify(json, null, '\t')}`);
         if (child) {
             child.postMessage(json, undefined, {keepOpen: false, timeout: 60000}, (data) => {
-                let {evt, id, reboot, error} = (data || {});
+                let {evt, error} = (data || {}); //evt, id, reboot, error
                 if (error) NSLog.error(`warpTunnel => postMessage ${evt} error: ${error}`);
                 else NSLog.info(`warpTunnel => postMessage ${evt}`);
                 child._dontDisconnect = true;
@@ -241,11 +241,8 @@ class IHandler extends events {
      * @param callback
      */
     killCluster(params, client, callback) {
-        const clusters = this.delegate.getClusters();
         const pid = parseInt(params.pid);
         const trash = params.trash;
-        const keys = Object.keys(clusters);
-
         if (!IHandler._verifyArgs(pid, "number")) {
             if (callback) callback({result: false});
             return false;
@@ -254,23 +251,9 @@ class IHandler extends events {
         if (trash) {
             result = this.clearTrash(pid);
         } else {
-            for (let name of keys) {
-                let group = clusters[name];
-                for (var j = 0; j < group.length; j++) {
-                    let cluster = group[j];
-                    let c_pid   = cluster.pid;
-                    if (c_pid == pid) {
-                        cluster.stop();
-                        cluster.stopHeartbeat();
-                        cluster.isRelease = true;
-                        group.splice(j,1);
-                        if (this.syncAssignFile)
-                            this.deleteAssign({name});
-                        result = true;
-                        break;
-                    }
-
-                }
+            let {result, name} = this.delegate.freeCluster({pid});
+            if (result && this.syncAssignFile) {
+                this.deleteAssign({name});
             }
         }
         if (callback) callback({result});
@@ -437,10 +420,12 @@ class IHandler extends events {
             }
         };
         this.multiReboot({group, time, strategy}, progress).then((res) => {
+            NSLog.log("info", `multiReboot res => ${res}`);
             this.hasMultiReboot = false;
             client.send({ action: 'progressSteps', method: 'restartMultiCluster', done: true});
             if (callback) callback({result: true, data: group});
         }).catch((err) => {
+            NSLog.log("error", `multiReboot err => ${err}`);
             this.hasMultiReboot = false;
             client.send({ action: 'progressSteps', method: 'restartMultiCluster', done: true});
             if (callback) callback({result: false, data: group});
@@ -492,7 +477,7 @@ class IHandler extends events {
                     step += 1;
                     NSLog.info(`MultiReboot tasks:${group.length} => waiting: ${time} ms`);
                     if (progress) progress.step(step);
-                    const wait = await this.waiting(time);
+                    await this.waiting(time);
                 }
                 j++;
                 if (group.length == 0) return true;
@@ -501,7 +486,7 @@ class IHandler extends events {
         return true;
     };
     async waiting(millisecond) {
-        return new Promise(function (resolve, reject) {
+        return new Promise(function (resolve) {
             setTimeout(function () {
                 resolve();
             }, millisecond || 500);
@@ -715,12 +700,26 @@ class IHandler extends events {
         this.delegate.blockIPs.load(data);
         if (callback) callback({result: true, data});
     };
+    /**
+     * ipv6格式檢查
+     * @return {RegExp}
+     */
     ipv6Regex() {
         return new RegExp(/^(?:(?:[a-fA-F\d]{1,4}:){7}(?:[a-fA-F\d]{1,4}|:)|(?:[a-fA-F\d]{1,4}:){6}(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3}|:[a-fA-F\d]{1,4}|:)|(?:[a-fA-F\d]{1,4}:){5}(?::(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3}|(?::[a-fA-F\d]{1,4}){1,2}|:)|(?:[a-fA-F\d]{1,4}:){4}(?:(?::[a-fA-F\d]{1,4}){0,1}:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3}|(?::[a-fA-F\d]{1,4}){1,3}|:)|(?:[a-fA-F\d]{1,4}:){3}(?:(?::[a-fA-F\d]{1,4}){0,2}:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3}|(?::[a-fA-F\d]{1,4}){1,4}|:)|(?:[a-fA-F\d]{1,4}:){2}(?:(?::[a-fA-F\d]{1,4}){0,3}:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3}|(?::[a-fA-F\d]{1,4}){1,5}|:)|(?:[a-fA-F\d]{1,4}:){1}(?:(?::[a-fA-F\d]{1,4}){0,4}:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3}|(?::[a-fA-F\d]{1,4}){1,6}|:)|(?::(?:(?::[a-fA-F\d]{1,4}){0,5}:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3}|(?::[a-fA-F\d]{1,4}){1,7}|:)))(?:%[0-9a-zA-Z]{1,})?$/, 'gm')
     };
+    /**
+     * ipv4格式檢查
+     * @return {RegExp}
+     */
     ipv4Regex() {
         return new RegExp(/^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/,'gm');
     };
+    /**
+     * 驗證IPAddress
+     * @param address
+     * @param type
+     * @return {string}
+     */
     validateAddress(address, type) {
         let regex = (type == 'ipv6') ? this.ipv6Regex() : this.ipv4Regex();
         const input = address.match(regex);
@@ -733,7 +732,6 @@ class IHandler extends events {
     IPBlockList(data, client, callback) {
 
         let {ip, state, endTime, count, log, author, range, subnet, type} = data;
-        let input
         let address = this.validateAddress(ip, type);
 
         if (!address) {
@@ -998,7 +996,7 @@ class IHandler extends events {
         if (!folder) folder = 'appsettings'
 
         const filepath = xPath.resolve(process.cwd(), `../${folder}`, filename);
-        let res = false;
+        let res;
         let str, data;
 
         if (!fs.existsSync(filepath)) fs.mkdirSync(filepath);

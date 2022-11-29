@@ -3,7 +3,7 @@ nav.navbar.navbar-default.no-radius
         div.navbar-header
             a.navbar-brand(href="javascript:;")
                 span(style="color: #555") Manager
-                span.text-muted Server
+                span.text-muted GrpcServer
         ul.nav.navbar-nav
             li(class=`${pathname == '/mgr/node' ? 'active' : ''}`): a(href=`${pathname != '/mgr/node' ? '/mgr/node' : 'javascript:;'}`) Home
             if user.status == 'authorized'

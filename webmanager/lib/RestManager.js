@@ -72,7 +72,7 @@ class RestManager extends EventEmitter {
                 } else {
                     if (data) {
                         const {twoFactor, otpauth, permission} = data;
-                        console.log(`${req.url} twoFactor:${twoFactor}, otpauth:${otpauth}`);
+                        console.log(`${req.url} twoFactor:${twoFactor}, otpauth:${otpauth} permission: ${permission}`);
                         let rule = this.permissions.get(permission);
                         if (rule.has('root')) return next();
                         if (!rule.has(req.url)) {

@@ -71,7 +71,7 @@ handshake::onResponse >
 
 ```script
 +--------------+					+--------------+
-| Client(Node) | 					| Server (FMS) |
+| Client(Node) | 					| GrpcServer (FMS) |
 +--------------+ 					+--------------+
 	   |                                                    |
 	   |                      C0 + C1                       |
