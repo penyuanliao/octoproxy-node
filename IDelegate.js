@@ -155,17 +155,21 @@ class IDelegate extends events.EventEmitter {
      * 建立子執行緒
      * @param opt cluster:[file:(String)<js filename>, assign:(String)<server assign rule>]
      */
-    setupCluster(opt) {
+    async setupCluster(opt) {
         if (typeof opt === 'undefined') {
             opt = { 'cluster': [] };
         }
+        const taskSync = opt.taskSync || false;
         const num = Number(opt.cluster.length);
         if (num != 0) {
             let child;
             let params;
             for (var index = 0; index < num; index++) {
                 params = opt.cluster[index];
-                child = this.createChild(this, {index, params});
+                child = this.createChild(this, {index, params, taskSync});
+                if (taskSync) {
+                    await child.start();
+                }
                 this.addChild(child);
             }
             NSLog.log('info',"Cluster active number:", num);
@@ -340,7 +344,7 @@ class IDelegate extends events.EventEmitter {
         if (hack) {
             const {heartbeat_namespace} = iConfig;
             this.tcp_write(handle, this.createBody({namespace: heartbeat_namespace, mode: 'http', status: 401}));
-            this.rejectClientException(handle, "CON_DENY_CONNECT");
+            this.rejectClientException(handle, "CON_DONT_CONNECT");
             handle.close(this.close_callback.bind(handle, this));
             this.handleRelease(handle);
             handle = null;
@@ -356,8 +360,6 @@ class IDelegate extends events.EventEmitter {
             handle.getSockInfos.path  = namespace;
             handle.getSockInfos.mode  = mode;
         }
-
-
 
         /** 回應heartbeat **/
         let echo = this.createBody({namespace, mode, status: 200});
@@ -553,7 +555,6 @@ class IDelegate extends events.EventEmitter {
         if (handle && handle != 0) handle.readStop();
         source = null;
     };
-
     /**
      * reload request rtmp/tcp
      * @param {*} handle
@@ -611,10 +612,12 @@ class IDelegate extends events.EventEmitter {
      * roundrobin: 輪詢規則不管伺服器使用者數量
      * leastconn: 檢查伺服器數量平均使用者
      * @param {Object|String} namespace
+     * @param {Object} options
      * @param cb callback
      * @returns {undefined}
      */
-    assign(namespace, cb) {
+    assign(namespace, options, cb) {
+        const args = arguments[0];
         let url_path;
         let subname = "";
         if (typeof namespace == "string") {
@@ -625,36 +628,26 @@ class IDelegate extends events.EventEmitter {
             let split = url_path.split("/");
             subname = split[1] || split[0];
         } else if (typeof arguments[0] == "object") {
-            const args = arguments[0];
             namespace = args.dir;
-
         }
 
-        let clusterName = namespace;
-        let group = this.getChild(clusterName);
-        if ((typeof group == "undefined")) {
-            clusterName = subname;
-            group = this.getChild(clusterName);
-        }
-        if (typeof group == "undefined") {
-            clusterName = this.findAssignRules({namespace, subname});
-            group = this.getChild(clusterName);
-        }
+        let {name, pool} = this.getPool(namespace, subname);
 
-        if (!group || typeof group == 'undefined') {
+        if (!pool || typeof pool == 'undefined') {
             // console.error('Error not found Cluster server');
             NSLog.log('error','leastconn not found Cluster server');
             if (cb) cb(undefined);
             return;
         }
         let {balance} = iConfig;
+        let child;
         // url_param
         if (balance === "url_param") {
 
         } else if (balance === "roundrobin") {
-            this.roundrobin({namespace: clusterName, group: group}, cb);
+            this.roundrobin({name, pool}, cb);
         } else if (balance === "leastconn") { //Each server with the lowest number of connections
-            this.leastconn({namespace: clusterName, group: group}, cb);
+            this.leastconn({name, pool}, cb);
         } else
         {
             // console.error('Error not found Cluster server');
@@ -662,31 +655,80 @@ class IDelegate extends events.EventEmitter {
             if (cb) cb(undefined);
         }
     };
-    asyncAssign(namespace) {
+    /**
+     * 取得服務的cluster pool
+     * @param namespace
+     * @param subname
+     * @return {{name: (*), pool: *}}
+     */
+    getPool(namespace, subname) {
+        let name = namespace;
+        let pool = this.getChild(name);
+        if ((typeof pool == "undefined") && subname) {
+            name = subname;
+            pool = this.getChild(name);
+        }
+        if (typeof pool == "undefined") {
+            name = this.findAssignRules({namespace, subname});
+            pool = this.getChild(name);
+        }
+        return {name, pool};
+    };
+    /**
+     * Async Syntax Assign
+     * @param namespace
+     * @param options
+     * @return {Promise}
+     */
+    asyncAssign(namespace, options) {
         return new Promise((resolve, reject) => {
             try {
-                this.assign(namespace, resolve);
+                this.assign(namespace, options, resolve);
             } catch (e) {
                 reject(e);
             }
         });
     };
+    /**
+     * 異常連線排除
+     * @param namespace
+     * @param source
+     * @param originPath
+     * @param mode
+     * @param handle
+     */
     exceptionBreaker({namespace, source, originPath, mode}, handle) {
-        let worker = this.clusters['*']; //TODO 未來準備擋奇怪連線
-        if (typeof worker == 'undefined'  || !worker) {
+        const { route } = iConfig.breaker;
+        let worker = this.clusters[route];
+        if (typeof worker == 'undefined'  || !worker || !Array.isArray(worker)) return false;
 
-        } else {
-            NSLog.log("warning", `exceptionBreaker -> `, namespace);
-            worker[0].send({'evt':'c_init', data: source, namespace, originPath, mode}, handle, { keepOpen:false });
-            setTimeout(() => {
-                this.rejectClientException(handle, "CON_VERIFIED");
-                handle.close(this.close_callback.bind(handle, this));
-                this.handleRelease(handle);
-                handle = null;
-            }, sendWaitClose);
+        NSLog.log("warning", `Exception Breaker -> `, namespace);
+        let match = 0;
+        if (Array.isArray(worker) && worker.length >= 1) {
+            worker[match].send({
+                evt: 'c_init',
+                data: source,
+                namespace,
+                originPath,
+                mode
+            }, handle, { keepOpen:false });
         }
+        setTimeout(() => {
+            this.rejectClientException(handle, "CON_VERIFIED");
+            handle.close(this.close_callback.bind(handle, this));
+            this.handleRelease(handle);
+            handle = null;
+        }, sendWaitClose);
+
+        return true;
 
     };
+    /**
+     * 尋找線程
+     * @param {string} namespace 識別碼
+     * @param {string} subname 調整識別碼
+     * @return {undefined|*}
+     */
     findAssignRules({namespace, subname}) {
         let {ruleTable} = this;
         if (ruleTable.has(namespace)) {
@@ -698,38 +740,60 @@ class IDelegate extends events.EventEmitter {
     };
     /**
      * 循環法
-     * @param {string} namespace
-     * @param {Array} group
+     * @param {string} name
+     * @param {Array} pool
      * @param {Function} cb
      */
-    roundrobin({namespace, group}, cb) {
+    roundrobin({name, pool}, cb) {
+        const {activate} = daemon.ActivateState();
         let cluster;
+        let start = this.roundrobinNum[name];
         do {
-            cluster = group[this.roundrobinNum[namespace]++];
-            if (this.roundrobinNum[namespace] >= group.length) {
-                this.roundrobinNum[namespace] = 0;
-                if (cb) cb(undefined);
+            if (start >= pool.length) start = 0;
+            if (start == this.roundrobinNum[name]) {
+                cluster = undefined;
+                break;
             }
-        } while (cluster.creationComplete != 1)
+            cluster = pool[start++];
+        } while (cluster.creationComplete != activate);
+
+        this.roundrobinNum[name] = start;
+
         if (cb) cb(cluster);
+        cb = null;
+        return cluster;
     };
     /**
      * 最少連線排程法
-     * @param {string} namespace
-     * @param {Array} group
+     * @param {string} name
+     * @param {Array} pool
      * @param {Function} cb
+     * @return {*}
      */
-    leastconn({namespace, group}, cb) {
-        let num = group.length;
-        let cluster = group[0];
-        for (let n = 0; n < num; n++) {
+    leastconn({name, pool}, cb) {
+        const {activate} = daemon.ActivateState();
+        let num = pool.length;
+        let current = pool[0];
+        for (let n = 1; n < num; n++) {
             //檢查最小連線數
-            let { connections, creationComplete } = group[n].nodeInfo;
-            let isPriority = (cluster.nodeInfo.connections > connections) && (creationComplete == 1);
-            if (isPriority) cluster = group[n];
+            let {creationComplete} = pool[n];
+            let { connections } = pool[n].nodeInfo;
+            let isPriority = (current.nodeInfo.connections > connections) && (creationComplete == activate);
+            if (isPriority) current = pool[n];
         }
-        if (cb) cb(cluster);
+        if (cb) cb(current);
+        return current
     };
+
+    /**
+     *
+     * @param headers
+     * @param method
+     * @param mode
+     * @param source
+     * @param handle
+     * @return {boolean}
+     */
     onManager({headers, method, mode, source}, handle) {
         let corsMode = false;
         let appid = false;
@@ -875,6 +939,10 @@ class IDelegate extends events.EventEmitter {
         handle = null;
         endpoint = null;
     };
+    /**
+     * clear log info
+     * @param handle
+     */
     clearGetSockInfos(handle) {
         let { getSockInfos } = handle;
         if (getSockInfos) {
@@ -886,6 +954,11 @@ class IDelegate extends events.EventEmitter {
             handle.getSockInfos = null;
         }
     };
+    /**
+     * 記錄錯誤類型
+     * @param handle
+     * @param name
+     */
     rejectClientException(handle, name) {
         if (typeof handle != "undefined" && TRACE_SOCKET_IO) {
             handle.getSockInfos.exception = utilities.errorException(name);
@@ -907,6 +980,14 @@ class IDelegate extends events.EventEmitter {
         handle = null;
         return true;
     };
+    /**
+     * 釋放物件跟紀錄
+     * @param handle
+     * @param name
+     * @param exception
+     * @param mode
+     * @param skip
+     */
     admin_free({handle, name, exception, mode, skip}) {
         handle.getSockInfos.path = name;
         handle.getSockInfos.mode = mode;
@@ -1048,12 +1129,13 @@ class IDelegate extends events.EventEmitter {
      */
     /**
      *
-     * @param {Object} endpoint
-     * @param {Number} index
-     * @param {Object} params
+     * @param {Object} endpoint 物件
+     * @param {Number} index 編號
+     * @param {Object} params 參數
+     * @param {boolean} taskSync 列隊執行
      * @return {daemon}
      */
-    createChild(endpoint, {index, params}) {
+    createChild(endpoint, {index, params, taskSync}) {
         let options = IDelegate.createChildProperties(params);
         let env = JSON.parse(JSON.stringify(process.env)); //環境變數
         env.NODE_CDID = String(index);
@@ -1088,6 +1170,8 @@ class IDelegate extends events.EventEmitter {
             //心跳系統
             lookoutEnabled: options.lookout,
             heartbeatEnabled: options.heartbeat,
+            maxAttempts: options.maxAttempts,
+            heartbeatTimeout: options.heartbeatTimeout,
             pkgFile: options.pkg,
             cmd,
             assign2syntax,
@@ -1103,9 +1187,8 @@ class IDelegate extends events.EventEmitter {
         child.ats = ats;
         child.optConf = options; //複製程序使用
         child.tags = tags;
-        child.init();
-        child.emitter.on('warp_handle', (message, handle) => {
-            let result = endpoint.duringWarp(message, handle);
+        child.emitter.on('warp_handle', async (message, handle) => {
+            let result = await endpoint.duringWarp(message, handle);
             const { evt, id } = message;
             child.postMessage({ evt, id, data: result });
         });
@@ -1116,6 +1199,9 @@ class IDelegate extends events.EventEmitter {
             endpoint.tgBotTemplate(iConfig.IManagerConfig.telegram.chats.sys, "shutdown", [err.name]);
         });
         child.emitter.on('restart', () => endpoint.mgmtSrv.refreshClusterParams(child));
+
+        if (!taskSync) child.init();
+
         return child;
     };
     /**
@@ -1146,21 +1232,21 @@ class IDelegate extends events.EventEmitter {
      * @param handle
      * @return {Promise<void>}
      */
-    duringWarp(message, handle) {
-        const assign = String(message.goto);
-        const event = "wrap_socket";
-        let worker = this.asyncAssign(assign)
+    async duringWarp({raw, metadata, originPath, goto, mode}, handle) {
+        const namespace = String(goto);
+        const evt = "wrap_socket";
+        let worker = await this.asyncAssign(namespace)
         if (typeof worker === 'undefined' || !worker) {
             handle = null;
             return {result: false, error: 'assign not found.'};
         }
         worker.send({
-            evt: event,
+            evt,
             mode,
-            raw: message.raw,
-            metadata: message.metadata,
-            namespace: assign,
-            originPath: message.originPath
+            raw,
+            metadata,
+            namespace,
+            originPath
         }, handle, {keepOpen: false});
         return {result: true};
     };
@@ -1280,7 +1366,9 @@ class IDelegate extends events.EventEmitter {
             stderrFile,
             version,
             assign2syntax,
-            stdio
+            stdio,
+            maxAttempts,
+            heartbeatTimeout
         } = params;
         /** @typedef {ChildProperties} */
         let options = {
@@ -1308,6 +1396,12 @@ class IDelegate extends events.EventEmitter {
         }
         else {
             options.heartbeat = true;
+        }
+        if (typeof heartbeatTimeout == "number") {
+            options.heartbeatTimeout = heartbeatTimeout;
+        }
+        if (typeof maxAttempts == "number") {
+            options.maxAttempts = maxAttempts;
         }
 
         if (typeof pkg == "boolean") options.pkg = pkg;

@@ -46,6 +46,8 @@ class IConfig {
         this.setupManager();
 
         this.setupLogMonitor();
+
+        this.setupDirector();
     }
     setupLoadBalance() {
         this.gamSLB = {
@@ -106,7 +108,12 @@ class IConfig {
             proxyMode: {host: "", port: 0},
             enabled: false
         };
-    }
+    };
+    setupDirector() {
+        this.breaker = {
+            route: '*'
+        }
+    };
     setupManager() {
         this.wpc = {
             /**
@@ -144,10 +151,11 @@ class IConfig {
 
                 port: 10084,
 
-                router: ['/mgr'],
+                router: [`/mgr`],
 
                 session: {
-                    secret: '',
+                    // sessionID hash secret
+                    secret: 'sidonia_shizuka',
                     name: 'user',
                     saveUninitialized: false,
                     resave: true
@@ -159,7 +167,6 @@ class IConfig {
             udp: {
                 port: 8080
             },
-
             debug: false,
             // http proxy mode
             proxyMode: true
