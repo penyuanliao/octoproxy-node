@@ -247,7 +247,7 @@ class IManager extends EventEmitter {
                 cluster.stopHeartbeat();
                 cluster.isRelease = true;
                 let group = this.getClusters(name);
-                group.indexOf(group.indexOf(cluster), 1);
+                group.splice(group.indexOf(cluster), 1);
                 if (group.length == 0) this.rmCluster(name);
                 result.result = true;
                 result.name = name;

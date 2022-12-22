@@ -248,12 +248,14 @@ class IHandler extends events {
             return false;
         }
         let result = false;
+
         if (trash) {
             result = this.clearTrash(pid);
         } else {
-            let {result, name} = this.delegate.freeCluster({pid});
-            if (result && this.syncAssignFile) {
-                this.deleteAssign({name});
+            let freed = this.delegate.freeCluster({pid});
+            result = freed.result;
+            if (freed.result && this.syncAssignFile) {
+                this.deleteAssign(freed);
             }
         }
         if (callback) callback({result});
