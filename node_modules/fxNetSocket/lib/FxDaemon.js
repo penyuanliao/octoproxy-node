@@ -24,6 +24,19 @@ const heart_times = 5000;
 const restart = false;
 
 const retry = {"limit":0, "timeout":1000};
+/**
+ * 服務狀態
+ * @type {Readonly<{unableActivate:number, deactivate:number, activate:number, pending:number, maint:number, trash:number}>}
+ */
+const ActivateState = (function (values) {
+    values[values['unableActivate'] = -1] = 'unableActivate'; //無法啟用
+    values[values['deactivate'] = 0] = 'deactivate'; //停用
+    values[values['activate'] = 1] = 'activate'; //啟用
+    values[values['pending'] = 2] = 'pending'; //等待啟用
+    values[values['maint'] = 3] = 'maint'; //維護
+    values[values['trash'] = 4] = 'trash'; //回收
+    return Object.freeze(values);
+})({});
 
 /***
  * HEART BEAT Module
@@ -32,6 +45,11 @@ const retry = {"limit":0, "timeout":1000};
  * @constructor
  */
 class FxDaemon extends events.EventEmitter {
+
+    static ActivateState() {
+        return ActivateState;
+    }
+
     constructor(modulePath/*, args, options*/) {
         super();
         let options, args;
@@ -107,6 +125,21 @@ class FxDaemon extends events.EventEmitter {
          * @private
          */
         this._lookoutEnabled = (typeof options.lookoutEnabled != "undefined") ? options.lookoutEnabled : true;
+        /**
+         * 嘗試次數限制
+         * @type {number}
+         */
+        this.maxAttempts = (options.maxAttempts || doWait_maximum);
+        /**
+         * 輪詢超時
+         * @type {Number}
+         */
+        this.heartbeatTimeout = (options.heartbeatTimeout || wait_times);
+        /**
+         * 回傳事件
+         * @type {null}
+         */
+        this.getInfoBlock = null;
         /* todo Don't disconnect existing clients when a new connection comes in, refuse new connection. */
         /**
          * 禁止使用者進入
@@ -149,6 +182,11 @@ class FxDaemon extends events.EventEmitter {
          */
         this.uptime = 0;
         /**
+         * 資訊更新時間
+         * @type {Number}
+         */
+        this.heartbeatUpdate = Date.now();
+        /**
          * 設定pkg檔案路徑
          * @type {Boolean|String}
          */
@@ -181,7 +219,7 @@ class FxDaemon extends events.EventEmitter {
 
         this.optConf = null;
 
-        this.tryDetect = 0;
+        this.currentRetry = 0;
 
         this.assign2syntax = options.assign2syntax ? options.assign2syntax : true;
         /**
@@ -212,7 +250,7 @@ class FxDaemon extends events.EventEmitter {
      * @return {boolean}
      */
     get running() {
-        return this.creationComplete != 0;
+        return this.creationComplete == ActivateState.activate || this.creationComplete == ActivateState.maint;
     }
     init() {
         const { pkgFile, cmd, _modulePath, _args, _options } = this;
@@ -237,7 +275,7 @@ class FxDaemon extends events.EventEmitter {
         child.on('exit', (code, signal) => {
             NSLog.log("info",'[%s | %s] process will exit %s (%s)', _modulePath, _args[0], signal, code);
             this._killed = true;
-            this.setMakeSureComplete(0);
+            this.setMakeSureComplete(ActivateState.deactivate);
             if  ((code == 0 && (signal == null || !signal)) || (signal == "SIGTERM" && (code == null || !code)))  {
                 this.log("info", "Signals termination Done");
             } else {
@@ -253,6 +291,31 @@ class FxDaemon extends events.EventEmitter {
         //啟動心跳檢查機制
         if(this._heartbeatEnabled) this.startHeartbeat();
     };
+    /**
+     * pending init
+     * @return {Promise}
+     */
+    start() {
+        return new Promise((resolve) => {
+            this.init();
+            if (this.pkgFile) {
+                resolve(true);
+            } else {
+                this.on('up', () => resolve(true));
+            }
+            let timeout = setTimeout(() => {
+                NSLog.info(`Pending/Promise running start()`)
+                if (this.creationComplete === ActivateState.unableActivate) {
+                    resolve(false);
+                } else if (this.creationComplete === ActivateState.activate) {
+                    resolve(true);
+                } else {
+                    resolve(false);
+                }
+            }, 60000)
+
+        });
+    }
     /**
      * custom IPC message event
      * @param {Object} data
@@ -272,7 +335,7 @@ class FxDaemon extends events.EventEmitter {
         }
 
         if (evt === 'processInfo') {
-            this._msgcb ? this._msgcb(message.data) : false;
+            this.getInfoBlock = this.getInfoBlock ? this.getInfoBlock(message.data) : null;
         }
         else if (evt === 'processConf') {
             this.nodeConf = message.data;
@@ -379,53 +442,78 @@ class FxDaemon extends events.EventEmitter {
      */
     startHeartbeat() {
         if (this._heartbeat) this.stopHeartbeat();
-        this.tryDetect = 0;
+        this.currentRetry = 0;
         this._heartbeat = setInterval(() => this.patrolling(), heart_times)
     };
     /**
      * 監視線程patrolling
      */
     patrolling() {
-        let { tryDetect } = this;
+        let { currentRetry } = this;
         let out;
-        if (!this._lookoutEnabled) return false;
-
+        //前一次還沒timeout
+        if (this.getInfoBlock) return false;
         out = setTimeout(() => this.checkingException(), wait_times);
-
-        this.getInfo({ tryDetect }, (data) => {
+        this.getInfo({ currentRetry }, (data) => {
             try {
+                if (out) clearTimeout(out);
+                this.currentRetry = 0;
+                this.heartbeatUpdate = Date.now();
                 if (typeof data == "string") data = JSON.stringify(data);
                 this.nodeInfo = data;
             } catch (e) {
                 NSLog.error(`[${this.pid}] patrolling.getInfo.error: ${e}`);
+                return null;
             }
-            if (out) clearTimeout(out);
-            this.tryDetect = 0;
+            return null;
         });
 
     };
-    checkingException() {
-        let { tryDetect } = this;
-        this.tryDetect++;
-
-        NSLog.info(`GetInfo() not received
-        timeout: ${wait_times} patrolling: ${this._modulePath}
-        tryDetect: ${tryDetect} doWait_maximum: ${doWait_maximum}`);
-
-        if (!(this.tryDetect > doWait_maximum)) return true;
-
-        this.stopHeartbeat();
-        this.quit();
-        this.tryDetect = 0;
-        // execute restart
-        setTimeout(() => {
-            if (this.isRelease) return false;
-            this.init();
-            this.emitter.emit('status', 'Daemon init [' + this.name + ']');
-            NSLog.log("warning", `${this._modulePath} patrolling.checkingException.init()`);
-        }, 1000);
-        return false;
+    /**
+     * 無法反應時間
+     * @param time
+     * @return {string}
+     */
+    timeTextContent(time) {
+        let stopwatch = Math.floor((Date.now() - time)/1000);
+        let sec = (stopwatch % 60);
+        let min = Math.floor((stopwatch - sec) / 60) % 60;
+        let hours = Math.floor((stopwatch - (min + sec)) / 3600) % 60;
+        let str = '';
+        if (hours > 0) {
+            str += `${hours}h `
+        }
+        str += `${(min >= 10 ? min : '0' + min)}:${(sec >= 10 ? sec : '0' + sec)}`
+        return str;
     };
+    async checkingException() {
+        let { currentRetry, maxAttempts } = this;
+        this.currentRetry++;
+        this.getInfoBlock = null;
+
+        if (!(this.currentRetry > maxAttempts)) {
+            NSLog.info(`GetInof() not received try Detect fail: ${currentRetry} time: ${this.timeTextContent(this.heartbeatUpdate)}`);
+            return true;
+        }
+        NSLog.info(`GetInfo() Activity currentRetry timeouts: ${this.timeTextContent(this.heartbeatUpdate)} status: ${ActivateState[this.creationComplete]}
+        timeout: ${wait_times} patrolling: ${this._modulePath}
+        currentRetry: ${currentRetry} maxAttempts: ${maxAttempts}`);
+
+        this.currentRetry = 0;
+        if (!this._lookoutEnabled) return false;
+        this.stopHeartbeat();
+        await this.quit();
+        // execute restart
+        await this.delay(1);
+        if (this.isRelease) return false;
+        this.init();
+        this.emitter.emit('status', 'Daemon init [' + this.name + ']');
+        NSLog.log("warning", `${this._modulePath} patrolling.checkingException.init()`);
+
+    };
+    delay(sec) {
+        return new Promise((resovle) => setTimeout(() => resovle(), sec * 1000));
+    }
     /**
      * 停止心跳機制
      * @name FxDaemon#stopHeartbeat
@@ -508,7 +596,7 @@ class FxDaemon extends events.EventEmitter {
      */
     getInfo(data, cb) {
         if (this._cpf && this._killed == false) {
-            this._msgcb = cb;
+            this.getInfoBlock = cb;
             try {
                 this._cpf.send({evt: 'processInfo','data': data});
             }
@@ -516,8 +604,9 @@ class FxDaemon extends events.EventEmitter {
                 NSLog.debug(`Send process info error killed=${this._killed}.`);
             }
 
-        }else  {
-            NSLog.log('info','getInfo: Process Is Dead.')
+        } else {
+            NSLog.log('info','getInfo: Process Is Dead.');
+            this.setMakeSureComplete(-1);
         }
     };
     postMessage(message, handle, options, cb) {
@@ -554,25 +643,36 @@ class FxDaemon extends events.EventEmitter {
             }
         })
     }
+
     /**
      * 刪除服務(不會停止心跳服務)
      * @name FxDaemon#quit
      * @function quit
      * @public
+     * @return {Promise}
      */
     quit() {
-        if (this._cpf) {
-            // console.log('server-initiated unhappy termination.');
-            this._killed = true;
+        return new Promise((resolve, reject) => {
+            if (this._cpf) {
+                NSLog.error(`${this._modulePath} Send Commands Kill(${this.pid}) to running processes.`);
+                this._killed = true;
 
-            cp.exec(`kill -9 ${ this.pid }`);
+                cp.exec(`kill -9 ${ this.pid }`, (error) => {
+                    if (error) {
+                        NSLog.info(error);
+                        reject(error);
+                    } else {
+                        resolve(true);
+                    }
+                });
 
-            this._cpf = null;
-            this._cpfpid = 0;
-        } else {
-            // console.log('child process is null.');
-        }
-    }
+                this._cpf = null;
+                this._cpfpid = 0;
+            } else {
+                resolve(true);
+            }
+        });
+    };
     /**
      * 停止服務
      * @name FxDaemon#stop
@@ -630,10 +730,11 @@ class FxDaemon extends events.EventEmitter {
         } else if (typeof data === "number") {
             value = data;
         }
-        if (value == 1 && this.creationComplete != 1) {
+        let {activate, deactivate} = ActivateState
+        if (value == activate && this.creationComplete != activate) {
             this.emit('up');
         }
-        else if (this.creationComplete == 1 && value == 0) {
+        else if (this.creationComplete == activate && value == deactivate) {
             this.emit('down');
         }
         this.creationComplete  = value;
@@ -666,7 +767,10 @@ class FxDaemon extends events.EventEmitter {
     on() {
         this.emitter.on.apply(this.emitter, arguments);
     }
-    setup() {
+    setupRetryPolicy(enabled, maxAttempts, timeout) {
+        if (typeof enabled == "boolean") this._lookoutEnabled = enabled;
+        if (typeof maxAttempts == "number") this.maxAttempts = maxAttempts;
+        if (typeof timeout == "number") this.heartbeatTimeout = timeout;
     }
     clean() {
     }
