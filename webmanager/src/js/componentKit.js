@@ -442,10 +442,12 @@ var componentKit = (function ()
                 action: 'getDashboardInfo'
             });
         };
-        async login(token) {
+        async login({token, username, password}) {
             let data = await this.send({
                 action: 'login',
-                token: token
+                token,
+                username,
+                password
             });
             this.setStatus(data.result);
             return data;
@@ -515,10 +517,18 @@ var componentKit = (function ()
         };
         /** 讀取pid服務log資訊 **/
         async liveLog({name, bool}) {
-            return await this.send({
-                action: 'liveLog',
-                data: {name, bool}
-            });
+            if (bool) {
+                return await this.send({
+                    action: 'liveLog',
+                    data: {name, bool}
+                });
+            } else {
+                return await this.send({
+                    action: 'leaveLog',
+                    data: {name, bool}
+                });
+            }
+
         };
         liveLog_v1({name, bool}) {
             let event = (bool ? 'liveLog' : 'leaveLog');
@@ -1162,6 +1172,13 @@ var componentKit = (function ()
             } else {
                 return await this.manager.appSettingsSave(json);
             }
+        };
+        async login(json) {
+            if (this.version == "v1") {
+                return false;
+            } else {
+                return await this.manager.login(json);
+            }
         }
         async smsManager() {
             if (this.version === 'v1') {
@@ -1330,9 +1347,13 @@ var componentKit = (function ()
                 $("#user_login").modal("show");
             });
             $("#btn-logout").click(async () => {
-                let respond = await this.iFetchManger.logout({
-                    username: $('#username').val()
-                });
+                let username = $('#username').val();
+                let respond;
+                if (this.info.website) {
+                    respond = await this.mAdapter.logout({ username });
+                } else {
+                    respond = await this.iFetchManger.logout({ username });
+                }
                 $("#btn-logout").hide();
                 $("#btn-login").show();
                 if (this.info.mode == 'pug') location.reload();
@@ -1343,10 +1364,13 @@ var componentKit = (function ()
                 $("#user_message").empty();
                 //let host = document.getElementById('ipAddress').value;
                 const username = $('#username').val();
-                const password = $('#password').val();
-
-                let respond = await this.iFetchManger.login({ username, password });
-
+                const password = new IEncoder().encryption($('#password').val());
+                let respond;
+                if (this.info.website) {
+                    respond = await this.mAdapter.login({username, password});
+                } else {
+                    respond = await this.iFetchManger.login({ username, password });
+                }
                 if (!respond.result) {
                     // alert("Internal error occurred: account is not active.")
                     $("#user_message").append(
@@ -2620,26 +2644,32 @@ var componentKit = (function ()
                 let res = await tracer.start();
                 tracer.addListener('complete', async ({event, data}) => {
                     if (event == 'ready') await tracer.liveLog({name: assign, bool: true});
-                    if (event == 'liveLog' && data.name == assign) this.logDraw(data);
+                    if (event == 'liveLog' && data.name == tracer.assign) this.logDraw(data);
                 });
+                tracer.assign = assign;
 
                 this.tracer = tracer;
+                const endpoint = this;
                 $(".scroll-content-log").mCustomScrollbar({
-                    callbacks:{
-                        onScrollStart:function(){
+                    callbacks: {
+                        onScroll:function () {
+                            // console.log("Content scrolled...");
+                        },
+                        onScrollStart:() => {
                             // console.log('onScrollStart');
                         },
                         whileScrolling:function() {
+                            endpoint.moveBottom = (this.mcs.topPct >= 97);
                         },
-                        onTotalScroll:function () {
-                            //console.log('onTotalScroll');
+                        onTotalScroll:() => {
+                            // console.log('onTotalScroll');
                             this.moveBottom = true;
                         }
                     }
                 });
                 $("#modal_log_cluster").on('hidden.bs.modal', () => {
                     console.log(`modal-log-cluster show => `);
-                    tracer.liveLog({name: assign, bool: false});
+                    tracer.liveLog({name: tracer.assign, bool: false});
                     $("#modal_log_cluster").find(".mCSB_container").empty();
                     $("#modal_log_rows").html(0);
                 });
@@ -2650,17 +2680,18 @@ var componentKit = (function ()
                     }
                 });
             } else {
-                if (typeof this.tracer != "undefined") {
-                    if (version == 'v1') {
-                        tracer.liveLog_v1({name: assign, bool: true});
-                    } else {
-                        tracer.liveLog({name: assign, bool: false});
-                    }
-                    $("#modal_log_cluster").find(".mCSB_container").empty();
-                    $("#modal_log_rows").html(0);
+                if (version == 'v1') {
+                    tracer.liveLog_v1({name: assign, bool: true});
+                } else {
+                    tracer.liveLog({name: assign, bool: true});
                 }
+                $("#modal_log_cluster").find(".mCSB_container").empty();
+                $("#modal_log_rows").html(0);
+                tracer.assign = assign;
             }
 
+            //scroll bar 高度
+            $(".scroll-content-log").height( $( window ).height() - 200 );
         };
         logDraw(d) {
             let { log } = d;
@@ -2670,6 +2701,7 @@ var componentKit = (function ()
             let str = log.replace(/error/g, '<span style=color:#da4453;font-weight:bold;>error</span>');
             str = str.replace(/info/g, '<span style=color:#2f9fe0;font-weight:bold;>info</span>');
             str = str.replace(/warning/g, '<span style=color:#f6bb42;font-weight:bold;>warning</span>');
+            str = str.replace(/quiet/g, '<span style=color:#3d85c6;font-weight:bold;>warning</span>');
             $("#mCSB_1_container").append("<p style='margin: 0 0 0 0;'>" + str + "</p>");
             var rows = $("#mCSB_1_container > p").length;
             $("#modal_log_rows").html(rows);
