@@ -611,6 +611,21 @@ var componentKit = (function ()
                 data
             })
         }
+        async appSettings({folder, filename}) {
+            return await this.send({
+                action: 'appSettings',
+                folder,
+                filename
+            })
+        };
+        async appSettingsSave({folder, filename, data}) {
+            return await this.send({
+                action: 'appSettingsSave',
+                folder,
+                filename,
+                data
+            })
+        };
         async command(action, data) {
             return await this.send({action, data});
         }
@@ -1133,6 +1148,20 @@ var componentKit = (function ()
                 console.log('cancelSchedule:', data);
                 if (this.completed) this.completed(data);
             }
+        };
+        async appSettings(json) {
+            if (this.version == "v1") {
+                return false;
+            } else {
+                return await this.manager.appSettings(json);
+            }
+        };
+        async appSettingsSave(json) {
+            if (this.version == "v1") {
+                return false;
+            } else {
+                return await this.manager.appSettingsSave(json);
+            }
         }
         async smsManager() {
             if (this.version === 'v1') {
@@ -1368,6 +1397,10 @@ var componentKit = (function ()
             return await this.iFetchManger.appSettingsDir(folder);
         }
         async appSettings({filename, folder}) {
+            console.log(`appSettings => ${filename} ${folder}`);
+            if (this.info.website) {
+                return await this.mAdapter.appSettings({filename, folder});
+            }
             if (filename) {
                 return await this.iFetchManger.appSettingsFile({filename, folder});
             } else {
@@ -1375,9 +1408,13 @@ var componentKit = (function ()
             }
         };
         async appSettingsSave({filename, folder}, data) {
-            console.log(`appSettingsSave -> ${filename} ${folder}`);
-            if (filename) {
+            console.log(`appSettingsSave => ${filename} ${folder}`);
+            if (!filename) return false;
+            if (this.info.website) {
+                return await this.mAdapter.appSettingsSave({filename, folder, data});
+            } else {
                 return await this.iFetchManger.appSettingsSave({filename, folder}, data);
+
             }
         };
         f2dbInfo(table) {
