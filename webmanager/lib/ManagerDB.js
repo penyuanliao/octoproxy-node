@@ -22,13 +22,15 @@ class ManagerDB extends events.EventEmitter {
     async start() {
         let {filepath} = this;
         if (!filepath) filepath = ".";
-        let src = `${filepath}/manager.db`;
+        let src = `./manager.db`;
         NSLog.info(`ManagerDB lokijs src: ${src}`);
-        this.db = new lokijs(src, {autoload: true, autoloadCallback: (element) => {
-                console.log(`autoloadCallback`, element);
-            }});
+        this.db = new lokijs(src);
         await this.load();
         this.accounts = this.createBucket(`accounts`);
+        // this.roles = this.createBucket('roles');
+        // this.roles.insert({role: 'Guest', id: 0});
+        // console.log(this.roles.findOne({role: 'Guest'}));
+        this.save();
         return this;
     }
     async load() {
@@ -43,7 +45,7 @@ class ManagerDB extends events.EventEmitter {
         if (collection) {
             return collection;
         } else {
-            collection = db.addCollection(bucket);
+            collection = db.addCollection(bucket, {autoupdate: true});
             return collection;
         }
     }
@@ -83,12 +85,14 @@ class ManagerDB extends events.EventEmitter {
     async flushToken({username, token}) {
         let user = await this.getUser(username);
         user.token = token;
-        console.log('flushToken', user);
+        // console.log('flushToken', user);
         this.update(user);
+        return user;
     }
-    async updateSecret(username, otp) {
+    async updateSecret(username, otp, url) {
         let user = await this.getUser(username);
         user.otp = otp;
+        user.url = url || null;
         this.update(user);
     }
     async getSecret(username) {
@@ -108,9 +112,15 @@ class ManagerDB extends events.EventEmitter {
         accounts.update(user);
         this.db.saveDatabase();
     }
+    save() {
+        console.log(`db.save()`);
+        this.db.save();
+    }
     clean() {
     }
     release() {
     }
 }
 module.exports = exports = ManagerDB;
+
+new ManagerDB().start();

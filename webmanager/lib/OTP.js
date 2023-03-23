@@ -14,7 +14,7 @@ class OTP extends events.EventEmitter {
     constructor() {
         super();
         this.setup();
-
+        this.issuer = 'octoMan';
     }
     setup() {
         let digits = 6;

@@ -11,8 +11,9 @@ const NSLog         = require("fxNetSocket").logger.getInstance();
  * @constructor
  */
 class Auth extends EventEmitter {
-    constructor() {
+    constructor(delegate) {
         super();
+        this.delegate = delegate;
         this.enabled = false;
         this.db = null;
         this.expiry = Math.floor(Date.now() / 1000) + (60 * 60);
@@ -37,7 +38,7 @@ class Auth extends EventEmitter {
             let { authorization } = IConfig.ManagerAccounts();
             let { accounts, enabled, secret, expiry } = authorization;
             this.db = await this.initDB();
-            if (accounts) await this.createUsers(accounts);
+            // if (accounts) await this.createUsers(accounts);
             this.enabled = enabled;
             this.secret  = secret;
             if (expiry) this.expiry = expiry;
@@ -50,6 +51,7 @@ class Auth extends EventEmitter {
         for (let i = 0; i < accounts.length; i++) {
             let { username, password, permission } = accounts[i];
             let user = await this.db.getUser(username);
+            console.log(user);
             if (!user) {
                 await this.register({ username, password, permission });
             }
@@ -99,25 +101,30 @@ class Auth extends EventEmitter {
      * @return {Promise<*|boolean>}
      */
     async login({username, password}) {
-        password = this.decryption(password, this.aes);
-        let {valid, twoFactor} = await this.verify({username, password});
+        try {
+            password = this.decryption(password, this.aes);
+            let {valid, twoFactor} = await this.verify({username, password});
 
-        if (valid) {
-            const payload = {
-                username,
-                exp: this.expiry, // 1hour
-                twoFactor,
-                otpauth: false
-            };
-            const options = {};
-            let token = jwt.sign(payload, this.secret, options);
-            await this.db.flushToken({token, username}); //刷新
-            return {
-                payload,
-                token
-            };
+            if (valid) {
+                const payload = {
+                    username,
+                    exp: this.expiry, // 1hour
+                    twoFactor,
+                    otpauth: false
+                };
+                const options = {};
+                let token = jwt.sign(payload, this.secret, options);
+                let info = await this.db.flushToken({token, username}); //刷新
+                return {
+                    payload,
+                    info,
+                    token
+                };
+            }
+            return false;
+        } catch (e) {
+            return false;
         }
-        return false;
     };
     async otpAuth(payload) {
         const {username} = payload;
@@ -204,8 +211,8 @@ class Auth extends EventEmitter {
             });
         });
     };
-    async registerOTP(username, secret) {
-        return await this.db.updateSecret(username, secret);
+    async registerOTP({username, secret, url}) {
+        return await this.db.updateSecret(username, secret, url);
     };
     async getSecret(username) {
         return await this.db.getSecret(username);
@@ -213,9 +220,72 @@ class Auth extends EventEmitter {
     async getPermission(username) {
         return await this.db.getPermission(username);
     };
-    encryption(data, {key, iv}) {
+    /**
+     * 產生二次驗證qrcode
+     * @param credentials
+     * @return {Promise<*|null>}
+     */
+    async generate2FAQRCode(credentials) {
+        const {otp} = this.delegate;
+        let {result, data} = await this.jwtVerify(credentials);
+        if (result) {
+            const {username} = data;
+            const db = await this.getSecret(username)
+            let secret, url;
+            if (db) {
+                // secret = db.otp;
+                url    = db.url;
+            } else {
+                secret = otp.generateSecret(32);
+                url = otp.generateURL({
+                    issuer: otp.issuer,
+                    username,
+                    secret
+                });
+                await this.registerOTP({username, secret, url});
+            }
+            return await otp.create_qrcode(url, 'buffer');
+        }
+        return null;
+    };
+    /**
+     * 二次驗證
+     * @param credentials 登入的token
+     * @param token otp 6位數密碼
+     * @return {Promise<{result: boolean, token: (*)}|{result: boolean}>}
+     */
+    async verify2FA({credentials, token}) {
+        const {otp} = this.delegate;
+        let {result, data} = await this.jwtVerify(credentials);
+        if (result) {
+            const {username} = data;
+            const db = await this.getSecret(username);
+            let secret = '';
+            if (db) {
+                secret = db.otp;
+                let validate = otp.verify({secret, token});
+                if (validate) {
+                    return {
+                        result: true,
+                        token: await this.otpAuth(data)
+                    };
+                }
+            }
+        }
+        return {result: false};
+    };
+    /**
+     * 加密
+     * @param data
+     * @param opt
+     * @param opt.key
+     * @param opt.iv
+     * @return {string}
+     */
+    encryption(data, opt) {
         if (typeof data != 'string') data = JSON.stringify(data);
-        iv = iv || "";
+        let {key, iv} = opt || {};
+        iv = iv || this.aes.iv;
         if (typeof key == 'undefined') key = this.aes.key;
         let clearEncoding = 'utf8';
         let cipherEncoding = 'hex';
@@ -226,9 +296,18 @@ class Auth extends EventEmitter {
         cipherChunks.push(cipher.final(cipherEncoding));
         return cipherChunks.join('');
     };
-    decryption(data, {key, iv}) {
+    /**
+     * 解密
+     * @param data
+     * @param opt
+     * @param opt.key
+     * @param opt.iv
+     * @return {string}
+     */
+    decryption(data, opt) {
         if (!data) return "";
-        iv = iv || "";
+        let {key, iv} = opt || {};
+        iv = iv || this.aes.iv;
         if (typeof key == 'undefined') key = this.aes.key;
         let clearEncoding = 'utf8';
         let cipherEncoding = 'hex';

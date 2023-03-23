@@ -260,6 +260,8 @@ class IConfig {
         };
 
         this.forkOptions = getConfig('../configuration/Assign.json');
+        // wait for ready
+        this.taskSync = false;
 
         if (this.env === 'development') {
             this.development();
@@ -318,12 +320,23 @@ class IConfig {
     };
     static ManagerAccounts() {
         let accounts = new Map([
-
+            [
+                'root',  {
+                username: "newflash@mail.chungyo.net",
+                password: "gv2Z3UyOrs",
+                permission: 777,
+            }],
+            [
+                'guest', {
+                username: "sguest@mail.chungyo.net",
+                password: "36Gfi5ryW6",
+                permission: 1,
+            }]
         ]);
         return {
             authorization: {
                 enabled: false,
-                secret: "",
+                secret: "sidonia",
                 accounts: [ ...accounts.values() ]
             }
         }

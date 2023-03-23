@@ -3,6 +3,7 @@ const net           = require("net");
 const util          = require("util");
 const EventEmitter  = require("events");
 const PassThrough   = require("stream").PassThrough;
+const NSLog         = require('fxNetSocket').logger.getInstance();
 /**
  * 服務LOG導出到控制端
  * @constructor
@@ -95,6 +96,7 @@ class LogServer extends EventEmitter {
     broadcast(name, data) {
         //檢查是否有使用者檢視log
         if (this.clients.has(name)) {
+            // NSLog.info('broadcast', name, this.clients.has(name));
             let group = this.clients.get(name);//檢查是否存在
             let groupMap = this.clientsMap.get(name);
             for (let client of groupMap.values()) {
@@ -117,14 +119,27 @@ class LogServer extends EventEmitter {
             groupMap = new Set();
             this.clients.set(name, group);//檢查clients是否移除
             this.clientsMap.set(name, groupMap);
+            NSLog.info('join', name, groupMap.size);
         }
         group.set(client, groupMap);
-        groupMap.add(client);
+        if (!groupMap.has(client)) {
+            groupMap.add(client);
+        }
     };
     leave(name, client) {
+        let group;
+        let groupMap;
         if (this.clients.has(name)) {
-            this.clients.delete(name);
-            this.clientsMap.delete(name);
+            group = this.clients.get(name);
+            groupMap = this.clientsMap.get(name);
+            group.delete(client);
+            groupMap.delete(client);
+            NSLog.info('leave', name, groupMap.size);
+            if (groupMap.size == 0) {
+                this.clients.delete(name);
+                this.clientsMap.delete(name);
+            }
+
         }
     };
     clean() {

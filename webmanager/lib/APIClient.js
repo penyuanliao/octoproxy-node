@@ -4,7 +4,9 @@
 const EventEmitter  = require("events");
 const {WSClient}    = require("fxNetSocket");
 const {UDPManager}  = require("../../lib/UDP.js");
+const {WSPermissions, Roles} = require('./Permissions.js');
 const NSLog         = require('fxNetSocket').logger.getInstance();
+
 /**
  * websocket客端
  * @constructor
@@ -16,18 +18,40 @@ class APIClient extends EventEmitter {
         this.manager  = delegate.manager;
         this.wDelegate = new WeakMap([[this, delegate]]);
         this.cmode    = 0;
-        this.signin   = false;
-        this.token    = null;
+        this.isRelease = false;
         this.info     = null;
-
         this.udpPort  = delegate.configure.wpc.udp.port;
         this.udp      = null; //視訊專用
         this.viewer   = new Set();
         this.logSkip  = new Set(['getServiceInfo', 'getSysInfo', 'getDashboardInfo']);
+        this.permissions = new Map(
+            [
+                [Roles.Guest, new Set([0, 36, 37])],
+                [Roles.Viewer, new Set([1, 2, 3, 4])],
+                [Roles.Boss, new Set([
+                    0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+                    10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                    20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+                    30, 31, 32, 33, 34, 35, 36, 37
+                ])],
+                [Roles.Manager, new Set([])]
+            ]
+        )
+        //允許資料夾
+        this.accept = new Set(['appsettings', 'configuration']);
+        //權限
+        this.session  = {
+            user: 'Guest',
+            token: '',
+            status: 'not_authorized',
+            role: Roles.Guest,
+            exp: 0
+        };
     }
+
     /**
      *
-     * @return {null}
+     * @return {null|Object}
      */
     get delegate() {
         if (this.wDelegate.has(this))
@@ -35,18 +59,26 @@ class APIClient extends EventEmitter {
         else {
             return null;
         }
-    }
+    };
     /**
      *
      * @return {boolean}
      */
     get authEnabled() {
         if (this.delegate.auth) {
-            return false;
-            // return this.delegate.auth.enabled;
+            return this.delegate.auth.enabled;
         } else {
             return false;
         }
+    };
+    get token() {
+        return this.session.token;
+    };
+    set token(value) {
+        this.session.token = value;
+    };
+    get signin() {
+        return (this.session.status == 'authorized');
     }
     /**
      * 開始連線
@@ -86,9 +118,27 @@ class APIClient extends EventEmitter {
      * @private
      */
     ready() {
-        let { ws } = this;
+        let { ws, manager } = this;
         if (ws) {
-            ws.write({event: 'ready', version: require('../package.json').version, isAuthEnabled: this.authEnabled});
+            ws.write({
+                event: 'ready',
+                managerVersion: require('../package.json').version,
+                version: manager.version,
+                isAuthEnabled: this.authEnabled
+            });
+        }
+    };
+    /**
+     * 角色權限
+     * @param role
+     * @return {null|Set<number>}
+     */
+    getRolePermission(role) {
+        const {permissions} = this;
+        if (permissions.has(role)) {
+            return this.permissions.get(role);
+        } else {
+            return null;
         }
     };
     /**
@@ -97,25 +147,26 @@ class APIClient extends EventEmitter {
      * @param data
      */
     handle(data) {
+        let author = (this.signin ? this.session.user : 'n/a');
         if (typeof data == "string") data = JSON.parse(data);
-        const { authEnabled, signin } = this;
+        const { authEnabled, session } = this;
         const {action} = data;
-        if (authEnabled && !signin && action === "login") {
-            this[action](data);
-        } else if ((authEnabled ? signin : true) && this[action] instanceof Function) {
-            if (!this.logSkip.has(action)) NSLog.info(`[APIClient] action: ${action}`);
+        if (authEnabled) {
+            if (this.isExpired()) this.logout();
+            const permission = this.getRolePermission(session.role);
+            if (permission.has(WSPermissions[action]) === false) {
+                NSLog.warning(`[APIClient] authentication required.`);
+                this.authenticationRequired(data);
+                return false;
+            }
+        }
+        if (this[action] instanceof Function) {
+            if (!this.logSkip.has(action)) NSLog.info(`[APIClient] action: ${action} author: ${author}`);
             this[action](data);
         } else if (this.handle_v1(data)) {
 
         } else {
-            if (authEnabled && !signin) {
-                NSLog.warning(`[APIClient] authentication required.`);
-                this.authenticationRequired(data);
-            } else {
-                NSLog.warning('[APIClient] Not Found %s', action, data);
-            }
-
-
+            NSLog.warning('[APIClient] Not Found %s', action, data);
         }
     };
     handle_v1(data) {
@@ -123,10 +174,10 @@ class APIClient extends EventEmitter {
             //舊API
             switch (data.event) {
                 case "liveLog":
-                    this[data.event]({ name: data.data[0]});
+                    this[data.event]({ name: data.data[0] });
                     break;
                 case 'leaveLog':
-                    this[data.event]({ name: data.data[0]});
+                    this[data.event]({ name: data.data[0] });
                     break
                 default:
                     return false;
@@ -145,29 +196,69 @@ class APIClient extends EventEmitter {
             message: 'Authentication required. your need to sign in to your Account.'
         };
         this.write(respond);
-    }
-    async login({tokenId, token}) {
+    };
+    versions(json) {
+        let { ws, manager } = this;
+        let respond = {
+            tokenId: json.tokenId,
+            event: "version",
+            version: manager.version,
+            result: true
+        };
+        this.write(respond);
+    };
+    isExpired() {
+        let sec = Math.floor(((this.session.exp * 1000) - Date.now()) / 1000);
+        return sec < 0;
+    };
+    async login({tokenId, token, password, username}) {
         const auth = this.delegate.auth;
         let respond = {
             tokenId: tokenId,
             event: "login",
             result: false
         };
-        if (!token || token == '') return this.write(respond);
-        let {result, data} = await auth.jwtVerify(token);
-        respond.result = result;
-        this.signin = result;
-        this.token = token;
+        if (password && username) {
+
+            let user = await auth.login({username, password});
+            let {token, payload: { exp }, info: {permission}} = user;
+            respond.result = (user != false);
+            respond.data = { token };
+            this.token          = user.token;
+            this.session.user   = username;
+            this.session.status = 'authorized';
+            this.session.role   = permission;
+            this.session.exp    = exp;
+        } else {
+            if (!token || token == '') return this.write(respond);
+            let {result, data} = await auth.jwtVerify(token);
+            respond.result = result;
+            this.token = token;
+            this.session.user = data.user;
+            this.session.status = 'authorized';
+        }
         this.write(respond);
     };
+    /**
+     * 登出
+     * @param json
+     */
     logout(json) {
-        this.signin = false;
+        if (!json) json = {};
+        this.token          = '';
+        this.session.user   = 'Guest';
+        this.session.status = 'not_authorized';
+        this.session.role   = Roles.Guest;
+        this.session.exp    = 0;
         let respond = {
             tokenId: json.tokenId,
             event: "logout",
             result: true
         };
         this.write(respond);
+    };
+    async userTFA(json) {
+
     };
     /** 服務資訊 **/
     async getServiceInfo(json) {
@@ -234,12 +325,12 @@ class APIClient extends EventEmitter {
             bool
         } = (json.data || json);
 
-        if (!this.viewer.has(name)) {
+        if (!this.viewer.has(name) && bool) {
             logServer.join(name, this.ws);
             this.viewer.add(name);
         }
         if (bool == false) {
-            logServer.leave(name);
+            logServer.leave(name, this.ws);
             this.viewer.delete(name);
         }
     };
@@ -248,7 +339,7 @@ class APIClient extends EventEmitter {
         let {
             name
         } = (json.data || json);
-        logServer.leave(name);
+        logServer.leave(name, this.ws);
         this.viewer.delete(name);
     };
     /**
@@ -648,6 +739,56 @@ class APIClient extends EventEmitter {
         };
         this.write(respond);
     };
+    async appSettings(json) {
+        const {manager} = this;
+        let {folder, filename, data, tokenId} = json;
+        let params;
+
+        if (filename) {
+            params = {
+                method: "readFileContents",
+                folder,
+                filename
+            }
+        } else {
+            params = {
+                method: "readFiles",
+                folder
+            };
+        }
+
+        if (!this.accept.has(folder)) return this.write({
+            tokenId,
+            event: "getAppSettings",
+            result: false
+        });
+
+        let respond = await manager.send(params);
+        respond.tokenId = tokenId;
+        respond.event = "getAppSettings";
+        this.write(respond);
+    };
+    async appSettingsSave(json) {
+        const {manager} = this;
+        let {folder, filename, data, tokenId} = json;
+        let params = {
+            method: "saveFileContents",
+            folder,
+            filename,
+            data
+        }
+
+        if (!this.accept.has(folder)) return this.write({
+            tokenId,
+            event: "getAppSettings",
+            result: false
+        });
+
+        let respond = await manager.send(params);
+        respond.tokenId = tokenId;
+        respond.event = "appSettingsSave";
+        this.write(respond);
+    };
     /** process溝通通道 **/
     async ipcMessage(json) {
         const manager = this.manager;
@@ -847,11 +988,12 @@ class APIClient extends EventEmitter {
         this.manager = manager;
     };
     write(data) {
-        if (this.cmode == 0) {
+        if (this.cmode == 0 && this.isRelease === false) {
             this.ws.write(data);
         }
     };
     release() {
+        this.isRelease = true;
         if (this.udp) this.udp.release();
         if (!this.delegate) return false;
         if (this.viewer) {

@@ -30,7 +30,7 @@ class APIServer extends EventEmitter {
     setup() {
         const { wpc } = this.configure;
         const listen = !this.isWorker;
-        this.auth        = new Auth();
+        this.auth        = new Auth(this);
         this.otp         = new OTP();
         this.wsServer    = this.createTCPServer({listen, port: wpc.ws.port});
         this.restManager = this.createRestServer({

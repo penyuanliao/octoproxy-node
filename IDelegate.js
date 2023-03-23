@@ -70,7 +70,7 @@ function noop() {}
  * @constructor IDelegate
  * @property server
  * @property clusters
- * @property clusterNum
+ * @property serialNumber
  * @property awaitTrashTimes
  * @property roundrobinNum
  * @property gameLBSrv
@@ -96,13 +96,19 @@ class IDelegate extends events.EventEmitter {
         return this._lockdown;
     };
     setup() {
-        /** webSocket Server **/
-        this.awaitTrashTimes = undefined; //times
+        //recycle time
+        this.awaitTrashTimes = undefined;
+        //伺服器
         this.server          = undefined;
-        this.clusterNum      = 0;
+        //服務序列號
+        this.serialNumber    = 0;
+        //服務
         this.clusters        = {};
+        //服務HashMap
         this.clusterMap      = new WeakMap();
+        //規則轉導清單
         this.ruleTable       = new Map();
+        //等待回收清單
         this.garbageDump     = []; //回收記憶體太大的
         /** [roundrobin] Client go to sub-service index **/
         this.roundrobinNum   = [];
@@ -110,29 +116,38 @@ class IDelegate extends events.EventEmitter {
         this._lockdown       = false;
         /** casino load balance **/
         this.gameLBSrv       = new GLBSrv(iConfig.gamSLB, this);
-        this.mgmtSrv         = undefined;
+        //管理端
+        this.opManager       = undefined;
+        //連線紀錄
         this.recordEnabled   = true;
-        this.tokenId = 0;
-        NSLog.log('info','lockdown:[%s]', this._lockdown);
-        NSLog.log('debug', "** Initialize octoproxy.js **");
-        NSLog.log("debug", " > Frontend support listens for RTMP/TCP requests to enabled: [%s]", iConfig.gamSLB.rtmpFrontendEnabled);
+        //LB Request 編號
+        this.tokenId         = 0;
         this.init();
     };
     get dashboard() {
-        return this.mgmtSrv.dashboard;
+        return this.opManager.dashboard;
     }
     init() {
+
+        const {enabled, rtmpFrontendEnabled, httpEnabled} = iConfig.gamSLB;
+        NSLog.info(`** Initialize octoproxy.js **
+    Game server Setup ->
+     [1]Lockdown: ${this._lockdown}
+     [2]Support RTMP/TCP Enabled: ${rtmpFrontendEnabled}
+     [3]Support HTTP Enabled: ${httpEnabled}
+     [4]Support Load Balance Enabled: ${enabled}
+        `);
+
         utilities.autoReleaseGC(); //** 手動 1 sec gc
-        NSLog.log('info' , 'Game server load balance enabled: [%s]', iConfig.gamSLB.enabled);
-        if (iConfig.gamSLB.enabled) {
+        if (enabled) {
             // Initial start up on Game Server Load Balance.
             this.gameLBSrv.init_daemon();
         }
 
         // 1. setup child process fork
-        this.setupCluster(iConfig.forkOptions);
+        this.setupCluster(iConfig.forkOptions).then(() => {}).catch((reason => NSLog.error(`setupCluster() Error:${reason}`)));
         // 2. create listen 80 port server
-        this.start().then(() => {});
+        this.start().then(() => {}).catch((reason => NSLog.error(`start() Error:${reason}`)));
 
         this.bindingProcessEvent();
 
@@ -159,7 +174,7 @@ class IDelegate extends events.EventEmitter {
         if (typeof opt === 'undefined') {
             opt = { 'cluster': [] };
         }
-        const taskSync = opt.taskSync || false;
+        const taskSync = iConfig.taskSync || false;
         const num = Number(opt.cluster.length);
         if (num != 0) {
             let child;
@@ -173,7 +188,7 @@ class IDelegate extends events.EventEmitter {
                 this.addChild(child);
             }
             NSLog.log('info',"Cluster active number:", num);
-            this.clusterNum = num;
+            this.serialNumber = num;
         }
     };
     /**
@@ -305,7 +320,7 @@ class IDelegate extends events.EventEmitter {
         if (typeof headers["x-forwarded-for"] != "undefined") getSockInfos.xff = Dashboard.parseForwarded(headers["x-forwarded-for"]);
         else handle.getSockInfos.xff = null;
         const host = (typeof getSockInfos.xff == "string") ? getSockInfos.xff : getSockInfos.address;
-        if (this.mgmtSrv.checkedIPDeny(host)) {
+        if (this.opManager.checkedIPDeny(host)) {
             this.rejectClientException(handle, "CON_DENY_CONNECT");
             handle.close(this.close_callback.bind(handle, this));
             this.handleRelease(handle);
@@ -798,7 +813,7 @@ class IDelegate extends events.EventEmitter {
         let corsMode = false;
         let appid = false;
         const swp = headers["sec-websocket-protocol"];
-        const {getSignature} = this.mgmtSrv;
+        const {getSignature} = this.opManager;
 
         if (mode == 'http' && method === 'OPTIONS' &&
             (headers['sec-fetch-mode'] == iConfig.crossPolicy.secFetchMode ||
@@ -1192,13 +1207,13 @@ class IDelegate extends events.EventEmitter {
             const { evt, id } = message;
             child.postMessage({ evt, id, data: result });
         });
-        child.emitter.on('onIpcMessage', (message) => endpoint.mgmtSrv.onIpcMessage(message));
+        child.emitter.on('onIpcMessage', (message) => endpoint.opManager.onIpcMessage(message));
         child.emitter.on('status', (message) => NSLog.log('warning', message));
         child.emitter.on('unexpected', (err) => {
             NSLog.log('warning', "unexpected:", err.name);
             endpoint.tgBotTemplate(iConfig.IManagerConfig.telegram.chats.sys, "shutdown", [err.name]);
         });
-        child.emitter.on('restart', () => endpoint.mgmtSrv.refreshClusterParams(child));
+        child.emitter.on('restart', () => endpoint.opManager.refreshClusterParams(child));
 
         if (!taskSync) child.init();
 
@@ -1212,15 +1227,15 @@ class IDelegate extends events.EventEmitter {
     management() {
         NSLog.log('debug', '** Setup management service port:%s **', iConfig.managePort);
         const IManager = require('./smanager/IManager.js');
-        this.mgmtSrv = IManager.createManager(this);
+        this.opManager = IManager.createManager(this);
     };
     reLoadManagement() {
-        this.mgmtSrv.close();
+        this.opManager.close();
         delete require.cache[require.resolve('./smanager/IManager.js')];
         this.management();
     };
     tgBotTemplate(chatID, type, args) {
-        let {tgBot} = this.mgmtSrv;
+        let {tgBot} = this.opManager;
         if (typeof tgBot == "undefined") return false;
         if (type == "shutdown") {
             tgBot.sendMessage(chatID, util.format("%s ❗️shutdown: reboot by \n<code>%s</code>|<b>%s</b>", hostname, TelegramBot.dateFormat(new Date()), args[0]));
