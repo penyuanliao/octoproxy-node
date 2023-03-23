@@ -51,6 +51,7 @@ class IHandler extends events {
             "readIPBlockList",
             "addIPBlockList",
             "warpTunnel",
+            "versions"
         ]);
     }
     constructor(delegate) {
@@ -148,9 +149,10 @@ class IHandler extends events {
             });
         }
     };
-    test(params, client, callback) {
+    versions(params, client, callback) {
+        let version = require(xPath.resolve(process.cwd(), `package.json`)).version;
         if (callback) {
-            callback({result: true, version: require('./package.json').version});
+            callback({result: true, version});
         }
     };
     /** 讀取目前服務資訊 **/
@@ -202,7 +204,7 @@ class IHandler extends events {
         if (mxoss) options.mxoss = mxoss;
         let {clone} = options;
         const endpoint = this.delegate.delegate;
-        let index = endpoint.clusterNum++;
+        let index = endpoint.serialNumber++;
 
         const child = endpoint.createChild(endpoint, {index, params: options});
 

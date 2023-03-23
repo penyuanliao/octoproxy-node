@@ -9,6 +9,7 @@ const NSLog    = require("fxNetSocket").logger.getInstance();
 class RemoteClient {
     constructor() {
         this.mode = IManagerConfig.client.mode;
+        this.version = null;
         this.ctrl = undefined;
         this.progress = new Map();
         this.storageInfo = new Map();
@@ -54,7 +55,9 @@ class RemoteClient {
             delimiter:'\r\n'
         }
         const ctrl = new Client(this, options);
-        ctrl.on("connect", function () {
+        ctrl.on("connect", async () => {
+            let {version} = await this.getVersions();
+            this.version = version;
             NSLog.info(' - Active mode, the client connect to server port:%s.', port);
         });
         return ctrl;
@@ -100,8 +103,7 @@ class RemoteClient {
         } else {
             return await this.ctrl.callAsync("targetEvent", params);
         }
-    }
-
+    };
     /**
      * @private
      * @param method
@@ -119,7 +121,7 @@ class RemoteClient {
             }
         }
         return null;
-    }
+    };
     /**
      * @private
      * @param method
@@ -131,7 +133,7 @@ class RemoteClient {
             time: Date.now(),
             data
         });
-    }
+    };
     /**
      * @private
      * @param method
@@ -153,6 +155,12 @@ class RemoteClient {
                 this.progress.delete(method);
             }
         }
+    };
+    /**
+     * @public
+     */
+    async getVersions() {
+        return this.send({method: "versions"});
     }
 }
 
