@@ -837,20 +837,6 @@ function patch(Request) {
     };
 
     /**
-     * Returns true when connection state is "close"
-     *
-     * @private
-     * @memberof Request
-     * @instance
-     * @function closed
-     * @returns {Boolean} is closed
-     */
-    Request.prototype.closed = function closed() {
-        var self = this;
-        return self.connectionState() === 'close';
-    };
-
-    /**
      * Returns the route object to which the current request was matched to.
      *
      * @public

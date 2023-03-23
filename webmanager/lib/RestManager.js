@@ -7,6 +7,7 @@ const NSLog         = require('fxNetSocket').logger.getInstance();
 const restify       = require('restify');
 const errors        = require('restify-errors');
 const corsMiddleware = require('restify-cors-middleware2');
+const { Roles, HTTPPermissions } = require('./Permissions.js');
 /**
  * 管理介面
  * @constructor
@@ -23,11 +24,10 @@ class RestManager extends EventEmitter {
             '/user/2fa'
         ]);
         this.permissions = new Map([
-            [0, new Set()],
-            [5, new Set([ '/message/apply' ])],
-            [777, new Set(['root'])]
+            [Roles.Guest, new Set(['/user/login'])],
+            [Roles.Manager, new Set([ '/message/apply', '/dir/' ])],
+            [Roles.Boss, new Set(['root'])]
         ]);
-
         this.accept = new Set(['appsettings', 'configuration']);
         this.server = this.createAPIServer();
     };
@@ -49,59 +49,50 @@ class RestManager extends EventEmitter {
         server.use(restify.plugins.queryParser());
         server.use(restify.plugins.bodyParser());
         server.use(restify.plugins.authorizationParser()); // header authorization parser
-        server.use(async (req, res, next) => {
+        server.use(async (req, res) => {
+            console.log(`url => ${req.url}`);
             res.setHeader('Access-Control-Allow-Origin', "*");
-            if (this.visitorAPI.has(req.url)) return next();
+            if (this.visitorAPI.has(req.url)) return;
 
-            let auth = await this.verifyAuth(req.authorization);
+            let auth = this.verifyAuth(req.authorization);
             if (auth == 1) {
                 //未授權
-                next(new errors['NotAuthorizedError']("You are not authorized to access this api. You must sign-in using your credentials for authorization."));
+                res.send(new errors['NotAuthorizedError']("You are not authorized to access this api. You must sign-in using your credentials for authorization."));
             }
             else if (auth == 2) {
                 //未通過驗證
-                next(new errors['UnauthorizedError']('Access is denied due to invalid credentials.'));
+                res.send(new errors['UnauthorizedError']('Access is denied due to invalid credentials.'));
             } else {
                 let { data, result } = auth;
-                console.log(`auth => ${req.url}`);
                 console.log(auth);
 
                 result = 1;
                 if (result == false) {
-                    next(new errors['UnauthorizedError']('Access is denied due to invalid credentials.'));
+                    res.send(new errors['UnauthorizedError']('Access is denied due to invalid credentials.'));
                 } else {
                     if (data) {
                         const {twoFactor, otpauth, permission} = data;
                         console.log(`${req.url} twoFactor:${twoFactor}, otpauth:${otpauth} permission: ${permission}`);
                         let rule = this.permissions.get(permission);
-                        if (rule.has('root')) return next();
+                        if (rule.has('root')) return;
                         if (!rule.has(req.url)) {
                             console.error(`rule ${req.url} permission denied.`);
-                            next(new errors['UnauthorizedError'](`The caller does not permission.`));
-                            return
+                            res.send(new errors['UnauthorizedError'](`The caller does not permission.`));
                         }
                     }
-
-                    next();
                 }
             }
         });
         server.get(`${route}/version`, (req, res, next) => {
             res.send({
                 result: true,
-                version: this.version,
+                version: this.delegate.manager.version,
                 node: process.versions.node
             });
             return next();
-        })
-        server.post(`${route}/echo/:name/:passs`, function (req, res, next) {
-            console.log(req.body);
-            console.log(req.query);
-            res.send(req.params);
-            return next();
         });
         //登入驗證
-        server.post(`${route}/user/login`, async (req, res, next) => {
+        server.post(`${route}/user/login`, async (req, res) => {
             let {username, password} = req.body;
             let sessionID = req.header('proxy-session-id');
             let session = await this.userSession(sessionID);
@@ -115,11 +106,9 @@ class RestManager extends EventEmitter {
             } else {
                 res.send({result: false});
             }
-
-            return next();
         });
         //登出
-        server.post(`${route}/user/logout`, async (req, res, next) => {
+        server.post(`${route}/user/logout`, async (req, res) => {
             let { username } = req.body;
             NSLog.info(`${req.url} user: ${username} logout`);
             let sessionID = req.header('proxy-session-id');
@@ -129,49 +118,31 @@ class RestManager extends EventEmitter {
             session.status = 'not_authorized';
             await this.userSession(sessionID, session);
             res.send({ result: logout });
-            return next();
         });
-        server.post(`${route}/user/password`, (req, res, next) => this.password(req, res, next));
+        server.post(`${route}/user/password`, async (req, res) => this.password(req, res));
         //二次驗證
-        server.post(`${route}/user/2fa`, async (req, res, next) => {
-            const {otp, auth} = this.delegate;
+        server.post(`${route}/user/2fa`, async (req, res) => {
+            const {auth} = this.delegate;
             const {authorization} = req;
-            let {result, data} = await auth.jwtVerify(authorization.credentials);
             const {token} = req.body;
-            if (result) {
-                const {username} = data;
-                const db = await auth.getSecret(username);
-                let secret = '';
-                if (db) {
-                    secret = db.otp;
-                }
-                let result = otp.verify({secret, token});
-                if (result) {
-                    res.send({
-                        result,
-                        token: await auth.otpAuth(data)
-                    })
-                } else {
-                    res.send({result})
-                }
-            }
-            return next();
+            res.send(await auth.verify2FA({
+                credentials: authorization.credentials,
+                token
+            }));
         });
-        server.get(`${route}/amf/config`, async (req, res, next) => {
+        server.get(`${route}/amf/config`, async (req, res) => {
             let src = await this.delegate.manager.send({ method: "getAMFConfig" })
             res.send(src);
-            return next();
         });
         // load balancing forwarding rule
-        server.get(`${route}/balancing/rule`, async (req, res, next) => {
+        server.get(`${route}/balancing/rule`, async (req, res) => {
 
             let src = await this.delegate.manager.send({
                 method: "getLBGamePath"
             });
             res.send(src);
-            return next();
         });
-        server.post(`${route}/balancing/rule`, async (req, res, next) => {
+        server.post(`${route}/balancing/rule`, async (req, res) => {
             let data;
             let json = req.body;
             let checked = true;
@@ -193,24 +164,20 @@ class RestManager extends EventEmitter {
                 });
                 res.send(src);
             }
-
-            return next();
         });
-        server.get(`${route}/process/sys/info`, async (req, res, next) => {
+        server.get(`${route}/process/sys/info`, async (req, res) => {
             let src = await this.delegate.manager.send({
                 method: "getSysInfo"
             });
             res.send(src);
-            return next();
         });
-        server.get(`${route}/process/sys/metadata`, async (req, res, next) => {
+        server.get(`${route}/process/sys/metadata`, async (req, res) => {
             let src = await this.delegate.manager.send({
                 method: "metadata"
             });
             res.send(src);
-            return next();
         });
-        server.del(`${route}/process/user/kickout`, async (req, res, next) => {
+        server.del(`${route}/process/user/kickout`, async (req, res) => {
             let {pid, trash, params} = req.body || {};
             let src = await this.delegate.manager.send({
                 method: "kickoutToPID",
@@ -219,16 +186,14 @@ class RestManager extends EventEmitter {
                 params: params
             });
             res.send(src);
-            return next();
         });
-        server.get(`${route}/process/info`, async (req, res, next) => {
+        server.get(`${route}/process/info`, async (req, res) => {
             let src = await this.delegate.manager.send({
                 method: "getServiceInfo"
             });
             res.send(src);
-            return next();
         });
-        server.post(`${route}/process/info`, async (req, res, next) => {
+        server.post(`${route}/process/info`, async (req, res) => {
             let {
                 mxoss,
                 file,
@@ -256,9 +221,8 @@ class RestManager extends EventEmitter {
                 });
                 res.send(src);
             }
-            return next();
         });
-        server.put(`${route}/process/info`, async (req, res, next) => {
+        server.put(`${route}/process/info`, async (req, res) => {
             let {oAssign, nAssign, pid, options} = req.body || {};
             if (pid == 'all') {
                 pid = 0;
@@ -278,17 +242,14 @@ class RestManager extends EventEmitter {
                 });
                 res.send(src);
             }
-
-            return next();
         });
-        server.patch(`${route}/process/batch/reboot`, async (req, res, next) => {
+        server.patch(`${route}/process/batch/reboot`, async (req, res) => {
 
             let json = req.body || {};
             let delay = json.delay || 1000;
             let group = json.group;
             if (!Array.isArray(group)) {
                 res.send({result: false , error: "invalid argument"});
-                return next();
             } else {
                 this.delegate.queueSteps({
                     method: 'restartMultiCluster',
@@ -305,21 +266,19 @@ class RestManager extends EventEmitter {
             }
 
         });
-        server.post(`${route}/process/warp/tunnel`, async (req, res, next) => {
+        server.post(`${route}/process/warp/tunnel`, async (req, res) => {
             let json = req.body || {};
             let {from, togo, that, list} = json;
             if (!from || !that) {
                 res.send({result: false , error: "invalid argument"});
-                return next();
             }
             let src = await this.delegate.manager.send({
                 method: "warpTunnel",
                 params: json
             });
             res.send(src);
-            return next();
         });
-        server.get(`${route}/service/dashboard/info`, async (req, res, next) => {
+        server.get(`${route}/service/dashboard/info`, async (req, res) => {
             let src = await this.delegate.manager.send({
                 method: "getDashboardInfo"
             })
@@ -328,9 +287,8 @@ class RestManager extends EventEmitter {
             } else {
                 res.send({result: false});
             }
-            return next();
         });
-        server.post(`${route}/service/lockdown/mode`, async (req, res, next) => {
+        server.post(`${route}/service/lockdown/mode`, async (req, res) => {
             let json = req.body || {};
             let src = await this.delegate.manager.send({
                 method: "lockdownMode",
@@ -341,9 +299,8 @@ class RestManager extends EventEmitter {
             } else {
                 res.send({result: false});
             }
-            return next();
         });
-        server.post(`${route}/service/blocklist`, async (req, res, next) => {
+        server.post(`${route}/service/blocklist`, async (req, res) => {
 
             const {auth} = this.delegate;
 
@@ -355,49 +312,30 @@ class RestManager extends EventEmitter {
                 method: "readIPBlockList"
             });
             res.send(src);
-            return next();
         });
-        server.put(`${route}/service/blocklist`, async (req, res, next) => this.blocklistHandle(req, res, next));
-        server.del(`${route}/service/blocklist`, async (req, res, next) => this.blocklistHandle(req, res, next));
-        server.get(`${route}/user/otp/qrcode`, async (req, res, next) => {
+        server.put(`${route}/service/blocklist`, async (req, res) => this.blocklistHandle(req, res));
+        server.del(`${route}/service/blocklist`, async (req, res) => this.blocklistHandle(req, res));
+        server.get(`${route}/user/otp/qrcode`, async (req, res) => {
             const {otp} = this.delegate;
             const img = await otp.test();
             res.setHeader('Content-Type', 'image/png');
             res.end(img);
-            return next();
         });
-        server.get(`${route}/user/login/gen/otp`, async (req, res, next) => {
-            const {otp, auth} = this.delegate;
+        server.get(`${route}/user/login/gen/otp`, async (req, res) => {
+            const {auth} = this.delegate;
 
             const {authorization} = req;
-            const {result, data} = await auth.jwtVerify(authorization.credentials);
 
-            if (result) {
-                const {username} = data;
-                const db = await auth.getSecret(username)
-                let secret;
-                if (db) {
-                    secret = db.otp;
-                } else {
-                    secret = otp.generateSecret(32);
-                    await auth.registerOTP(username, secret);
-                }
+            let img = auth.generate2FAQRCode(authorization.credentials);
 
-                let url = otp.generateURL({
-                    issuer: "octoMan",
-                    username,
-                    secret
-                });
-                console.log(`url: ${url}`);
-                const img = await otp.create_qrcode(url, 'buffer');
+            if (img) {
                 res.setHeader('Content-Type', 'image/png');
                 res.end(img);
             } else {
                 res.send({result: false});
             }
-            return next();
         });
-        server.get(`${route}/dir/:folder`, async (req, res, next) => {
+        server.get(`${route}/dir/:folder`, async (req, res) => {
             let folder = (req.params.folder || 'appsettings');
             let src = await this.delegate.manager.send({
                 method: "readFiles",
@@ -409,13 +347,11 @@ class RestManager extends EventEmitter {
                     result: false,
                     code: 'InvalidName',
                     message: 'This is not a valid folder'});
-                return next();
+            } else {
+                res.send(src);
             }
-
-            res.send(src);
-            return next();
         });
-        server.put(`${route}/dir`, async (req, res, next) => {
+        server.put(`${route}/dir`, async (req, res) => {
             let folder = (req.body.folder || 'appsettings');
 
             if (!this.acceptFolder(folder)) {
@@ -423,18 +359,16 @@ class RestManager extends EventEmitter {
                     result: false,
                     code: 'InvalidName',
                     message: 'This is not a valid folder'});
-                return next();
+            } else {
+                let src;
+                src = await this.delegate.manager.send({
+                    method: "readFiles",
+                    folder
+                });
+                res.send(src);
             }
-
-            let src;
-            src = await this.delegate.manager.send({
-                method: "readFiles",
-                folder
-            });
-            res.send(src);
-            return next();
         });
-        server.get(`${route}/dir/:folder/:filename`, async (req, res, next) => {
+        server.get(`${route}/dir/:folder/:filename`, async (req, res) => {
             let folder = (req.params.folder || 'appsettings');
             let filename = this.getFilename(req.params.filename);
 
@@ -443,24 +377,21 @@ class RestManager extends EventEmitter {
                     result: false,
                     code: 'InvalidName',
                     message: 'This is not a valid file name'});
-                return next();
             } else if (!this.acceptFolder(folder)) {
                 res.send({
                     result: false,
                     code: 'InvalidName',
                     message: 'This is not a valid folder'});
-                return next();
+            } else {
+                let src = await this.delegate.manager.send({
+                    method: "readFileContents",
+                    folder,
+                    filename
+                });
+                res.send(src);
             }
-
-            let src = await this.delegate.manager.send({
-                method: "readFileContents",
-                folder,
-                filename
-            });
-            res.send(src);
-            return next();
         });
-        server.post(`${route}/dir/:folder/:filename`, async (req, res, next) => {
+        server.post(`${route}/dir/:folder/:filename`, async (req, res) => {
             let folder = (req.params.folder || 'appsettings');
             let filename = this.getFilename(req.params.filename);
             if (!filename) {
@@ -468,13 +399,13 @@ class RestManager extends EventEmitter {
                     result: false,
                     code: 'InvalidName',
                     message: 'This is not a valid file name'});
-                return next();
+                return;
             } else if (!this.acceptFolder(folder)) {
                 res.send({
                     result: false,
                     code: 'InvalidName',
                     message: 'This is not a valid folder'});
-                return next();
+                return;
             }
             let {
                 data,
@@ -498,13 +429,12 @@ class RestManager extends EventEmitter {
                 }
             }
             res.send(src);
-            return next();
         });
 
-        server.patch('/message/apply', async (req, res, next) => {
+        server.patch('/message/apply', async (req, res) => {
             let {result, error} = await this.verifyAuth(req.authorization);
             if (result === false) {
-                return next(new errors['UnauthorizedError'](error));
+                return res.send(new errors['UnauthorizedError'](error));
             }
 
             let { pid, appName, streamName, host } = req.params;
@@ -532,16 +462,14 @@ class RestManager extends EventEmitter {
      * @group User
      * @param req
      * @param res
-     * @param next
      * @return {Promise<Object>}
      */
-    async password (req, res, next) {
+    async password (req, res) {
         const { delegate } = this;
         let { password, newPassword } = req.body;
         let { authorization } = req;
         let result = await delegate.auth.changePassword({ password, newPassword, authorization });
         res.send({ result });
-        return next();
     }
 
     acceptFolder(str) {
@@ -598,7 +526,7 @@ class RestManager extends EventEmitter {
         }
     };
 
-    async blocklistHandle(req, res, next) {
+    async blocklistHandle(req, res) {
         let {
             address,
             enabled,
@@ -615,7 +543,7 @@ class RestManager extends EventEmitter {
         const {authorization} = req;
         const {result, data} = await auth.jwtVerify(authorization.credentials);
         if (result == false) {
-            return next(new errors['UnauthorizedError']('Access is denied due to invalid credentials.'));
+            return res.send(new errors['UnauthorizedError']('Access is denied due to invalid credentials.'));
         }
         let src = await this.delegate.manager.send({
             method: "IPBlockList",
@@ -630,8 +558,7 @@ class RestManager extends EventEmitter {
             type
         });
         res.send(src);
-        return next();
-    }
+    };
     async login({username, password}) {
         let login = await this.delegate.auth.login(arguments[0])
         if (login === false) {
