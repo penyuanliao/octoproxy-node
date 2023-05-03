@@ -432,7 +432,7 @@ FxSocket.prototype.write = function (data, opcode) {
     if (this.isRelease == true) return false;
 
     if (this.mode === fxStatus.websocket) {
-        if (typeof data == "object") data = JSON.stringify(data);
+        if (typeof data == "object" && this._binaryType == 1) data = JSON.stringify(data);
 
         const encData = this.dataEncryptByWebsocket(data); // 資料加密處理
         const opcode = (Buffer.isBuffer(encData) ? 2 : 1);
