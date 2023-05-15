@@ -185,11 +185,16 @@ class IDelegate extends events.EventEmitter {
                 if (taskSync) {
                     await child.start();
                 }
+
                 this.addChild(child);
             }
             NSLog.log('info',"Cluster active number:", num);
             this.serialNumber = num;
         }
+        let Autoscaling = require('./lib/AutoScaler.js');
+        let scaler = new Autoscaling({});
+        scaler.load(this.clusters['test']);
+        scaler.start();
     };
     /**
      * 建立tcp伺服器不使用node net
@@ -543,9 +548,13 @@ class IDelegate extends events.EventEmitter {
         }
     };
     async clusterEndpoint({namespace, source, originPath, mode}, handle) {
+
+
         let worker = await this.asyncAssign(namespace).catch((reason) => {
             NSLog.error(`clusterEndpoint catch: \r\n`, reason);
         });
+
+
         if (typeof worker === 'undefined' || !worker) {
             this.exceptionBreaker({namespace, source, originPath, mode}, handle);
         } else if (worker._dontDisconnect) {
@@ -715,28 +724,33 @@ class IDelegate extends events.EventEmitter {
     exceptionBreaker({namespace, source, originPath, mode}, handle) {
         const { route } = iConfig.breaker;
         let worker = this.clusters[route];
-        if (typeof worker == 'undefined'  || !worker || !Array.isArray(worker)) return false;
-
-        NSLog.log("warning", `Exception Breaker -> `, namespace);
-        let match = 0;
-        if (Array.isArray(worker) && worker.length >= 1) {
-            worker[match].send({
-                evt: 'c_init',
-                data: source,
-                namespace,
-                originPath,
-                mode
-            }, handle, { keepOpen:false });
-        }
-        setTimeout(() => {
-            this.rejectClientException(handle, "CON_VERIFIED");
+        if (worker) {
+            NSLog.log("warning", `Exception Breaker -> `, route);
+            let match = 0;
+            if (Array.isArray(worker) && worker.length >= 1) {
+                worker[match].send({
+                    evt: 'c_init',
+                    data: source,
+                    namespace,
+                    originPath,
+                    mode
+                }, handle, { keepOpen:false });
+            }
+            setTimeout(() => {
+                this.rejectClientException(handle, "CON_VERIFIED");
+                handle.close(this.close_callback.bind(handle, this));
+                this.handleRelease(handle);
+                handle = null;
+            }, sendWaitClose);
+            return true;
+        } else {
+            this.rejectClientException(handle, "PROC_NOT_FOUND");
             handle.close(this.close_callback.bind(handle, this));
             this.handleRelease(handle);
+            NSLog.log('trace','exceptionBreaker out');
             handle = null;
-        }, sendWaitClose);
-
-        return true;
-
+            return false;
+        }
     };
     /**
      * 尋找線程
@@ -1349,7 +1363,7 @@ class IDelegate extends events.EventEmitter {
 
             }, 1000);
         });
-    }
+    };
     reject() {
 
     }
