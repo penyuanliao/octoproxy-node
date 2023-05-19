@@ -836,7 +836,8 @@ class IDelegate extends events.EventEmitter {
         } else {
             appid = ((getSignature instanceof Function) && getSignature(headers["appid"]));
         }
-        let web = this.isManagerWebRoute(headers.general[1]);
+        let general = headers.general || []
+        let web = this.isManagerWebRoute(general[1]);
         if (web) mode = 'web';
         if (swp == "admin" || swp == "log" || corsMode || appid || web) {
             const [cluster] = (this.clusters["inind"] || this.clusters["administrator"] || []);
@@ -867,6 +868,7 @@ class IDelegate extends events.EventEmitter {
      */
     isManagerWebRoute(uri) {
         const { webManagePrefix } = iConfig;
+        if (!uri) uri = '';
         let args = xPath.parse(uri);
         return args.dir.split('/').indexOf(webManagePrefix) != -1;
     }
